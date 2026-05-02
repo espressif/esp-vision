@@ -42,8 +42,14 @@
 #define ESP_VISION_CAMERA_SCCB_I2C_FREQ             (100000)
 #define ESP_VISION_CAMERA_XCLK_FREQ                 (24000000)
 
-#define ESP_VISION_RAW_PREVIEW_ENABLE               (0)
-#define ESP_VISION_RAW_PREVIEW_WIDTH                (0)
-#define ESP_VISION_RAW_PREVIEW_HEIGHT               (0)
+/* SD card configuration. */
+#define ESP_VISION_SDCARD_MOUNT_PATH                "/sdcard"
+#define ESP_VISION_SDCARD_SLOT                      (0)
+#define ESP_VISION_SDCARD_BUS_WIDTH                 (4)
+#define ESP_VISION_SDCARD_EN_PIN                    (46)
+#define ESP_VISION_SDCARD_EN_ACTIVE_LEVEL           (0)
+#define ESP_VISION_SDCARD_DETECT_PIN                (45)
+#define ESP_VISION_SDCARD_DETECT_PRESENT_LEVEL      (0)
+#define ESP_VISION_SDCARD_LDO_CHAN_ID               (4)
 
 #endif /* ESP_VISION_BOARD_CONFIG_H */

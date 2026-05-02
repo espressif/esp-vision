@@ -24,6 +24,8 @@ let previewFrameTimes: number[] = [];
 let currentPort = "";
 let suppressSerialOutput = false;
 let rawOutputParser: RawOutputParser | undefined;
+let serialPreviewParser: PreviewTextParser = createPreviewTextParser({ dropUntilFirstFrame: true });
+let serialDecoder = new StringDecoder("utf8");
 let lastRunnableUri: vscode.Uri | undefined;
 let runCompletion: Promise<void> | undefined;
 let resolveRunCompletion: (() => void) | undefined;
@@ -64,6 +66,8 @@ interface PreviewTextParser {
     phase: "text" | "body";
     pending: string;
     header?: PreviewFrameHeader;
+    dropUntilFirstFrame?: boolean;
+    seenFrame?: boolean;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -159,6 +163,7 @@ async function connect(): Promise<void> {
     transport = nextTransport;
     rawRepl = new RawRepl(nextTransport);
     currentPort = port;
+    resetSerialPreviewParser();
     showOutput(true);
     appendOutputLine(`[connected] ${port} @ ${baudRate}`);
     updateStatus(true);
@@ -175,6 +180,7 @@ async function disconnect(options: { quiet?: boolean } = {}): Promise<void> {
     currentPort = "";
     finishRawRun();
     suppressSerialOutput = false;
+    resetSerialPreviewParser();
 
     if (options.quiet) {
         currentTransport.removeAllListeners();
@@ -213,14 +219,19 @@ async function runCurrentFileInner(): Promise<void> {
 
     showOutput(true);
     appendOutputLine(`\n[run] ${document.fileName}`);
-    startRawRun();
     try {
-        await repl.runScript(document.getText());
+        suppressSerialOutput = true;
+        await repl.enter();
+        suppressSerialOutput = false;
+        startRawRun();
+        await repl.executeScript(document.getText());
     } catch (error) {
         finishRawRun();
         const message = error instanceof Error ? error.message : String(error);
         appendOutputLine(`[error] ${message}`);
         vscode.window.showErrorMessage(`ESP-VISION run failed: ${message}`);
+    } finally {
+        suppressSerialOutput = false;
     }
 }
 
@@ -329,10 +340,7 @@ function startRawRun(): void {
         decoder: new StringDecoder("utf8"),
         stderrBytes: 0,
         stopRequested: false,
-        preview: {
-            phase: "text",
-            pending: "",
-        },
+        preview: createPreviewTextParser(),
     };
     runCompletion = new Promise<void>((resolve) => {
         resolveRunCompletion = resolve;
@@ -411,6 +419,20 @@ function appendOutput(value: string): void {
     }
 }
 
+function createPreviewTextParser(options: { dropUntilFirstFrame?: boolean } = {}): PreviewTextParser {
+    return {
+        phase: "text",
+        pending: "",
+        dropUntilFirstFrame: options.dropUntilFirstFrame,
+        seenFrame: false,
+    };
+}
+
+function resetSerialPreviewParser(): void {
+    serialPreviewParser = createPreviewTextParser({ dropUntilFirstFrame: true });
+    serialDecoder = new StringDecoder("utf8");
+}
+
 function handleSerialData(data: Buffer): void {
     if (rawOutputParser) {
         handleRawOutputData(data);
@@ -421,7 +443,8 @@ function handleSerialData(data: Buffer): void {
         return;
     }
 
-    appendOutput(data.toString("utf8"));
+    const text = serialDecoder.write(data);
+    appendOutput(normalizeLineEndings(processPreviewText(serialPreviewParser, text)));
 }
 
 function handleRawOutputData(data: Buffer): void {
@@ -506,13 +529,17 @@ function processPreviewText(parser: PreviewTextParser, value: string): string {
             if (frameStart < 0) {
                 const keep = "<EVFRAME".length - 1;
                 if (parser.pending.length > keep) {
-                    outputText += parser.pending.slice(0, parser.pending.length - keep);
+                    if (!parser.dropUntilFirstFrame || parser.seenFrame) {
+                        outputText += parser.pending.slice(0, parser.pending.length - keep);
+                    }
                     parser.pending = parser.pending.slice(parser.pending.length - keep);
                 }
                 return outputText;
             }
 
-            outputText += parser.pending.slice(0, frameStart);
+            if (!parser.dropUntilFirstFrame || parser.seenFrame) {
+                outputText += parser.pending.slice(0, frameStart);
+            }
             parser.pending = parser.pending.slice(frameStart);
 
             const headerEnd = parser.pending.indexOf(">");
@@ -546,6 +573,7 @@ function processPreviewText(parser: PreviewTextParser, value: string): string {
         parser.header = undefined;
 
         if (header) {
+            parser.seenFrame = true;
             handlePreviewFrame(header, base64);
         }
     }

@@ -68,6 +68,7 @@
 #include "camera.h"
 #include "fb_alloc.h"
 #include "preview.h"
+#include "sdcard.h"
 
 #if MICROPY_BLUETOOTH_NIMBLE
 #include "extmod/modbluetooth.h"
@@ -142,6 +143,7 @@ soft_reset:
     mp_init();
     esp_vision_camera_init0();
     esp_vision_preview_init0();
+    esp_vision_sdcard_init0();
     fb_alloc_init0();
     mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR__slash_lib));
     readline_init0();
@@ -152,6 +154,7 @@ soft_reset:
     #endif
 
     pyexec_frozen_module("_boot.py", false);
+    esp_vision_sdcard_mount_if_present();
     int ret = pyexec_file_if_exists("boot.py");
 
     #if MICROPY_HW_ENABLE_USBDEV

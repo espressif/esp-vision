@@ -64,6 +64,9 @@ export class SerialTransport extends EventEmitter {
         await new Promise<void>((resolve, reject) => {
             port.open((error) => error ? reject(error) : resolve());
         });
+        await new Promise<void>((resolve, reject) => {
+            port.set({ dtr: true, rts: true }, (error) => error ? reject(error) : resolve());
+        });
     }
 
     async close(): Promise<void> {
@@ -100,6 +103,19 @@ export class SerialTransport extends EventEmitter {
 
     clearInput(): void {
         this.rxBuffer = Buffer.alloc(0);
+    }
+
+    async flushInput(): Promise<void> {
+        const port = this.port;
+        this.clearInput();
+        if (!port?.isOpen) {
+            return;
+        }
+
+        await new Promise<void>((resolve, reject) => {
+            port.flush((error) => error ? reject(error) : resolve());
+        });
+        this.clearInput();
     }
 
     takeInput(): Buffer {
