@@ -12,6 +12,7 @@ exclude: |
     modules/py_assert\.h$|
     modules/py_helper\.[ch]$|
     modules/py_image\.[ch]$|
+    modules/py_imageio\.[ch]$|
     vscode-extension/node_modules/|
     vscode-extension/out/|
     vscode-extension/.*\.vsix$|

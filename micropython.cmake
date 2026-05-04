@@ -11,6 +11,10 @@ endif()
 set(ESP_VISION_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 set(ESP_VISION_BOARD_DIR "${ESP_VISION_ROOT}/boards/${ESP_VISION_BOARD}")
 
+list(APPEND MICROPY_QSTRDEFS_PORT
+    ${ESP_VISION_ROOT}/modules/qstrdefs_esp_vision.h
+)
+
 set(MICROPY_ESP32_MAIN_SOURCE "${ESP_VISION_ROOT}/platform/main.c")
 
 set(ESP_VISION_BOARD_SOURCES)
@@ -23,11 +27,14 @@ endforeach()
 add_library(usermod_esp_vision_platform INTERFACE)
 
 target_sources(usermod_esp_vision_platform INTERFACE
+    ${ESP_VISION_ROOT}/modules/py_espdl.cpp
     ${ESP_VISION_ROOT}/modules/py_image.c
+    ${ESP_VISION_ROOT}/modules/py_imageio.c
     ${ESP_VISION_ROOT}/modules/py_helper.c
     ${ESP_VISION_ROOT}/modules/py_sensor.c
     ${ESP_VISION_ROOT}/platform/camera.c
     ${ESP_VISION_ROOT}/platform/debug.c
+    ${ESP_VISION_ROOT}/platform/esp_vision_jpeg.c
     ${ESP_VISION_ROOT}/platform/preview.c
     ${ESP_VISION_ROOT}/platform/sdcard.c
     ${ESP_VISION_ROOT}/platform/usb_msc.c
@@ -47,6 +54,10 @@ target_include_directories(usermod_esp_vision_platform INTERFACE
 target_compile_definitions(usermod_esp_vision_platform INTERFACE
     CMSIS_MCU_H="cmsis_compiler.h"
     OMV_NO_GPL=1
+)
+
+target_compile_options(usermod_esp_vision_platform INTERFACE
+    $<$<COMPILE_LANGUAGE:CXX>:-std=gnu++2b>
 )
 
 target_link_libraries(usermod INTERFACE usermod_esp_vision_platform)

@@ -547,6 +547,5 @@ void py_helper_update_framebuffer(image_t *img) {
 }
 
 void py_helper_set_to_framebuffer(image_t *img) {
-    (void) img;
-    mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("copy_to_fb is not supported"));
+    image_alloc(img, image_size(img));
 }

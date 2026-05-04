@@ -50,6 +50,7 @@
 #include "py_helper.h"
 #include "py_image.h"
 #include "omv_boardconfig.h"
+#include "esp_vision_jpeg.h"
 #include "preview.h"
 #if defined(IMLIB_ENABLE_IMAGE_IO)
 #include "py_imageio.h"
@@ -1280,6 +1281,47 @@ static mp_obj_t py_image_crop(size_t n_args, const mp_obj_t *args, mp_map_t *kw_
 static MP_DEFINE_CONST_FUN_OBJ_KW(py_image_crop_obj, 1, py_image_crop);
 
 #if defined(IMLIB_ENABLE_IMAGE_FILE_IO)
+static bool py_image_save_extension_equals(const char *ext, const char *target) {
+    while (*target) {
+        char c = *ext++;
+        if ((c >= 'A') && (c <= 'Z')) {
+            c += 'a' - 'A';
+        }
+        if (c != *target++) {
+            return false;
+        }
+    }
+    return *ext == '\0';
+}
+
+static bool py_image_save_path_is_jpeg(const char *path) {
+    const char *ext = strrchr(path, '.');
+    return (ext != NULL) &&
+           (py_image_save_extension_equals(ext, ".jpg") || py_image_save_extension_equals(ext, ".jpeg"));
+}
+
+static bool py_image_save_roi_is_full_image(const image_t *img, const rectangle_t *roi) {
+    return (roi->x == 0) && (roi->y == 0) && (roi->w == img->w) && (roi->h == img->h);
+}
+
+static bool py_image_save_hardware_jpeg(image_t *img, const char *path, const rectangle_t *roi, int quality) {
+    if (!py_image_save_path_is_jpeg(path) || !py_image_save_roi_is_full_image(img, roi) || IM_IS_JPEG(img)) {
+        return false;
+    }
+
+    uint8_t *jpeg_buf = NULL;
+    size_t jpeg_size = 0;
+    if (esp_vision_jpeg_encode(img, quality, &jpeg_buf, &jpeg_size) != ESP_OK) {
+        return false;
+    }
+
+    file_t fp;
+    file_open(&fp, path, false, FA_WRITE | FA_CREATE_ALWAYS);
+    file_write(&fp, jpeg_buf, jpeg_size);
+    file_close(&fp);
+    return true;
+}
+
 static mp_obj_t py_image_save(size_t n_args, const mp_obj_t *args, mp_map_t *kw_args) {
     image_t *arg_img = py_image_cobj(args[0]);
     const char *path = mp_obj_str_get_str(args[1]);
@@ -1289,6 +1331,10 @@ static mp_obj_t py_image_save(size_t n_args, const mp_obj_t *args, mp_map_t *kw_
 
     int arg_q = py_helper_keyword_int(n_args, args, 3, kw_args, MP_OBJ_NEW_QSTR(MP_QSTR_quality), 50);
     PY_ASSERT_TRUE_MSG((1 <= arg_q) && (arg_q <= 100), "Error: 1 <= quality <= 100!");
+
+    if (py_image_save_hardware_jpeg(arg_img, path, &roi, arg_q)) {
+        return args[0];
+    }
 
     fb_alloc_mark();
     imlib_save_image(arg_img, path, &roi, arg_q);
