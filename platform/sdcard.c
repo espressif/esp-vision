@@ -8,6 +8,7 @@
 
 #include "sdcard.h"
 
+#include "esp_log.h"
 #include "extmod/vfs.h"
 #include "modmachine.h"
 #include "py/mpconfig.h"
@@ -28,6 +29,8 @@
 #ifndef ESP_VISION_SDCARD_BUS_WIDTH
 #define ESP_VISION_SDCARD_BUS_WIDTH (4)
 #endif
+
+static const char *TAG = "esp_vision_sdcard";
 
 MP_WEAK void esp_vision_board_sdcard_init0(void)
 {
@@ -109,8 +112,11 @@ void esp_vision_sdcard_mount_if_present(void)
         };
         mp_vfs_mount(2, mount_args, (mp_map_t *)&mp_const_empty_map);
         nlr_pop();
+        ESP_LOGI(TAG, "mounted SD card at %s", path);
     } else {
-        /* Missing or unusable SD cards must not block the REPL. */
+        mp_obj_t exc = MP_OBJ_FROM_PTR(nlr.ret_val);
+        mp_printf(&mp_plat_print, "[esp-vision] SD mount failed: ");
+        mp_obj_print_exception(&mp_plat_print, exc);
     }
 #endif
 }
