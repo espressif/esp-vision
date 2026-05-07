@@ -21,6 +21,7 @@ export function activate(context: vscode.ExtensionContext): void {
         buttons.stop,
         buttons.reset,
         buttons.preview,
+        buttons.tools,
     );
 
     session = new EspVisionSession(context.extensionUri, output, buttons);
@@ -51,6 +52,7 @@ function createStatusButtons(): StatusButtons {
     const stop = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
     const reset = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
     const preview = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
+    const tools = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
     run.text = "$(play)";
     run.tooltip = "ESP-VISION: Run Current File";
     run.command = "espVision.runCurrentFile";
@@ -63,5 +65,8 @@ function createStatusButtons(): StatusButtons {
     preview.text = "$(preview)";
     preview.tooltip = "ESP-VISION: Show Preview";
     preview.command = "espVision.showPreview";
-    return { status, run, stop, reset, preview };
+    tools.text = "$(tools)";
+    tools.tooltip = "ESP-VISION: Tools";
+    tools.command = "espVision.showTools";
+    return { status, run, stop, reset, preview, tools };
 }

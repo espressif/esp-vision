@@ -63,6 +63,7 @@ export interface StatusButtons {
     stop: vscode.StatusBarItem;
     reset: vscode.StatusBarItem;
     preview: vscode.StatusBarItem;
+    tools: vscode.StatusBarItem;
 }
 
 export class EspVisionSession {
@@ -84,6 +85,8 @@ export class EspVisionSession {
     private runOperation: Promise<void> = Promise.resolve();
     private previewPanel?: vscode.WebviewPanel;
     private previewPanelReady = false;
+    private thresholdPanel?: vscode.WebviewPanel;
+    private thresholdPanelReady = false;
     private lastPreviewFrame?: PreviewFrame;
     private previewFrameSeq = 0;
     private previewFrameTimes: number[] = [];
@@ -174,6 +177,18 @@ export class EspVisionSession {
         }
     }
 
+    async showTools(): Promise<void> {
+        const items = [
+            { label: "$(symbol-color) Threshold Editor (LAB)", id: "threshold" as const },
+        ];
+        const selected = await vscode.window.showQuickPick(items, {
+            placeHolder: "ESP-VISION Tools",
+        });
+        if (selected?.id === "threshold") {
+            this.openThresholdEditor();
+        }
+    }
+
     showPreview(): void {
         if (this.transport?.isOpen && !this.rawOutputParser) {
             this.lastPreviewFrame = undefined;
@@ -209,12 +224,45 @@ export class EspVisionSession {
                 this.postPreviewState();
             }
         });
-        panel.webview.html = this.renderPreviewHtml(panel.webview);
+        panel.webview.html = this.renderWebviewHtml(panel.webview, "preview");
+    }
+
+    private openThresholdEditor(): void {
+        if (this.thresholdPanel) {
+            this.thresholdPanel.reveal(vscode.ViewColumn.Beside);
+            this.postThresholdState();
+            return;
+        }
+
+        const mediaRoot = vscode.Uri.joinPath(this.extensionUri, "media");
+        const panel = vscode.window.createWebviewPanel(
+            "espVisionThreshold",
+            "ESP-VISION Threshold Editor",
+            vscode.ViewColumn.Beside,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+                localResourceRoots: [mediaRoot],
+            },
+        );
+        this.thresholdPanel = panel;
+        panel.onDidDispose(() => {
+            this.thresholdPanel = undefined;
+            this.thresholdPanelReady = false;
+        });
+        panel.webview.onDidReceiveMessage((message: { type?: string } | undefined) => {
+            if (message?.type === "ready") {
+                this.thresholdPanelReady = true;
+                this.postThresholdState();
+            }
+        });
+        panel.webview.html = this.renderWebviewHtml(panel.webview, "threshold");
     }
 
     async dispose(): Promise<void> {
         await this.disconnect({ quiet: true });
         this.previewPanel?.dispose();
+        this.thresholdPanel?.dispose();
     }
 
     private async openSerialPort(port: string, baudRate: number): Promise<void> {
@@ -264,6 +312,7 @@ export class EspVisionSession {
         this.lastPreviewFrame = undefined;
         this.resetSerialPreviewParser();
         this.updatePreviewPanel();
+        this.postThresholdState();
         this.appendOutputLine("\n[serial closed]");
         this.updateStatus(false);
 
@@ -424,6 +473,7 @@ export class EspVisionSession {
             this.buttons.stop.show();
             this.buttons.reset.show();
             this.buttons.preview.show();
+            this.buttons.tools.show();
         } catch {
             // status bar item disposed
         }
@@ -562,6 +612,7 @@ export class EspVisionSession {
         this.buttons.preview.text = `$(preview) ${header.width}x${header.height} ${formatFps(fps)}`;
         this.buttons.preview.tooltip = `ESP-VISION Preview: ${header.width}x${header.height}, ${formatFps(fps)}`;
         this.updatePreviewPanel();
+        this.postThresholdState();
     }
 
     private recordPreviewFrame(receivedAtMs: number): number {
@@ -605,10 +656,20 @@ export class EspVisionSession {
         void this.previewPanel.webview.postMessage(message);
     }
 
-    private renderPreviewHtml(webview: vscode.Webview): string {
-        const htmlPath = path.join(this.extensionUri.fsPath, "media", "preview.html");
-        const cssUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "preview.css"));
-        const jsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "preview.js"));
+    private postThresholdState(): void {
+        if (!this.thresholdPanel || !this.thresholdPanelReady) {
+            return;
+        }
+        const message = this.lastPreviewFrame
+            ? { type: "frame", frame: toPreviewWebviewFrame(this.lastPreviewFrame) }
+            : { type: "clear" };
+        void this.thresholdPanel.webview.postMessage(message);
+    }
+
+    private renderWebviewHtml(webview: vscode.Webview, name: string): string {
+        const htmlPath = path.join(this.extensionUri.fsPath, "media", `${name}.html`);
+        const cssUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", `${name}.css`));
+        const jsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", `${name}.js`));
         const nonce = createNonce();
         const replacements: Record<string, string> = {
             cspSource: webview.cspSource,

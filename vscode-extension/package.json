@@ -46,6 +46,11 @@
         "command": "espVision.showPreview",
         "title": "ESP-VISION: Show Preview",
         "icon": "$(preview)"
+      },
+      {
+        "command": "espVision.showTools",
+        "title": "ESP-VISION: Tools",
+        "icon": "$(tools)"
       }
     ],
     "configuration": {

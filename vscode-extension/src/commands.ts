@@ -15,5 +15,6 @@ export function registerCommands(context: vscode.ExtensionContext, session: EspV
         vscode.commands.registerCommand("espVision.stopScript", () => session.stopScript()),
         vscode.commands.registerCommand("espVision.softReset", () => session.softReset()),
         vscode.commands.registerCommand("espVision.showPreview", () => session.showPreview()),
+        vscode.commands.registerCommand("espVision.showTools", () => session.showTools()),
     );
 }
