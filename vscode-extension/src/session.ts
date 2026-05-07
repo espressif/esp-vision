@@ -218,6 +218,11 @@ export class EspVisionSession {
             this.previewPanel = undefined;
             this.previewPanelReady = false;
         });
+        panel.onDidChangeViewState(() => {
+            if (panel.visible && this.previewPanelReady) {
+                this.postPreviewState();
+            }
+        });
         panel.webview.onDidReceiveMessage((message: { type?: string } | undefined) => {
             if (message?.type === "ready") {
                 this.previewPanelReady = true;
@@ -249,6 +254,11 @@ export class EspVisionSession {
         panel.onDidDispose(() => {
             this.thresholdPanel = undefined;
             this.thresholdPanelReady = false;
+        });
+        panel.onDidChangeViewState(() => {
+            if (panel.visible && this.thresholdPanelReady) {
+                this.postThresholdState();
+            }
         });
         panel.webview.onDidReceiveMessage((message: { type?: string } | undefined) => {
             if (message?.type === "ready") {
@@ -640,7 +650,7 @@ export class EspVisionSession {
     }
 
     private updatePreviewPanel(): void {
-        if (!this.previewPanel || !this.previewPanelReady) {
+        if (!this.previewPanel || !this.previewPanelReady || !this.previewPanel.visible) {
             return;
         }
         this.postPreviewState();
@@ -657,7 +667,7 @@ export class EspVisionSession {
     }
 
     private postThresholdState(): void {
-        if (!this.thresholdPanel || !this.thresholdPanelReady) {
+        if (!this.thresholdPanel || !this.thresholdPanelReady || !this.thresholdPanel.visible) {
             return;
         }
         const message = this.lastPreviewFrame

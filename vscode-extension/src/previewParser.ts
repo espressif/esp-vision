@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const PREVIEW_MAX_PENDING_CHARS = 2 * 1024 * 1024;
+const PREVIEW_MAX_PENDING_CHARS = 256 * 1024;
 
 export interface PreviewFrameHeader {
     width: number;

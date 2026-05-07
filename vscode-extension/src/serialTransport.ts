@@ -7,6 +7,8 @@
 import { EventEmitter } from "events";
 import { SerialPort } from "serialport";
 
+const MAX_RX_BUFFER_BYTES = 256 * 1024;
+
 interface ReadWaiter {
     marker: Buffer;
     resolve: (value: Buffer) => void;
@@ -53,7 +55,7 @@ export class SerialTransport extends EventEmitter {
         this.port = port;
 
         port.on("data", (data: Buffer) => {
-            this.rxBuffer = Buffer.concat([this.rxBuffer, data]);
+            this.appendRx(data);
             this.emit("data", data);
             this.processWaiters();
         });
@@ -143,6 +145,20 @@ export class SerialTransport extends EventEmitter {
             };
             this.waiters.push(waiter);
         });
+    }
+
+    private appendRx(data: Buffer): void {
+        const total = this.rxBuffer.length + data.length;
+        if (total <= MAX_RX_BUFFER_BYTES) {
+            this.rxBuffer = this.rxBuffer.length === 0 ? Buffer.from(data) : Buffer.concat([this.rxBuffer, data]);
+            return;
+        }
+        if (data.length >= MAX_RX_BUFFER_BYTES) {
+            this.rxBuffer = Buffer.from(data.subarray(data.length - MAX_RX_BUFFER_BYTES));
+            return;
+        }
+        const keep = MAX_RX_BUFFER_BYTES - data.length;
+        this.rxBuffer = Buffer.concat([this.rxBuffer.subarray(this.rxBuffer.length - keep), data]);
     }
 
     private processWaiters(): void {

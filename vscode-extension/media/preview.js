@@ -16,7 +16,13 @@
     const redStats = document.getElementById("redStats");
     const greenStats = document.getElementById("greenStats");
     const blueStats = document.getElementById("blueStats");
+    const DECODE_TIMEOUT_MS = 2000;
     let currentFrame = null;
+    let pendingFrame = null;
+    let decodingFrame = false;
+    let decodeTimer = null;
+    let sourceCanvas = null;
+    let sourceCtx = null;
 
     function resizeCanvas(target) {
         const rect = target.getBoundingClientRect();
@@ -127,15 +133,18 @@
             return;
         }
         try {
-            const source = document.createElement("canvas");
-            source.width = image.naturalWidth;
-            source.height = image.naturalHeight;
-            const sourceCtx = source.getContext("2d", { willReadFrequently: true });
+            const w = image.naturalWidth, h = image.naturalHeight;
+            if (!sourceCanvas || sourceCanvas.width !== w || sourceCanvas.height !== h) {
+                sourceCanvas = document.createElement("canvas");
+                sourceCanvas.width = w;
+                sourceCanvas.height = h;
+                sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true });
+            }
             if (!sourceCtx) {
                 return;
             }
             sourceCtx.drawImage(image, 0, 0);
-            const pixels = sourceCtx.getImageData(0, 0, source.width, source.height).data;
+            const pixels = sourceCtx.getImageData(0, 0, w, h).data;
             const red = new Array(256).fill(0);
             const green = new Array(256).fill(0);
             const blue = new Array(256).fill(0);
@@ -144,7 +153,7 @@
                 green[pixels[i + 1]] += 1;
                 blue[pixels[i + 2]] += 1;
             }
-            const totalPixels = source.width * source.height;
+            const totalPixels = w * h;
             drawHistogram(redCanvas, red, "rgba(255, 82, 82, 0.95)");
             drawHistogram(greenCanvas, green, "rgba(77, 208, 120, 0.95)");
             drawHistogram(blueCanvas, blue, "rgba(88, 166, 255, 0.95)");
@@ -155,12 +164,39 @@
         }
     }
 
-    function showFrame(frame) {
-        currentFrame = frame;
+    function finishDecode() {
+        if (decodeTimer !== null) {
+            clearTimeout(decodeTimer);
+            decodeTimer = null;
+        }
+        decodingFrame = false;
+        if (pendingFrame) {
+            const next = pendingFrame;
+            pendingFrame = null;
+            showFrame(next);
+        }
+    }
+
+    function renderFrame(frame) {
         empty.hidden = true;
         content.hidden = false;
         metadata.textContent = frame.width + "x" + frame.height + " JPG · " + frame.size + " bytes · " + frame.fpsText + " · " + frame.receivedAtText;
         image.src = "data:image/jpeg;base64," + frame.base64;
+        decodeTimer = setTimeout(finishDecode, DECODE_TIMEOUT_MS);
+        const decode = typeof image.decode === "function" ? image.decode() : Promise.resolve();
+        decode.then(() => {
+            computeHistogram();
+        }).catch(() => undefined).finally(finishDecode);
+    }
+
+    function showFrame(frame) {
+        currentFrame = frame;
+        if (decodingFrame) {
+            pendingFrame = frame;
+            return;
+        }
+        decodingFrame = true;
+        renderFrame(frame);
     }
 
     function clearFrame() {
@@ -174,7 +210,6 @@
         content.hidden = true;
     }
 
-    image.addEventListener("load", computeHistogram);
     window.addEventListener("resize", () => {
         if (currentFrame) {
             computeHistogram();

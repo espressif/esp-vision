@@ -17,12 +17,17 @@
 
     const DEFAULTS = { L: [0, 100], A: [-128, 127], B: [-128, 127] };
     const thresholds = { L: [0, 100], A: [-128, 127], B: [-128, 127] };
+    const DECODE_TIMEOUT_MS = 2000;
     let labCache = null;
     let labWidth = 0;
     let labHeight = 0;
     let pendingFrame = null;
     let decodingFrame = false;
+    let decodeTimer = null;
     let frozen = false;
+    let decodeImage = null;
+    let tmpCanvas = null;
+    let tmpCtx = null;
 
     sourceImage.hidden = true;
 
@@ -87,27 +92,16 @@
 
     function decodeFrame(frame) {
         decodingFrame = true;
-        const img = new Image();
-        img.onload = () => {
-            sourceImage.src = img.src;
-            sourceImage.hidden = false;
-            sourceEmpty.hidden = true;
-            const w = img.naturalWidth, h = img.naturalHeight;
-            const tmp = document.createElement("canvas");
-            tmp.width = w;
-            tmp.height = h;
-            const tmpCtx = tmp.getContext("2d", { willReadFrequently: true });
-            if (!tmpCtx) {
-                decodingFrame = false;
-                return;
+        if (!decodeImage) {
+            decodeImage = new Image();
+        }
+        const img = decodeImage;
+        const src = "data:image/jpeg;base64," + frame.base64;
+        const finish = () => {
+            if (decodeTimer !== null) {
+                clearTimeout(decodeTimer);
+                decodeTimer = null;
             }
-            tmpCtx.drawImage(img, 0, 0);
-            const imageData = tmpCtx.getImageData(0, 0, w, h);
-            labCache = computeLab(imageData);
-            labWidth = w;
-            labHeight = h;
-            renderMask();
-            metadata.textContent = `${w}x${h} JPG · ${frame.size} bytes · ${frame.fpsText} · ${frame.receivedAtText}`;
             decodingFrame = false;
             if (pendingFrame) {
                 const next = pendingFrame;
@@ -115,10 +109,35 @@
                 decodeFrame(next);
             }
         };
-        img.onerror = () => {
-            decodingFrame = false;
+        decodeTimer = setTimeout(finish, DECODE_TIMEOUT_MS);
+        const render = () => {
+            try {
+                sourceImage.src = src;
+                sourceImage.hidden = false;
+                sourceEmpty.hidden = true;
+                const w = img.naturalWidth, h = img.naturalHeight;
+                if (!w || !h) { finish(); return; }
+                if (!tmpCanvas || tmpCanvas.width !== w || tmpCanvas.height !== h) {
+                    tmpCanvas = document.createElement("canvas");
+                    tmpCanvas.width = w;
+                    tmpCanvas.height = h;
+                    tmpCtx = tmpCanvas.getContext("2d", { willReadFrequently: true });
+                }
+                if (!tmpCtx) { finish(); return; }
+                tmpCtx.drawImage(img, 0, 0);
+                const imageData = tmpCtx.getImageData(0, 0, w, h);
+                labCache = computeLab(imageData);
+                labWidth = w;
+                labHeight = h;
+                renderMask();
+                metadata.textContent = `${w}x${h} JPG · ${frame.size} bytes · ${frame.fpsText} · ${frame.receivedAtText}`;
+            } catch {
+            }
+            finish();
         };
-        img.src = "data:image/jpeg;base64," + frame.base64;
+        img.src = src;
+        const decode = typeof img.decode === "function" ? img.decode() : Promise.resolve();
+        decode.then(render).catch(() => finish());
     }
 
     function showFrame(frame) {
