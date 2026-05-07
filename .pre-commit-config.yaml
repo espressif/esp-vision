@@ -16,8 +16,7 @@ exclude: |
     modules/py_imageio\.[ch]$|
     vscode-extension/node_modules/|
     vscode-extension/out/|
-    vscode-extension/.*\.vsix$|
-    .*\.py$
+    vscode-extension/.*\.vsix$
   )
 
 repos:
@@ -53,7 +52,6 @@ repos:
       - id: check-shebang-scripts-are-executable
       - id: mixed-line-ending
         args: ['-f=lf']
-      - id: double-quote-string-fixer
 
   - repo: https://github.com/espressif/astyle_py.git
     rev: v1.1.0

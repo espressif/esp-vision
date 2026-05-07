@@ -22,6 +22,7 @@ ignore:
     - 'components/imlib/**/*'
     - 'lib/micropython/**/*'
     - 'lib/ulab/**/*'
+    - 'overlay/micropython/**/*'
     - 'vscode-extension/node_modules/**/*'
     - 'vscode-extension/out/**/*'
     - 'vscode-extension/package-lock.json'
@@ -33,5 +34,4 @@ ignore:
     - 'vscode-extension/*.vsix'
     - 'patches/**/*'
     - '**/*.patch'
-    - '**/*.py'
     - 'tools/ci/check_copyright_ignore.txt'

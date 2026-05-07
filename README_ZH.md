@@ -34,6 +34,7 @@ ESP-VISION 是面向 ESP32-P4 的 MicroPython 视觉运行时，并配套 VSCode
 | `modules` | 暴露给脚本的 MicroPython C/C++ 绑定层，包括 `sensor`、`image`、`display`、`imageio` 和 `espdl`。 |
 | `components/imlib` | ESP-IDF 组件，包含 MIT 许可证的 OpenMV `imlib` 子集和 ESP32-P4 兼容层。 |
 | `models` | 可选 `.espdl` 模型资源，运行时从 `/flash` 或 `/sdcard` 等板端文件系统加载。 |
+| `example` | MicroPython 示例脚本，覆盖 camera、preview、storage、display、image processing 和 ESP-DL 使用流程。 |
 | `vscode-extension` | VSCode 上位机扩展，负责串口连接、脚本启停和 JPG 预览。 |
 
 ### MicroPython Overlay

@@ -34,6 +34,7 @@ ESP-VISION is an ESP32-P4 MicroPython vision runtime with a VSCode-based host to
 | `modules` | MicroPython C/C++ bindings exposed to scripts, including `sensor`, `image`, `display`, `imageio`, and `espdl`. |
 | `components/imlib` | ESP-IDF component containing the MIT-licensed OpenMV `imlib` subset and the ESP32-P4 compatibility layer. |
 | `models` | Optional `.espdl` model assets loaded at runtime from board storage such as `/flash` or `/sdcard`. |
+| `example` | MicroPython example scripts for camera, preview, storage, display, image processing, and ESP-DL workflows. |
 | `vscode-extension` | Host-side VSCode extension for serial connection, script run/stop, and JPG preview. |
 
 ### MicroPython Overlay
