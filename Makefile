@@ -4,7 +4,11 @@
 ROOT      := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 BOARD     ?= ESP32_P4X_EYE
 BUILD     := $(ROOT)/build/$(BOARD)
-MP_PORT   := $(ROOT)/lib/micropython/ports/esp32
+MP_BASE_REF ?= v1.28.0
+MP_BASE_COMMIT := e0e9fbb17ed6fd06bb76e266ae554784c9c80804
+MP_REPO   := $(ROOT)/lib/micropython
+MP_OVERLAY := $(ROOT)/overlay/micropython
+MP_PORT   := $(MP_REPO)/ports/esp32
 
 IDF_ARGS := -C $(MP_PORT) \
             -B $(BUILD) \
@@ -21,28 +25,35 @@ ifdef ESPBAUD
 IDF_ARGS += -b $(ESPBAUD)
 endif
 
-.PHONY: all build flash monitor deploy erase menuconfig size clean distclean
+.PHONY: all prepare-micropython ensure-build-source build flash monitor deploy erase menuconfig size clean distclean
 
 all: build
 
-build:
+prepare-micropython:
+	if [ "$$(git -C $(MP_REPO) rev-parse HEAD)" != "$(MP_BASE_COMMIT)" ]; then echo "lib/micropython must be checked out at $(MP_BASE_REF) ($(MP_BASE_COMMIT))"; exit 1; fi
+	if [ -d "$(MP_OVERLAY)" ]; then cp -a $(MP_OVERLAY)/. $(MP_REPO)/; fi
+
+ensure-build-source: prepare-micropython
+	if [ -f "$(BUILD)/CMakeCache.txt" ] && ! grep -qx "CMAKE_HOME_DIRECTORY:INTERNAL=$(MP_PORT)" "$(BUILD)/CMakeCache.txt"; then rm -rf $(BUILD); fi
+
+build: ensure-build-source
 	idf.py $(IDF_ARGS) build
 
-flash:
+flash: ensure-build-source
 	idf.py $(IDF_ARGS) flash
 
-monitor:
+monitor: ensure-build-source
 	idf.py $(IDF_ARGS) monitor
 
 deploy: build flash
 
-erase:
+erase: ensure-build-source
 	idf.py $(IDF_ARGS) erase-flash
 
-menuconfig:
+menuconfig: ensure-build-source
 	idf.py $(IDF_ARGS) menuconfig
 
-size:
+size: ensure-build-source
 	idf.py $(IDF_ARGS) size
 
 clean:

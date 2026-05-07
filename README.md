@@ -14,6 +14,8 @@ make BOARD=ESP32_P4X_EYE ESPPORT=/dev/ttyACM0 build flash monitor
 
 Other useful targets: `make menuconfig`, `make size`, `make erase`, `make clean`, `make distclean`.
 
+Before invoking `idf.py`, the top-level Makefile runs `prepare-micropython`: it verifies that `lib/micropython` is checked out at MicroPython v1.28.0 commit `e0e9fbb17ed6fd06bb76e266ae554784c9c80804`, then applies `overlay/micropython/` to the submodule working tree.
+
 ## Architecture
 
 ESP-VISION is an ESP32-P4 MicroPython vision runtime with a VSCode-based host tool.
@@ -24,8 +26,9 @@ ESP-VISION is an ESP32-P4 MicroPython vision runtime with a VSCode-based host to
 | --- | --- |
 | `Makefile` | Top-level build entry that wraps `idf.py` with the correct MicroPython ESP32 port flags. |
 | `micropython.cmake` | ESP-VISION MicroPython integration point, registering user modules, platform sources, board sources, include paths, and `ulab`. |
-| `lib/micropython` | Pinned MicroPython submodule; provides the runtime, ESP32 port, build system, and managed component integration. |
+| `lib/micropython` | MicroPython v1.28.0 submodule used as the upstream baseline. |
 | `lib/ulab` | Pinned `micropython-ulab` submodule used for numerical Python support. |
+| `overlay/micropython` | ESP-VISION MicroPython delta, using the same path layout as the MicroPython repository. |
 | `boards` | Board packages containing per-board configuration, frozen manifests, and board-specific peripheral implementations. |
 | `platform` | Runtime services shared by Python modules, including camera, preview, storage, display, USB, JPEG, and debug support. |
 | `modules` | MicroPython C/C++ bindings exposed to scripts, including `sensor`, `image`, `display`, `imageio`, and `espdl`. |
@@ -33,11 +36,17 @@ ESP-VISION is an ESP32-P4 MicroPython vision runtime with a VSCode-based host to
 | `models` | Optional `.espdl` model assets loaded at runtime from board storage such as `/flash` or `/sdcard`. |
 | `vscode-extension` | Host-side VSCode extension for serial connection, script run/stop, and JPG preview. |
 
+### MicroPython Overlay
+
+ESP-VISION uses MicroPython v1.28.0 as a fixed upstream baseline. Project-specific changes to the MicroPython ESP32 port are maintained under `overlay/micropython/`.
+
+`prepare-micropython` applies the overlay to `lib/micropython/`. Modified or untracked files corresponding to the overlay are expected in the submodule after preparation.
+
 ### Adding a New Board
 
-A board package is split across two locations: the MicroPython ESP32 port (`lib/micropython/ports/esp32/boards/<BOARD>/`) and the ESP-VISION repo (`boards/<BOARD>/`).
+A board package is split across two locations: the MicroPython ESP32 port overlay (`overlay/micropython/ports/esp32/boards/<BOARD>/`) and the ESP-VISION repo (`boards/<BOARD>/`).
 
-**1. MicroPython port side** — `lib/micropython/ports/esp32/boards/<BOARD>/`:
+**1. MicroPython port side** — `overlay/micropython/ports/esp32/boards/<BOARD>/`:
 
 | File | Purpose |
 | --- | --- |

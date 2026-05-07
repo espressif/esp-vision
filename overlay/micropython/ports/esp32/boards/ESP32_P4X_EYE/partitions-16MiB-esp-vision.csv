@@ -1,0 +1,10 @@
+# ESP-VISION ESP32-P4X-EYE 16MiB flash partition table.
+#
+# Keep a large factory app partition for the future vision runtime and use
+# the rest of flash as a FAT filesystem mounted by MicroPython.
+#
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xf000,  0x1000,
+factory,  app,  factory, 0x10000, 0x700000,
+ffat,     data, fat,     0x710000, 0x8F0000,

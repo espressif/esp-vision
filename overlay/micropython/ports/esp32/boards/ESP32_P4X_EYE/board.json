@@ -1,0 +1,18 @@
+{
+    "deploy": [
+        "../deploy.md"
+    ],
+    "deploy_options": {
+        "flash_offset": "0x2000"
+    },
+    "docs": "",
+    "features": [
+        "MIPI_CSI",
+        "OV2710"
+    ],
+    "mcu": "esp32p4x",
+    "product": "ESP32-P4X-EYE",
+    "thumbnail": "",
+    "url": "https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32p4/esp32-p4x-eye/index.html",
+    "vendor": "Espressif"
+}

@@ -9,6 +9,7 @@ exclude: |
     components/imlib/|
     lib/micropython/|
     lib/ulab/|
+    overlay/micropython/|
     modules/py_assert\.h$|
     modules/py_helper\.[ch]$|
     modules/py_image\.[ch]$|
