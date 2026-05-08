@@ -168,7 +168,9 @@ static void esp_vision_camera_release_ppa(void)
 
 static esp_err_t esp_vision_camera_start_xclk(void)
 {
-#if CONFIG_CAMERA_XCLK_USE_ESP_CLOCK_ROUTER
+#if ESP_VISION_CAMERA_XCLK_PIN < 0
+    return ESP_OK;
+#elif CONFIG_CAMERA_XCLK_USE_ESP_CLOCK_ROUTER
     esp_cam_sensor_xclk_config_t xclk_config = {
         .esp_clock_router_cfg = {
             .xclk_pin = ESP_VISION_CAMERA_XCLK_PIN,
