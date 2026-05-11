@@ -11,7 +11,7 @@ const CTRL_B = Buffer.from([0x02]);
 const CTRL_C = Buffer.from([0x03]);
 const CTRL_D = Buffer.from([0x04]);
 const ENTER_RAW_REPL_ATTEMPTS = 4;
-const ENTER_RAW_REPL_TIMEOUT_MS = 3000;
+const ENTER_RAW_REPL_TIMEOUT_MS = 5000;
 const REPL_SETTLE_MS = 200;
 const INTERRUPT_CTRL_C_COUNT = 3;
 
@@ -69,10 +69,16 @@ export class RawRepl {
     }
 
     async softReset(): Promise<void> {
-        await this.enter();
+        await this.transport.flushInput();
+        await this.interruptUserCode();
+        await this.exitToFriendly();
         this.transport.clearInput();
         await this.transport.write(CTRL_D);
         await delay(500);
+    }
+
+    async recoverAfterFailedEnter(): Promise<void> {
+        await this.exitToFriendly().catch(() => undefined);
     }
 
     private async interruptUserCode(): Promise<void> {

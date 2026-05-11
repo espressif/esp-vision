@@ -1,4 +1,13 @@
-node_modules/
 src/
-*.map
+scripts/
+**/*.map
 tsconfig.json
+.gitignore
+.npmignore
+.vscode/
+*.vsix
+node_modules/.bin/
+node_modules/@types/
+node_modules/pyright/
+node_modules/typescript/
+node_modules/undici-types/

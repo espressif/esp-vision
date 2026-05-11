@@ -5,9 +5,11 @@
  */
 
 import { EventEmitter } from "events";
-import { SerialPort } from "serialport";
+import * as path from "path";
+import type { SerialPort as SerialPortType } from "serialport";
 
 const MAX_RX_BUFFER_BYTES = 256 * 1024;
+type SerialPortConstructor = typeof import("serialport").SerialPort;
 
 interface ReadWaiter {
     marker: Buffer;
@@ -19,20 +21,27 @@ interface ReadWaiter {
 export interface SerialPortInfo {
     path: string;
     label: string;
+    manufacturer?: string;
+    productId?: string;
+    vendorId?: string;
 }
 
 export class SerialTransport extends EventEmitter {
-    private port?: SerialPort;
+    private port?: SerialPortType;
     private rxBuffer = Buffer.alloc(0);
     private waiters: ReadWaiter[] = [];
 
     static async listPorts(): Promise<SerialPortInfo[]> {
+        const SerialPort = loadSerialPort();
         const ports = await SerialPort.list();
         return ports.map((port) => {
             const details = [port.manufacturer, port.serialNumber].filter(Boolean).join(" ");
             return {
                 path: port.path,
                 label: details ? `${port.path} - ${details}` : port.path,
+                manufacturer: port.manufacturer,
+                productId: port.productId,
+                vendorId: port.vendorId,
             };
         });
     }
@@ -46,6 +55,7 @@ export class SerialTransport extends EventEmitter {
             await this.close();
         }
 
+        const SerialPort = loadSerialPort();
         this.rxBuffer = Buffer.alloc(0);
         const port = new SerialPort({
             path,
@@ -56,8 +66,8 @@ export class SerialTransport extends EventEmitter {
 
         port.on("data", (data: Buffer) => {
             this.appendRx(data);
-            this.emit("data", data);
             this.processWaiters();
+            this.emit("data", data);
         });
 
         port.on("error", (error) => this.emit("error", error));
@@ -191,5 +201,19 @@ export class SerialTransport extends EventEmitter {
             waiter.reject(error);
         }
         this.waiters = [];
+    }
+}
+
+function loadSerialPort(): SerialPortConstructor {
+    try {
+        const moduleName = "serialport";
+        return require(moduleName).SerialPort as SerialPortConstructor;
+    } catch (error) {
+        try {
+            return require(path.join(__dirname, "..", "runtime", "node_modules", "serialport")).SerialPort as SerialPortConstructor;
+        } catch (runtimeError) {
+            const message = runtimeError instanceof Error ? runtimeError.message : String(runtimeError);
+            throw new Error(`serialport runtime dependency is missing or failed to load: ${message}`);
+        }
     }
 }

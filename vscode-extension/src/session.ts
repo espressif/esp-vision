@@ -15,6 +15,7 @@ import {
     flushPreviewText,
     processPreviewText,
 } from "./previewParser";
+import { EXAMPLE_SCHEME, ExampleProvider } from "./exampleProvider";
 import { RawRepl } from "./rawRepl";
 import { SerialPortInfo, SerialTransport } from "./serialTransport";
 
@@ -22,6 +23,8 @@ const PREVIEW_FPS_WINDOW_MS = 2000;
 const SERIAL_RECONNECT_DELAY_MS = 1200;
 const SERIAL_RECONNECT_MAX_ATTEMPTS = 20;
 const SERIAL_OPEN_SETTLE_MS = 300;
+// Matches MICROPY_HW_USB_MANUFACTURER_STRING in overlay/.../mpconfigboard.h.
+const ESP_VISION_USB_MANUFACTURER = "ESP-VISION";
 
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -95,8 +98,57 @@ export class EspVisionSession {
         private readonly extensionUri: vscode.Uri,
         private readonly output: vscode.OutputChannel,
         private readonly buttons: StatusButtons,
+        private readonly examples?: ExampleProvider,
     ) {
         this.updateStatus();
+    }
+
+    async openExample(relativePath: string): Promise<void> {
+        const uri = vscode.Uri.parse(`${EXAMPLE_SCHEME}:/${relativePath}`);
+        const doc = await vscode.workspace.openTextDocument(uri);
+        await vscode.languages.setTextDocumentLanguage(doc, "python");
+        await vscode.window.showTextDocument(doc, { preview: false });
+    }
+
+    async editExampleCopy(): Promise<void> {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.uri.scheme !== EXAMPLE_SCHEME) {
+            return;
+        }
+        const sourceDoc = editor.document;
+        const sourceUri = sourceDoc.uri;
+        const filename = path.basename(sourceUri.path);
+        const content = sourceDoc.getText();
+        const selection = editor.selection;
+        const viewColumn = editor.viewColumn;
+
+        const wsFolder = vscode.workspace.workspaceFolders?.[0];
+        const defaultUri = wsFolder
+            ? vscode.Uri.joinPath(wsFolder.uri, filename)
+            : vscode.Uri.file(filename);
+
+        const target = await vscode.window.showSaveDialog({
+            defaultUri,
+            filters: { Python: ["py"] },
+            title: "Save Example Copy",
+        });
+        if (!target) {
+            return;
+        }
+
+        await vscode.workspace.fs.writeFile(target, Buffer.from(content, "utf8"));
+
+        const newDoc = await vscode.workspace.openTextDocument(target);
+        const newEditor = await vscode.window.showTextDocument(newDoc, { viewColumn });
+        newEditor.selection = selection;
+
+        for (const group of vscode.window.tabGroups.all) {
+            for (const tab of group.tabs) {
+                if (tab.input instanceof vscode.TabInputText && tab.input.uri.toString() === sourceUri.toString()) {
+                    await vscode.window.tabGroups.close(tab);
+                }
+            }
+        }
     }
 
     setLastRunnableUri(uri: vscode.Uri): void {
@@ -107,10 +159,13 @@ export class EspVisionSession {
         const config = vscode.workspace.getConfiguration("espVision");
         const configuredPort = config.get<string>("serialPort", "");
         const baudRate = config.get<number>("baudRate", 115200);
-        const port = configuredPort || await pickSerialPort();
-
+        let port = configuredPort;
         if (!port) {
-            return;
+            const picked = await pickSerialPort((message) => this.appendOutputLine(message));
+            if (!picked) {
+                return;
+            }
+            port = picked;
         }
 
         if (this.transport?.isOpen) {
@@ -399,6 +454,11 @@ export class EspVisionSession {
             await repl.executeScript(document.getText());
         } catch (error) {
             this.finishRawRun();
+            await repl.softReset().catch(async () => {
+                await repl.recoverAfterFailedEnter().catch(() => undefined);
+            });
+            this.transport?.clearInput();
+            this.resetSerialPreviewParser();
             const message = error instanceof Error ? error.message : String(error);
             this.appendOutputLine(`[error] ${message}`);
             vscode.window.showErrorMessage(`ESP-VISION run failed: ${message}`);
@@ -703,24 +763,33 @@ export class EspVisionSession {
 }
 
 export function isRunnableDocument(document: vscode.TextDocument): boolean {
-    return document.uri.scheme === "file" &&
-        (document.languageId === "python" || document.fileName.endsWith(".py"));
+    if (document.languageId !== "python" && !document.fileName.endsWith(".py")) {
+        return false;
+    }
+    return document.uri.scheme === "file"
+        || document.uri.scheme === "untitled"
+        || document.uri.scheme === EXAMPLE_SCHEME;
 }
 
-async function pickSerialPort(): Promise<string | undefined> {
+async function pickSerialPort(_log?: (message: string) => void): Promise<string | undefined> {
     const ports = await SerialTransport.listPorts();
     if (ports.length === 0) {
         vscode.window.showWarningMessage("No serial ports found.");
         return undefined;
     }
 
+    const matches = ports.filter((p) => p.manufacturer === ESP_VISION_USB_MANUFACTURER);
+    const candidates = matches.length > 0 ? matches : ports;
+    const placeHolder = matches.length > 0
+        ? "Select ESP-VISION serial port"
+        : "No ESP-VISION board detected — pick a port manually";
     const selected = await vscode.window.showQuickPick(
-        ports.map((port: SerialPortInfo) => ({
+        candidates.map((port: SerialPortInfo) => ({
             label: port.path,
             description: port.label === port.path ? undefined : port.label,
             port,
         })),
-        { placeHolder: "Select ESP-VISION serial port" },
+        { placeHolder },
     );
 
     return selected?.port.path;

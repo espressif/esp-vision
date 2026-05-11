@@ -51,8 +51,170 @@
         "command": "espVision.showTools",
         "title": "ESP-VISION: Tools",
         "icon": "$(tools)"
+      },
+      {
+        "command": "espVision.openExample",
+        "title": "ESP-VISION: Open Example"
+      },
+      {
+        "command": "espVision.refreshExamples",
+        "title": "ESP-VISION: Refresh Examples",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "espVision.openLibrary",
+        "title": "ESP-VISION: Open Library Reference"
+      },
+      {
+        "command": "espVision.refreshLibrary",
+        "title": "ESP-VISION: Refresh Library",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "espVision.refreshFiles",
+        "title": "ESP-VISION: Refresh Files",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "espVision.mountFlash",
+        "title": "ESP-VISION: Mount Flash Disk",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "espVision.openFlashFile",
+        "title": "ESP-VISION: Open Flash File"
+      },
+      {
+        "command": "espVision.revealFlashRoot",
+        "title": "ESP-VISION: Reveal Flash Disk",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "espVision.selectFlashRoot",
+        "title": "ESP-VISION: Select Flash Disk",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "espVision.clearFlashRoot",
+        "title": "ESP-VISION: Clear Selected Flash Disk",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "espVision.newFlashFile",
+        "title": "ESP-VISION: New Flash File",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "espVision.newFlashFolder",
+        "title": "ESP-VISION: New Flash Folder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "espVision.deleteFlashEntry",
+        "title": "ESP-VISION: Delete Flash Entry",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "espVision.editExampleCopy",
+        "title": "ESP-VISION: Edit a Copy of Example"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "espVision",
+          "title": "ESP-VISION",
+          "icon": "media/espvision-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "espVision": [
+        {
+          "id": "espVisionExplorer",
+          "name": "Examples"
+        },
+        {
+          "id": "espVisionLibrary",
+          "name": "Library"
+        },
+        {
+          "id": "espVisionFiles",
+          "name": "Files"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "espVision.refreshExamples",
+          "when": "view == espVisionExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "espVision.refreshLibrary",
+          "when": "view == espVisionLibrary",
+          "group": "navigation"
+        },
+        {
+          "command": "espVision.refreshFiles",
+          "when": "view == espVisionFiles",
+          "group": "navigation"
+        },
+        {
+          "command": "espVision.mountFlash",
+          "when": "view == espVisionFiles",
+          "group": "navigation"
+        },
+        {
+          "command": "espVision.revealFlashRoot",
+          "when": "view == espVisionFiles",
+          "group": "navigation"
+        },
+        {
+          "command": "espVision.selectFlashRoot",
+          "when": "view == espVisionFiles",
+          "group": "navigation"
+        },
+        {
+          "command": "espVision.clearFlashRoot",
+          "when": "view == espVisionFiles",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "espVision.newFlashFile",
+          "when": "view == espVisionFiles && viewItem == espVisionFlashRoot",
+          "group": "inline"
+        },
+        {
+          "command": "espVision.newFlashFolder",
+          "when": "view == espVisionFiles && viewItem == espVisionFlashRoot",
+          "group": "inline"
+        },
+        {
+          "command": "espVision.newFlashFile",
+          "when": "view == espVisionFiles && viewItem == espVisionFlashDir",
+          "group": "inline"
+        },
+        {
+          "command": "espVision.newFlashFolder",
+          "when": "view == espVisionFiles && viewItem == espVisionFlashDir",
+          "group": "inline"
+        },
+        {
+          "command": "espVision.deleteFlashEntry",
+          "when": "view == espVisionFiles && viewItem == espVisionFlashFile",
+          "group": "inline"
+        },
+        {
+          "command": "espVision.deleteFlashEntry",
+          "when": "view == espVisionFiles && viewItem == espVisionFlashDir",
+          "group": "inline"
+        }
+      ]
+    },
     "configuration": {
       "title": "ESP-VISION",
       "properties": {
@@ -65,18 +227,29 @@
           "type": "number",
           "default": 921600,
           "description": "Serial baud rate used for the MicroPython REPL connection."
+        },
+        "espVision.flashMountPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional ESP-VISION flash MSC mount path. When empty, the extension scans mounted disks for the ESPVIS MSC vendor or .esp_vision_disk marker."
         }
       }
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "sync-examples": "node scripts/sync-examples.js",
+    "sync-runtime-deps": "node scripts/sync-runtime-deps.js",
+    "compile": "npm run sync-examples && npm run sync-runtime-deps && tsc -p ./",
+    "package": "vsce package --no-dependencies --allow-missing-repository",
+    "watch": "npm run sync-examples && tsc -watch -p ./"
   },
   "dependencies": {
     "serialport": "^12.0.0"
   },
+  "bundledDependencies": [
+    "serialport"
+  ],
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
