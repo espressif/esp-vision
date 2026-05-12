@@ -9,6 +9,8 @@ import * as path from "path";
 import type { SerialPort as SerialPortType } from "serialport";
 
 const MAX_RX_BUFFER_BYTES = 256 * 1024;
+const WIN32_OPEN_RETRY_DELAYS_MS = [0, 300, 700, 1200];
+const WIN32_CLOSE_SETTLE_MS = 300;
 type SerialPortConstructor = typeof import("serialport").SerialPort;
 
 interface ReadWaiter {
@@ -55,6 +57,29 @@ export class SerialTransport extends EventEmitter {
             await this.close();
         }
 
+        const delays = process.platform === "win32" ? WIN32_OPEN_RETRY_DELAYS_MS : [0];
+        let lastError: unknown;
+        for (let attempt = 0; attempt < delays.length; attempt++) {
+            if (delays[attempt] > 0) {
+                await delay(delays[attempt]);
+            }
+
+            try {
+                await this.openOnce(path, baudRate);
+                return;
+            } catch (error) {
+                lastError = error;
+                await this.close().catch(() => undefined);
+                if (!shouldRetryOpen(error) || attempt === delays.length - 1) {
+                    break;
+                }
+            }
+        }
+
+        throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    }
+
+    private async openOnce(path: string, baudRate: number): Promise<void> {
         const SerialPort = loadSerialPort();
         this.rxBuffer = Buffer.alloc(0);
         const port = new SerialPort({
@@ -77,7 +102,7 @@ export class SerialTransport extends EventEmitter {
             port.open((error) => error ? reject(error) : resolve());
         });
         await new Promise<void>((resolve, reject) => {
-            port.set({ dtr: true, rts: true }, (error) => error ? reject(error) : resolve());
+            port.set({ dtr: true, rts: false }, (error) => error ? reject(error) : resolve());
         });
     }
 
@@ -90,9 +115,15 @@ export class SerialTransport extends EventEmitter {
             return;
         }
 
+        await new Promise<void>((resolve) => {
+            port.set({ dtr: false, rts: false }, () => resolve());
+        });
         await new Promise<void>((resolve, reject) => {
             port.close((error) => error ? reject(error) : resolve());
         });
+        if (process.platform === "win32") {
+            await delay(WIN32_CLOSE_SETTLE_MS);
+        }
     }
 
     async write(data: Buffer | string): Promise<void> {
@@ -202,6 +233,21 @@ export class SerialTransport extends EventEmitter {
         }
         this.waiters = [];
     }
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldRetryOpen(error: unknown): boolean {
+    if (process.platform !== "win32") {
+        return false;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return message.includes("SetCommState")
+        || message.includes("Unknown error code 31")
+        || message.includes("Access denied")
+        || message.includes("cannot open");
 }
 
 function loadSerialPort(): SerialPortConstructor {

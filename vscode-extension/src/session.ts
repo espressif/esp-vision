@@ -196,8 +196,16 @@ export class EspVisionSession {
             currentTransport.removeAllListeners();
         }
 
-        await currentTransport.close();
-        this.updateStatus(false);
+        try {
+            await currentTransport.close();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!options.quiet) {
+                this.appendOutputLine(`\n[serial close] ${message}`);
+            }
+        } finally {
+            this.updateStatus(false);
+        }
     }
 
     async runCurrentFile(): Promise<void> {
@@ -449,14 +457,13 @@ export class EspVisionSession {
         try {
             this.suppressSerialOutput = true;
             await repl.enter();
+            await repl.cleanupUserGlobals();
             this.suppressSerialOutput = false;
             this.startRawRun();
             await repl.executeScript(document.getText());
         } catch (error) {
             this.finishRawRun();
-            await repl.softReset().catch(async () => {
-                await repl.recoverAfterFailedEnter().catch(() => undefined);
-            });
+            await repl.recoverAfterFailedEnter().catch(() => undefined);
             this.transport?.clearInput();
             this.resetSerialPreviewParser();
             const message = error instanceof Error ? error.message : String(error);

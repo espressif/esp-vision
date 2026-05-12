@@ -12,6 +12,10 @@ from image import Image
 Float3 = tuple[float, float, float] | Sequence[float]
 #: Detection result tuple: (x, y, w, h, score, category).
 Detection = tuple[int, int, int, int, float, int]
+#: COCO pose keypoint tuple: (x, y). Missing keypoints are returned as (0, 0).
+PoseKeypoint = tuple[int, int]
+#: Pose result tuple: (x, y, w, h, score, category, keypoints).
+PoseDetection = tuple[int, int, int, int, float, int, list[PoseKeypoint]]
 #: Classification result tuple: (label, score).
 Classification = tuple[str, float]
 
@@ -80,6 +84,38 @@ class YOLO11:
     #: score: new confidence threshold, or None to keep current value.
     #: nms: new NMS threshold, or None to keep current value.
     def set_thresholds(self, *, score: float | None = None, nms: float | None = None) -> YOLO11: ...
+
+
+#: ESP-DL YOLO11n COCO pose wrapper.
+class YOLO11nPose:
+    #: Create a YOLO11n pose detector from an .espdl model.
+    #: path: model path.
+    #: score: optional confidence threshold.
+    #: nms: optional non-maximum suppression threshold.
+    #: topk: maximum number of pose results returned per frame.
+    #: mean: optional RGB mean values for preprocessing.
+    #: std: optional RGB standard deviation values for preprocessing.
+    def __init__(
+        self,
+        path: str,
+        *,
+        score: float | None = None,
+        nms: float | None = None,
+        topk: int = 10,
+        mean: Float3 | None = None,
+        std: Float3 | None = None,
+    ) -> None: ...
+    def __del__(self) -> None: ...
+    #: Release model resources.
+    def deinit(self) -> None: ...
+    #: Run COCO pose detection on an image.
+    #: image: RGB565 or grayscale image.
+    #: Returns 17 COCO keypoints for each person.
+    def detect(self, image: Image) -> list[PoseDetection]: ...
+    #: Update detector thresholds.
+    #: score: new confidence threshold, or None to keep current value.
+    #: nms: new NMS threshold, or None to keep current value.
+    def set_thresholds(self, *, score: float | None = None, nms: float | None = None) -> YOLO11nPose: ...
 
 
 #: ESP-DL ImageNet classification wrapper.

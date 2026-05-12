@@ -12,6 +12,8 @@ Models are grouped by runtime API because different families use different postp
 
 `yolo11n/` uses `espdl.YOLO11`.
 
+`yolo11n-pose/` uses `espdl.YOLO11nPose`.
+
 ## Usage
 
 Copy a model to `/sdcard/models/espdet/<family>/` or `/flash/models/espdet/<family>/`.

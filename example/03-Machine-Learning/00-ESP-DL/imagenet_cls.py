@@ -11,7 +11,10 @@ IMAGE = "/sdcard/cat.jpg"
 img = image.Image(IMAGE).to_rgb565(copy=True)
 cls = espdl.ImageNetCls(MODEL, topk=5, score=0.0)
 
-for name, score in cls.classify(img):
-    print(name, "%.4f" % score)
+try:
+    for name, score in cls.classify(img):
+        print(name, "%.4f" % score)
+finally:
+    cls.deinit()
 
 print("done")

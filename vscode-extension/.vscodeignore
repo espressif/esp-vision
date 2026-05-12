@@ -1,6 +1,9 @@
 src/
 scripts/
 **/*.map
+**/__pycache__/**
+**/*.pyc
+**/*.pyo
 tsconfig.json
 .gitignore
 .npmignore
