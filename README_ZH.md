@@ -86,7 +86,7 @@ ESP-VISION 自有代码以 Apache License 2.0 发布。引入的第三方代码�
 | [ESP-DL](https://github.com/espressif/esp-dl) | 来自 ESP Component Registry | 模型推理运行时 | MIT |
 | [esp_new_jpeg](https://github.com/espressif/esp-adf-libs/tree/master/esp_new_jpeg) | 来自 ESP Component Registry | 软件 JPEG codec 库 | Espressif MIT |
 | [esp32-camera](https://github.com/espressif/esp32-camera) | 来自 ESP Component Registry | Camera 驱动库 | Apache-2.0 |
-| [ESP-IDF](https://github.com/espressif/esp-idf) | 外部 SDK | ESP32-P4 构建系统、驱动、JPEG/PPA/Camera 等组件 | Apache-2.0 |
+| [ESP-IDF](https://github.com/espressif/esp-idf) | 外部 SDK | ESP32 构建系统、驱动、JPEG/PPA/Camera 等组件 | Apache-2.0 |
 | [node-serialport](https://github.com/serialport/node-serialport) | `vscode-extension` npm 依赖 | VSCode 扩展串口传输 | MIT |
 | [TypeScript](https://github.com/microsoft/TypeScript) | `vscode-extension` 开发依赖 | VSCode 扩展构建工具 | Apache-2.0 |
 | [VS Code API typings](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/vscode) | `vscode-extension` 开发依赖 | VSCode 扩展类型定义 | MIT |

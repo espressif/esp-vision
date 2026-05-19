@@ -104,6 +104,8 @@ static const char *TAG = "esp_vision_lcd";
 static bool s_backlight_ready;
 static esp_ldo_channel_handle_t s_dsi_phy_ldo;
 static esp_lcd_dsi_bus_handle_t s_dsi_bus;
+static esp_lcd_panel_io_handle_t s_panel_io;
+static esp_lcd_panel_handle_t s_panel;
 
 void esp_vision_board_display_deinit_panel(esp_lcd_panel_io_handle_t io_handle,
                                            esp_lcd_panel_handle_t panel_handle);
@@ -398,6 +400,27 @@ void esp_vision_board_display_set_backlight(uint32_t backlight)
     esp_vision_board_display_brightness_set((int)backlight);
 }
 
+static void esp_vision_board_display_delete_panel_resources(esp_lcd_panel_io_handle_t io_handle,
+                                                            esp_lcd_panel_handle_t panel_handle)
+{
+    if (panel_handle != NULL) {
+        esp_lcd_panel_del(panel_handle);
+    }
+    if (io_handle != NULL) {
+        esp_lcd_panel_io_del(io_handle);
+    }
+    if (s_dsi_bus != NULL) {
+        esp_lcd_del_dsi_bus(s_dsi_bus);
+        s_dsi_bus = NULL;
+    }
+    if (s_dsi_phy_ldo != NULL) {
+        esp_ldo_release_channel(s_dsi_phy_ldo);
+        s_dsi_phy_ldo = NULL;
+    }
+    s_panel_io = NULL;
+    s_panel = NULL;
+}
+
 esp_err_t esp_vision_board_display_init_panel(uint32_t width,
                                               uint32_t height,
                                               esp_lcd_panel_io_handle_t *io_handle,
@@ -413,6 +436,16 @@ esp_err_t esp_vision_board_display_init_panel(uint32_t width,
 
     *io_handle = NULL;
     *panel_handle = NULL;
+
+    if ((s_panel_io != NULL) && (s_panel != NULL)) {
+        ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "turn on EK79007 panel failed");
+        *io_handle = s_panel_io;
+        *panel_handle = s_panel;
+        return ESP_OK;
+    }
+    if ((s_panel_io != NULL) || (s_panel != NULL)) {
+        esp_vision_board_display_delete_panel_resources(s_panel_io, s_panel);
+    }
 
     esp_ldo_channel_config_t ldo_config = {
         .chan_id = ESP_VISION_LCD_MIPI_DSI_PHY_LDO_CHAN_ID,
@@ -452,10 +485,12 @@ esp_err_t esp_vision_board_display_init_panel(uint32_t width,
     ESP_GOTO_ON_ERROR(esp_lcd_panel_init(*panel_handle), err, TAG, "init EK79007 panel failed");
     ESP_GOTO_ON_ERROR(esp_lcd_panel_disp_on_off(*panel_handle, true), err, TAG, "turn on EK79007 panel failed");
 
+    s_panel_io = *io_handle;
+    s_panel = *panel_handle;
     return ESP_OK;
 
 err:
-    esp_vision_board_display_deinit_panel(*io_handle, *panel_handle);
+    esp_vision_board_display_delete_panel_resources(*io_handle, *panel_handle);
     *io_handle = NULL;
     *panel_handle = NULL;
     esp_vision_board_display_backlight_deinit();
@@ -467,20 +502,10 @@ void esp_vision_board_display_deinit_panel(esp_lcd_panel_io_handle_t io_handle,
 {
     if (panel_handle != NULL) {
         esp_lcd_panel_disp_on_off(panel_handle, false);
-        esp_lcd_panel_del(panel_handle);
-    }
-    if (io_handle != NULL) {
-        esp_lcd_panel_io_del(io_handle);
-    }
-    if (s_dsi_bus != NULL) {
-        esp_lcd_del_dsi_bus(s_dsi_bus);
-        s_dsi_bus = NULL;
-    }
-    if (s_dsi_phy_ldo != NULL) {
-        esp_ldo_release_channel(s_dsi_phy_ldo);
-        s_dsi_phy_ldo = NULL;
     }
     esp_vision_board_display_backlight_deinit();
+
+    (void)io_handle;
 }
 
 #else

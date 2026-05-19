@@ -86,7 +86,7 @@ ESP-VISION's own code is released under the Apache License 2.0. Vendored code ke
 | [ESP-DL](https://github.com/espressif/esp-dl) | from ESP Component Registry | Model inference runtime | MIT |
 | [esp_new_jpeg](https://github.com/espressif/esp-adf-libs/tree/master/esp_new_jpeg) | from ESP Component Registry | Software JPEG codec library | Espressif MIT |
 | [esp32-camera](https://github.com/espressif/esp32-camera) | from ESP Component Registry | Camera driver library | Apache-2.0 |
-| [ESP-IDF](https://github.com/espressif/esp-idf) | external SDK | ESP32-P4 build system, drivers, JPEG/PPA/camera related components | Apache-2.0 |
+| [ESP-IDF](https://github.com/espressif/esp-idf) | external SDK | ESP32 build system, drivers, JPEG/PPA/camera related components | Apache-2.0 |
 | [node-serialport](https://github.com/serialport/node-serialport) | `vscode-extension` npm dependency | VSCode extension serial transport | MIT |
 | [TypeScript](https://github.com/microsoft/TypeScript) | `vscode-extension` dev dependency | VSCode extension build tool | Apache-2.0 |
 | [VS Code API typings](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/vscode) | `vscode-extension` dev dependency | VSCode extension type definitions | MIT |
