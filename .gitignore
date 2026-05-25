@@ -25,10 +25,7 @@ __pycache__/
 .venv/
 
 # VSCode extension
-vscode-extension/.vscode/
-vscode-extension/node_modules/
-vscode-extension/out/
-vscode-extension/*.vsix
+vscode-extension/
 
 # Patches / staging
 *.rej

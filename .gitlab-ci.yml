@@ -41,25 +41,6 @@ python_stubs:
   script:
     - python -m py_compile stubs/*.pyi
 
-vscode_extension:
-  stage: check
-  image: node:20-bookworm
-  cache:
-    key:
-      files:
-        - vscode-extension/package-lock.json
-    paths:
-      - vscode-extension/.npm/
-  script:
-    - cd vscode-extension
-    - npm ci --cache .npm --prefer-offline
-    - npm run compile
-  artifacts:
-    when: on_success
-    expire_in: 1 week
-    paths:
-      - vscode-extension/out/
-
 firmware:
   stage: build
   image:

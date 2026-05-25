@@ -13,10 +13,7 @@ exclude: |
     modules/py_assert\.h$|
     modules/py_helper\.[ch]$|
     modules/py_image\.[ch]$|
-    modules/py_imageio\.[ch]$|
-    vscode-extension/node_modules/|
-    vscode-extension/out/|
-    vscode-extension/.*\.vsix$
+    modules/py_imageio\.[ch]$
   )
 
 repos:
@@ -34,7 +31,6 @@ repos:
         exclude: &whitespace_excludes |
           (?x)^(
             .+\.(md|rst|map|bin)|
-            vscode-extension/package-lock\.json|
             .+test.*\/.*expected.*|
             .+known-warnings.*|
             .+\/testdata\/.+|
