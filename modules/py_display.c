@@ -93,7 +93,6 @@ static MP_DEFINE_CONST_FUN_OBJ_1(py_display_height_obj, py_display_height);
 
 static mp_obj_t py_display_backlight(size_t n_args, const mp_obj_t *args)
 {
-    (void)args;
     py_display_ensure_ready();
 
     if (n_args == 1) {
