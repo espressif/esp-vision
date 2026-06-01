@@ -8,7 +8,7 @@ Models are grouped by runtime API because different families use different postp
 
 ## Families
 
-`pico/` uses `espdl.ESPDet`.
+`pico/<model>/` uses `espdl.ESPDet`.
 
 `yolo11n/` uses `espdl.YOLO11`.
 
@@ -16,6 +16,6 @@ Models are grouped by runtime API because different families use different postp
 
 ## Usage
 
-Copy a model to `/sdcard/models/espdet/<family>/` or `/flash/models/espdet/<family>/`.
+Copy a model directory to `/sdcard/models/espdet/<family>/` or `/flash/models/espdet/<family>/`.
 
 Use the matching Python API for that family.
