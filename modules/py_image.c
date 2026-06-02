@@ -52,6 +52,9 @@
 #include "omv_boardconfig.h"
 #include "jpeg.h"
 #include "preview.h"
+#if defined(ESP_VISION_ENABLE_ZXING_1D)
+#include "esp_vision_zxing.h"
+#endif
 #if defined(IMLIB_ENABLE_IMAGE_IO)
 #include "py_imageio.h"
 #endif
@@ -5651,7 +5654,7 @@ static mp_obj_t py_image_find_datamatrices(size_t n_args, const mp_obj_t *args, 
 static MP_DEFINE_CONST_FUN_OBJ_KW(py_image_find_datamatrices_obj, 1, py_image_find_datamatrices);
 #endif // IMLIB_ENABLE_DATAMATRICES
 
-#if defined(IMLIB_ENABLE_BARCODES) && (!defined(OMV_NO_GPL))
+#if (defined(IMLIB_ENABLE_BARCODES) && (!defined(OMV_NO_GPL))) || defined(ESP_VISION_ENABLE_ZXING_1D)
 // BarCode Object //
 #define py_barcode_obj_size    8
 typedef struct py_barcode_obj {
@@ -5785,9 +5788,17 @@ static mp_obj_t py_image_find_barcodes(size_t n_args, const mp_obj_t *args, mp_m
     rectangle_t roi;
     py_helper_keyword_rectangle_roi(arg_img, n_args, args, 1, kw_args, &roi);
 
+    #if defined(ESP_VISION_ENABLE_ZXING_1D)
+    PY_ASSERT_TRUE_MSG(IM_IS_GS(arg_img), "find_barcodes() requires a grayscale image");
+    #endif
+
     list_t out;
     fb_alloc_mark();
+    #if defined(ESP_VISION_ENABLE_ZXING_1D)
+    esp_vision_zxing_find_barcodes(&out, arg_img, &roi);
+    #else
     imlib_find_barcodes(&out, arg_img, &roi);
+    #endif
     fb_alloc_free_till_mark();
 
     mp_obj_list_t *objects_list = mp_obj_new_list(list_size(&out), NULL);
@@ -5826,7 +5837,7 @@ static mp_obj_t py_image_find_barcodes(size_t n_args, const mp_obj_t *args, mp_m
     return objects_list;
 }
 static MP_DEFINE_CONST_FUN_OBJ_KW(py_image_find_barcodes_obj, 1, py_image_find_barcodes);
-#endif // IMLIB_ENABLE_BARCODES
+#endif // IMLIB_ENABLE_BARCODES || ESP_VISION_ENABLE_ZXING_1D
 
 #ifdef IMLIB_ENABLE_FIND_DISPLACEMENT
 // Displacement Object //
@@ -6622,7 +6633,7 @@ static const mp_rom_map_elem_t locals_dict_table[] = {
     #else
     {MP_ROM_QSTR(MP_QSTR_find_datamatrices),   MP_ROM_PTR(&py_func_unavailable_obj)},
     #endif
-    #if defined(IMLIB_ENABLE_BARCODES) && (!defined(OMV_NO_GPL))
+    #if defined(ESP_VISION_ENABLE_ZXING_1D) || (defined(IMLIB_ENABLE_BARCODES) && (!defined(OMV_NO_GPL)))
     {MP_ROM_QSTR(MP_QSTR_find_barcodes),       MP_ROM_PTR(&py_image_find_barcodes_obj)},
     #else
     {MP_ROM_QSTR(MP_QSTR_find_barcodes),       MP_ROM_PTR(&py_func_unavailable_obj)},
@@ -7250,7 +7261,7 @@ static const mp_rom_map_elem_t globals_dict_table[] = {
     {MP_ROM_QSTR(MP_QSTR_ARTOOLKIT),           MP_ROM_INT(ARTOOLKIT)},
     #endif
     #endif
-    #ifdef IMLIB_ENABLE_BARCODES
+    #if defined(IMLIB_ENABLE_BARCODES) || defined(ESP_VISION_ENABLE_ZXING_1D)
     {MP_ROM_QSTR(MP_QSTR_EAN2),                MP_ROM_INT(BARCODE_EAN2)},
     {MP_ROM_QSTR(MP_QSTR_EAN5),                MP_ROM_INT(BARCODE_EAN5)},
     {MP_ROM_QSTR(MP_QSTR_EAN8),                MP_ROM_INT(BARCODE_EAN8)},

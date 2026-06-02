@@ -85,6 +85,7 @@ ESP-VISION's own code is released under the Apache License 2.0. Vendored code ke
 | [micropython-ulab](https://github.com/v923z/micropython-ulab) | `lib/ulab` | `ulab` numerical module | MIT |
 | [OpenMV](https://github.com/openmv/openmv) `imlib` MIT subset, excluding files listed separately (v4.8.1) | `components/imlib` | Image processing and drawing algorithms | MIT |
 | AprilTag algorithm from OpenMV `imlib` | `components/imlib/upstream/apriltag.c` | AprilTag and rectangle detection | BSD-2-Clause |
+| [ZXing-C++](https://github.com/zxing-cpp/zxing-cpp) | `lib/zxing-cpp` | 1D barcode reader backend | Apache-2.0 |
 | [ESP-DL](https://github.com/espressif/esp-dl) | from ESP Component Registry | Model inference runtime | MIT |
 | [esp_new_jpeg](https://github.com/espressif/esp-adf-libs/tree/master/esp_new_jpeg) | from ESP Component Registry | Software JPEG codec library | Espressif MIT |
 | [esp32-camera](https://github.com/espressif/esp32-camera) | from ESP Component Registry | Camera driver library | Apache-2.0 |

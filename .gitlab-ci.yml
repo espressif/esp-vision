@@ -54,17 +54,18 @@ firmware:
           - ESP32_S3_EYE
           - TEMPLATE
   before_script:
-    - git submodule sync -- lib/micropython lib/ulab
-    - git submodule update --init --depth 1 lib/micropython lib/ulab
+    - git submodule sync -- lib/micropython lib/ulab lib/zxing-cpp
+    - git submodule update --init --depth 1 lib/micropython lib/ulab lib/zxing-cpp
     - git -C lib/micropython submodule sync -- lib/micropython-lib
     - git -C lib/micropython submodule update --init --depth 1 lib/micropython-lib
     - . /opt/esp/idf/export.sh
   script:
     - make BOARD="$BOARD" build
   artifacts:
-    when: on_success
+    when: always
     expire_in: 1 week
     paths:
+      - build/$BOARD/log/
       - build/$BOARD/bootloader/bootloader.bin
       - build/$BOARD/partition_table/partition-table.bin
       - build/$BOARD/micropython.bin

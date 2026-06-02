@@ -12,6 +12,12 @@ set(ESP_VISION_ROOT "${CMAKE_CURRENT_LIST_DIR}")
 set(ESP_VISION_BOARD_DIR "${ESP_VISION_ROOT}/boards/${ESP_VISION_BOARD}")
 set(MICROPY_MANIFEST_ESP_VISION_ROOT "${ESP_VISION_ROOT}")
 
+
+set(ESP_VISION_ENABLE_BARCODE OFF)
+if(EXISTS "${ESP_VISION_BOARD_DIR}/board.cmake")
+    include("${ESP_VISION_BOARD_DIR}/board.cmake")
+endif()
+
 list(APPEND MICROPY_QSTRDEFS_PORT
     ${ESP_VISION_ROOT}/modules/qstrdefs_esp_vision.h
 )
@@ -72,6 +78,22 @@ target_compile_definitions(usermod_esp_vision_platform INTERFACE
     CMSIS_MCU_H="cmsis_compiler.h"
     OMV_NO_GPL=1
 )
+
+# Barcode support is opt-in per board (board sets ESP_VISION_ENABLE_BARCODE in
+# its boards/<board>/board.cmake) and requires the zxing-cpp submodule. Keep
+# this condition in sync with components/zxing/CMakeLists.txt.
+if(ESP_VISION_ENABLE_BARCODE
+        AND EXISTS "${ESP_VISION_ROOT}/lib/zxing-cpp/core/CMakeLists.txt")
+    target_compile_definitions(usermod_esp_vision_platform INTERFACE
+        ESP_VISION_ENABLE_ZXING_1D=1
+    )
+
+    target_include_directories(usermod_esp_vision_platform INTERFACE
+        ${ESP_VISION_ROOT}/components/zxing/include
+    )
+
+    target_link_libraries(usermod_esp_vision_platform INTERFACE idf::zxing)
+endif()
 
 target_compile_options(usermod_esp_vision_platform INTERFACE
     $<$<COMPILE_LANGUAGE:CXX>:-std=gnu++2b>

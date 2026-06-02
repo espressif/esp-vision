@@ -4,3 +4,6 @@
 [submodule "lib/ulab"]
 	path = lib/ulab
 	url = https://github.com/v923z/micropython-ulab.git
+[submodule "lib/zxing-cpp"]
+	path = lib/zxing-cpp
+	url = https://github.com/zxing-cpp/zxing-cpp.git
