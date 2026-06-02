@@ -4,7 +4,7 @@
 
 ## 快速开始
 
-环境要求：ESP-IDF v5.5.4（已 source `export.sh`，`idf.py` 可用），以及受支持的 ESP32-P4 或 ESP32-S3 目标板。
+环境要求：ESP-IDF release/v5.5（已 source `export.sh`，`idf.py` 可用），以及受支持的 ESP32-P4 或 ESP32-S3 目标板。
 
 ```bash
 git clone --recursive <本仓库> esp-vision

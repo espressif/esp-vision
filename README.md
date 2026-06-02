@@ -4,7 +4,7 @@
 
 ## Quickstart
 
-Prerequisites: ESP-IDF v5.5.4 with the export script sourced (`idf.py` on `PATH`), and a supported ESP32-P4 or ESP32-S3 target board.
+Prerequisites: ESP-IDF release/v5.5 with the export script sourced (`idf.py` on `PATH`), and a supported ESP32-P4 or ESP32-S3 target board.
 
 ```bash
 git clone --recursive <this-repo> esp-vision

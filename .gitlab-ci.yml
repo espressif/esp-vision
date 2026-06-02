@@ -44,7 +44,7 @@ python_stubs:
 firmware:
   stage: build
   image:
-    name: espressif/idf:v5.5.4
+    name: espressif/idf:release-v5.5
     entrypoint: [""]
   parallel:
     matrix:
