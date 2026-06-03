@@ -18,6 +18,8 @@ variables:
 
 pre_commit:
   stage: check
+  tags: 
+    - build
   image: python:3.11-slim
   cache:
     key:
@@ -37,12 +39,16 @@ pre_commit:
 
 python_stubs:
   stage: check
+  tags: 
+    - build
   image: python:3.11-slim
   script:
     - python -m py_compile stubs/*.pyi
 
 firmware:
   stage: build
+  tags: 
+    - build
   image:
     name: espressif/idf:release-v5.5
     entrypoint: [""]
