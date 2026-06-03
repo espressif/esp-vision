@@ -38,6 +38,15 @@ if((IDF_TARGET STREQUAL "esp32p4") OR (IDF_TARGET STREQUAL "esp32s3"))
     )
 endif()
 
+# The hardware H.264 encoder (esp_h264) and RTSP server (esp_media_protocols) are P4-only.
+if(IDF_TARGET STREQUAL "esp32p4")
+    list(APPEND ESP_VISION_MODULE_SOURCES
+        ${ESP_VISION_ROOT}/platform/h264.c
+        ${ESP_VISION_ROOT}/modules/py_h264.c
+        ${ESP_VISION_ROOT}/modules/py_rtsp.c
+    )
+endif()
+
 set(ESP_VISION_CAMERA_SOURCE "${ESP_VISION_ROOT}/platform/camera.c")
 set(ESP_VISION_BOARD_SOURCES)
 if(EXISTS "${ESP_VISION_BOARD_DIR}/camera.c")
