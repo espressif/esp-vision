@@ -1,0 +1,16 @@
+{
+    "deploy": [
+        "../deploy.md"
+    ],
+    "docs": "",
+    "features": [
+        "WiFi",
+        "DVP",
+        "OV3660"
+    ],
+    "mcu": "esp32s31",
+    "product": "ESP32-S31-Korvo",
+    "thumbnail": "",
+    "url": "https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s31/index.html",
+    "vendor": "Espressif"
+}

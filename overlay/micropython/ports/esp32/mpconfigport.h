@@ -123,14 +123,18 @@
 #define MICROPY_PY_MACHINE_RESET            (1)
 #define MICROPY_PY_MACHINE_BARE_METAL_FUNCS (1)
 #define MICROPY_PY_MACHINE_DISABLE_IRQ_ENABLE_IRQ (1)
+#ifndef MICROPY_PY_MACHINE_ADC
 #define MICROPY_PY_MACHINE_ADC              (1)
+#endif
 #define MICROPY_PY_MACHINE_ADC_INCLUDEFILE  "ports/esp32/machine_adc.c"
 #define MICROPY_PY_MACHINE_ADC_ATTEN_WIDTH  (1)
 #define MICROPY_PY_MACHINE_ADC_INIT         (1)
 #define MICROPY_PY_MACHINE_ADC_DEINIT       (1)
 #define MICROPY_PY_MACHINE_ADC_READ         (1)
 #define MICROPY_PY_MACHINE_ADC_READ_UV      (1)
+#ifndef MICROPY_PY_MACHINE_ADC_BLOCK
 #define MICROPY_PY_MACHINE_ADC_BLOCK        (1)
+#endif
 #define MICROPY_PY_MACHINE_ADC_BLOCK_INCLUDEFILE "ports/esp32/machine_adc_block.c"
 #define MICROPY_PY_MACHINE_PIN_MAKE_NEW     mp_pin_make_new
 #define MICROPY_PY_MACHINE_BITSTREAM        (1)
@@ -253,7 +257,9 @@
 
 #if MICROPY_HW_ENABLE_USBDEV
 #define MICROPY_SCHEDULER_STATIC_NODES        (1)
+#ifndef MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER
 #define MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER (1)
+#endif
 
 #ifndef MICROPY_HW_USB_VID
 #define USB_ESPRESSIF_VID 0x303A
@@ -285,14 +291,19 @@
 #define MICROPY_HW_USB_PRODUCT_FS_STRING "Espressif Device"
 #endif
 
-#if CONFIG_IDF_TARGET_ESP32P4
-// By default, ESP32-P4 uses the HS USB PHY (RHPORT1) for TinyUSB
-// and configures the full speed USB port as USB Serial/JTAG device
+#if CONFIG_IDF_TARGET_ESP32P4 || CONFIG_IDF_TARGET_ESP32S31
+// By default, ESP32-P4 uses the HS USB PHY on RHPORT1 for TinyUSB (the full
+// speed USB port runs as a USB Serial/JTAG device). ESP32-S31 is HS-only with
+// the USB PHY on RHPORT0.
 #ifndef MICROPY_HW_USB_HS
 #define MICROPY_HW_USB_HS 1
 #endif // MICROPY_HW_USB_HS
 #if MICROPY_HW_USB_HS && !defined(CFG_TUSB_RHPORT0_MODE) && !defined(CFG_TUSB_RHPORT1_MODE)
+#if CONFIG_IDF_TARGET_ESP32S31
+#define CFG_TUSB_RHPORT0_MODE   (OPT_MODE_DEVICE | OPT_MODE_HIGH_SPEED)
+#else
 #define CFG_TUSB_RHPORT1_MODE   (OPT_MODE_DEVICE | OPT_MODE_HIGH_SPEED)
+#endif
 #endif
 #endif
 

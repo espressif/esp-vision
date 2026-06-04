@@ -23,7 +23,7 @@ if(CONFIG_IDF_TARGET_ARCH_RISCV)
 endif()
 
 if(NOT DEFINED MICROPY_PY_TINYUSB)
-    if(CONFIG_IDF_TARGET_ESP32S2 OR CONFIG_IDF_TARGET_ESP32S3 OR CONFIG_IDF_TARGET_ESP32P4)
+    if(CONFIG_IDF_TARGET_ESP32S2 OR CONFIG_IDF_TARGET_ESP32S3 OR CONFIG_IDF_TARGET_ESP32P4 OR CONFIG_IDF_TARGET_ESP32S31)
         set(MICROPY_PY_TINYUSB ON)
     endif()
 endif()
@@ -117,7 +117,6 @@ endif()
 
 list(APPEND MICROPY_SOURCE_PORT
     panichandler.c
-    adc.c
     ppp_set_auth.c
     uart.c
     usb.c
@@ -129,7 +128,6 @@ list(APPEND MICROPY_SOURCE_PORT
     machine_bitstream.c
     machine_timer.c
     machine_pin.c
-    machine_touchpad.c
     machine_dac.c
     machine_i2c.c
     mpnimbleport.c
@@ -155,6 +153,12 @@ if($ENV{IDF_VERSION} VERSION_LESS "6.0")
         network_ppp.c
         network_wlan.c
         modsocket.c)
+endif()
+
+if(NOT CONFIG_IDF_TARGET_ESP32S31)
+    list(APPEND MICROPY_SOURCE_PORT
+        adc.c
+        machine_touchpad.c)
 endif()
 
 list(TRANSFORM MICROPY_SOURCE_PORT PREPEND ${MICROPY_PORT_DIR}/)
