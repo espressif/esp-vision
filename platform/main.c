@@ -59,7 +59,9 @@
 #include "shared/tinyusb/mp_usbd.h"
 
 #include "modmachine.h"
+#if MICROPY_PY_NETWORK
 #include "modnetwork.h"
+#endif
 #include "modesp32.h"
 #include "uart.h"
 #include "usb.h"
@@ -252,7 +254,9 @@ void boardctrl_startup(void)
         nvs_flash_init();
     }
 
-    esp_flash_get_physical_size(NULL, &esp_flash_default_chip->size);
+    // esp_flash_t is an opaque type on IDF 6.0, so query the size into a local.
+    uint32_t flash_size = 0;
+    esp_flash_get_physical_size(NULL, &flash_size);
 
     if (esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "vfs") == NULL &&
         esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "ffat") == NULL) {
@@ -264,8 +268,8 @@ void boardctrl_startup(void)
             iter = esp_partition_next(iter);
         }
 
-        if (offset > 0 && esp_flash_default_chip->size > offset) {
-            size_t size = esp_flash_default_chip->size - offset;
+        if (offset > 0 && flash_size > offset) {
+            size_t size = flash_size - offset;
             esp_partition_register_external(esp_flash_default_chip,
                                             offset,
                                             size,

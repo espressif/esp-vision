@@ -8,6 +8,7 @@
 #include <alloca.h>
 #include "esp_random.h"
 #include "esp_system.h"
+#include "esp_idf_version.h"
 #include "freertos/FreeRTOS.h"
 
 #ifndef MICROPY_CONFIG_ROM_LEVEL
@@ -153,7 +154,11 @@
 #define MICROPY_PY_MACHINE_DAC              (SOC_DAC_SUPPORTED)
 #endif
 #ifndef MICROPY_PY_MACHINE_I2S
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+#define MICROPY_PY_MACHINE_I2S              (0)
+#else
 #define MICROPY_PY_MACHINE_I2S              (SOC_I2S_SUPPORTED)
+#endif
 #endif
 #define MICROPY_PY_MACHINE_I2S_INCLUDEFILE  "ports/esp32/machine_i2s.c"
 #define MICROPY_PY_MACHINE_I2S_FINALISER    (1)
@@ -166,7 +171,15 @@
 #define MICROPY_PY_MACHINE_WDT              (1)
 #define MICROPY_PY_MACHINE_WDT_INCLUDEFILE  "ports/esp32/machine_wdt.c"
 #ifndef MICROPY_PY_NETWORK
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+#define MICROPY_PY_NETWORK (0)
+#else
 #define MICROPY_PY_NETWORK (1)
+#endif
+#endif
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+#undef MICROPY_PY_NETWORK_WLAN
+#define MICROPY_PY_NETWORK_WLAN (0)
 #endif
 #ifndef MICROPY_PY_NETWORK_HOSTNAME_DEFAULT
 #if CONFIG_IDF_TARGET_ESP32
@@ -200,15 +213,25 @@
 #ifndef MICROPY_HW_ESP_NEW_I2C_DRIVER
 #define MICROPY_HW_ESP_NEW_I2C_DRIVER       (0)
 #endif
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+#define MICROPY_PY_SSL                      (0)
+#define MICROPY_SSL_MBEDTLS                 (0)
+#define MICROPY_PY_CRYPTOLIB                (0)
+#else
 #define MICROPY_PY_SSL                      (MICROPY_PY_NETWORK)
 #define MICROPY_SSL_MBEDTLS                 (MICROPY_PY_SSL)
+#endif
 #define MICROPY_PY_WEBSOCKET                (MICROPY_PY_NETWORK)
 #define MICROPY_PY_WEBREPL                  (MICROPY_PY_NETWORK)
 #define MICROPY_PY_ONEWIRE                  (1)
 #define MICROPY_PY_SOCKET_EVENTS            (MICROPY_PY_WEBREPL)
 #define MICROPY_PY_BLUETOOTH_RANDOM_ADDR    (1)
 #ifndef MICROPY_PY_ESP32_PCNT
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+#define MICROPY_PY_ESP32_PCNT               (0)
+#else
 #define MICROPY_PY_ESP32_PCNT               (SOC_PCNT_SUPPORTED)
+#endif
 #endif
 
 // fatfs configuration

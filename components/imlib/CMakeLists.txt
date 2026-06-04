@@ -85,3 +85,10 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
     -O3
     -Wno-error
 )
+
+if($ENV{IDF_VERSION} VERSION_GREATER_EQUAL "6.0")
+    target_compile_options(${COMPONENT_LIB} PRIVATE
+        $<$<COMPILE_LANGUAGE:C>:-std=gnu17>
+        -Wno-uninitialized
+        -Wno-maybe-uninitialized)
+endif()

@@ -90,3 +90,7 @@ target_compile_options(ZXing PRIVATE
     -include "${CMAKE_CURRENT_LIST_DIR}/compat/zxing_config_override.h"
     -Wno-error=return-type
 )
+
+if($ENV{IDF_VERSION} VERSION_GREATER_EQUAL "6.0")
+    target_compile_options(ZXing PRIVATE -Wno-error=undef)
+endif()

@@ -299,7 +299,7 @@ static void int_py_imageio_read_chunk(py_imageio_obj_t *stream, image_t *image, 
     file_read(fp, &bpp, 4);
 
     if (stream->version < NEW_PIXFORMAT_VER) {
-        if (bpp < 0) {
+        if ((int32_t)bpp < 0) {
             mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Invalid image stream bpp"));
         } else if (bpp == OLD_BINARY_BPP) {
             image->pixfmt = PIXFORMAT_BINARY;

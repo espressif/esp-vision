@@ -3,7 +3,7 @@
 
 ROOT      := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 BOARD     ?= ESP32_P4X_EYE
-BUILD     := $(ROOT)/build/$(BOARD)
+BUILD     := $(ROOT)/build/$(BOARD)/idf$(ESP_IDF_VERSION)
 MP_BASE_REF ?= v1.28.0
 MP_BASE_COMMIT := e0e9fbb17ed6fd06bb76e266ae554784c9c80804
 MP_REPO   := $(ROOT)/lib/micropython
@@ -34,9 +34,11 @@ prepare-micropython:
 	@if [ "$$(git -C $(MP_REPO) rev-parse HEAD)" != "$(MP_BASE_COMMIT)" ]; then echo "lib/micropython must be checked out at $(MP_BASE_REF) ($(MP_BASE_COMMIT))"; exit 1; fi
 	@if [ -d "$(MP_OVERLAY)" ]; then cp -a $(MP_OVERLAY)/. $(MP_REPO)/; fi
 	@if [ -z "$$ESP_IDF_VERSION" ]; then echo "ESP_IDF_VERSION is not set; source the ESP-IDF export script before building"; exit 1; fi
-	@if [ ! -f "$(MP_COMPONENT_YML)/release$$ESP_IDF_VERSION/idf_component.yml" ]; then echo "No component manifest for ESP-IDF $$ESP_IDF_VERSION; add overlay/component_yml/release$$ESP_IDF_VERSION/idf_component.yml"; exit 1; fi
-	@cp $(MP_COMPONENT_YML)/release$$ESP_IDF_VERSION/idf_component.yml $(MP_PORT)/main/idf_component.yml
-	@echo "[prepare-micropython] selected component manifest: overlay/component_yml/release$$ESP_IDF_VERSION/idf_component.yml (ESP-IDF $$ESP_IDF_VERSION)"
+	@yml="$(MP_COMPONENT_YML)/release$$ESP_IDF_VERSION/idf_component.yml"; \
+	 [ -f "$$yml" ] || yml="$(MP_COMPONENT_YML)/master/idf_component.yml"; \
+	 [ -f "$$yml" ] || { echo "No component manifest for ESP-IDF $$ESP_IDF_VERSION and no overlay/component_yml/master fallback"; exit 1; }; \
+	 cmp -s "$$yml" $(MP_PORT)/main/idf_component.yml || cp "$$yml" $(MP_PORT)/main/idf_component.yml; \
+	 echo "[prepare-micropython] selected component manifest: $${yml#$(ROOT)/} (ESP-IDF $$ESP_IDF_VERSION)"
 
 ensure-build-source: prepare-micropython
 	@if [ -f "$(BUILD)/CMakeCache.txt" ] && [ ! -f "$(BUILD)/build.ninja" ]; then rm -rf $(BUILD); fi

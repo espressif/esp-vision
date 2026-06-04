@@ -45,20 +45,13 @@ python_stubs:
   script:
     - python -m py_compile stubs/*.pyi
 
-firmware:
+.firmware_base:
   stage: build
-  tags: 
+  tags:
     - build
   image:
-    name: espressif/idf:release-v5.5
+    name: espressif/idf:$IDF_IMAGE
     entrypoint: [""]
-  parallel:
-    matrix:
-      - BOARD:
-          - ESP32_P4X_EYE
-          - ESP32_P4X_FUNCTION_EV_BOARD
-          - ESP32_S3_EYE
-          - TEMPLATE
   before_script:
     - git submodule sync -- lib/micropython lib/ulab lib/zxing-cpp
     - git submodule update --init --depth 1 lib/micropython lib/ulab lib/zxing-cpp
@@ -71,7 +64,32 @@ firmware:
     when: always
     expire_in: 1 week
     paths:
-      - build/$BOARD/log/
-      - build/$BOARD/bootloader/bootloader.bin
-      - build/$BOARD/partition_table/partition-table.bin
-      - build/$BOARD/micropython.bin
+      - build/$BOARD/idf*/log/
+      - build/$BOARD/idf*/bootloader/bootloader.bin
+      - build/$BOARD/idf*/partition_table/partition-table.bin
+      - build/$BOARD/idf*/micropython.bin
+
+# Stable release lines (blocking): every board on every supported IDF release.
+firmware:
+  extends: .firmware_base
+  parallel:
+    matrix:
+      - IDF_IMAGE: ["release-v5.5", "release-v6.0"]
+        BOARD:
+          - ESP32_P4X_EYE
+          - ESP32_P4X_FUNCTION_EV_BOARD
+          - ESP32_S3_EYE
+          - TEMPLATE
+
+# IDF master (currently 6.1-dev) is a moving target: track it but don't block the pipeline.
+firmware_master:
+  extends: .firmware_base
+  allow_failure: true
+  parallel:
+    matrix:
+      - IDF_IMAGE: ["latest"]
+        BOARD:
+          - ESP32_P4X_EYE
+          - ESP32_P4X_FUNCTION_EV_BOARD
+          - ESP32_S3_EYE
+          - TEMPLATE

@@ -24,7 +24,6 @@
 
 #define MICROPY_HW_ENABLE_UART_REPL      (1)
 
-#define MICROPY_PY_MACHINE_I2S           (1)
 
 #ifndef MICROPY_PY_NETWORK_WLAN
 #define MICROPY_PY_NETWORK_WLAN          (1)
