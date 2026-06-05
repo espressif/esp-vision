@@ -4,6 +4,11 @@
 
 set(ESP_VISION_ROOT "${CMAKE_CURRENT_LIST_DIR}/../..")
 set(ZXING_ROOT "${ESP_VISION_ROOT}/lib/zxing-cpp")
+idf_build_get_property(ZXING_MICROPY_PORT_DIR PROJECT_DIR)
+if(NOT EXISTS "${ZXING_MICROPY_PORT_DIR}/esp32_common.cmake")
+    message(FATAL_ERROR "ESP-VISION must be built from the generated MicroPython ESP32 port")
+endif()
+get_filename_component(ZXING_MICROPY_DIR "${ZXING_MICROPY_PORT_DIR}/../.." ABSOLUTE)
 set(ESP_VISION_BOARD "ESP32_P4X_EYE")
 
 if(DEFINED MICROPY_BOARD)
@@ -53,9 +58,9 @@ idf_component_register(
         "${ESP_VISION_ROOT}/components/imlib/upstream"
         "${ESP_VISION_ROOT}/components/imlib/include"
         "${ESP_VISION_ROOT}/boards/${ESP_VISION_BOARD}"
-        "${ESP_VISION_ROOT}/lib/micropython"
-        "${ESP_VISION_ROOT}/lib/micropython/ports/esp32"
-        "${ESP_VISION_ROOT}/lib/micropython/ports/esp32/boards/${ESP_VISION_BOARD}"
+        "${ZXING_MICROPY_DIR}"
+        "${ZXING_MICROPY_PORT_DIR}"
+        "${ZXING_MICROPY_PORT_DIR}/boards/${ESP_VISION_BOARD}"
         "${CMAKE_BINARY_DIR}"
 )
 
