@@ -16,7 +16,7 @@ Set `BOARD` to the board package name under `boards/` and `overlay/micropython/p
 
 Other useful targets: `make menuconfig`, `make size`, `make erase`, `make clean`, `make distclean`.
 
-Before invoking `idf.py`, the top-level Makefile runs `prepare-micropython`: it verifies that `lib/micropython` is checked out at MicroPython v1.28.0 commit `e0e9fbb17ed6fd06bb76e266ae554784c9c80804`, then applies `overlay/micropython/` to the submodule working tree.
+Before invoking `idf.py`, the top-level Makefile runs `prepare-micropython`: it verifies that `lib/micropython` is checked out at MicroPython v1.28.0 commit `e0e9fbb17ed6fd06bb76e266ae554784c9c80804`, exports a clean MicroPython build copy under `build/micropython/`, then applies `overlay/micropython/` to that copy.
 
 ## Architecture
 
@@ -42,7 +42,7 @@ ESP-VISION is an ESP32-P4/ESP32-S3 MicroPython vision runtime with a VSCode-base
 
 ESP-VISION uses MicroPython v1.28.0 as a fixed upstream baseline. Project-specific changes to the MicroPython ESP32 port are maintained under `overlay/micropython/`.
 
-`prepare-micropython` applies the overlay to `lib/micropython/`. Modified or untracked files corresponding to the overlay are expected in the submodule after preparation.
+`prepare-micropython` applies the overlay to a generated build copy under `build/micropython/idf<ESP_IDF_VERSION>/micropython/`. The `lib/micropython` submodule remains a clean upstream reference and should not receive overlay changes.
 
 ### Adding a New Board
 

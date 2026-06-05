@@ -2,8 +2,11 @@
 # SPDX-License-Identifier: MIT
 
 set(ESP_VISION_ROOT "${CMAKE_CURRENT_LIST_DIR}/../..")
-set(IMLIB_MICROPY_DIR "${ESP_VISION_ROOT}/lib/micropython")
-set(IMLIB_MICROPY_PORT_DIR "${IMLIB_MICROPY_DIR}/ports/esp32")
+idf_build_get_property(IMLIB_MICROPY_PORT_DIR PROJECT_DIR)
+if(NOT EXISTS "${IMLIB_MICROPY_PORT_DIR}/esp32_common.cmake")
+    message(FATAL_ERROR "ESP-VISION must be built from the generated MicroPython ESP32 port")
+endif()
+get_filename_component(IMLIB_MICROPY_DIR "${IMLIB_MICROPY_PORT_DIR}/../.." ABSOLUTE)
 set(IMLIB_BOARD "ESP32_P4X_EYE")
 
 if(DEFINED MICROPY_BOARD)
