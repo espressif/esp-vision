@@ -1,0 +1,39 @@
+h264 -- H.264 编码
+==================
+
+:link_to_translation:`en:[English]`
+
+.. py:module:: h264
+
+``h264`` 模块将图像编码为 H.264 NAL 单元，例如用于将视频录制到存储，或为 :doc:`rtsp`
+服务提供数据。本页内容以 ``stubs/h264.pyi`` 为准。
+
+示例
+----
+
+.. code-block:: python
+
+   import sensor, h264
+
+   enc = h264.H264Encoder(320, 240, fps=15)
+   nal = enc.encode(sensor.snapshot())
+
+H264Encoder 类
+--------------
+
+.. py:class:: H264Encoder(width, height, *, fps=15, gop=0, bitrate=0, qp_min=25, qp_max=45)
+
+   为 ``width`` x ``height`` 的帧创建编码器。
+
+   .. py:method:: encode(image)
+
+      编码一帧图像并返回 H.264 NAL 字节。
+
+   .. py:method:: keyframe()
+
+      :return: 下一帧编码是否为关键帧。
+      :rtype: bool
+
+   .. py:method:: close()
+
+      释放编码器资源。

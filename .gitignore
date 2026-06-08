@@ -2,6 +2,9 @@
 /build/
 /dist/
 
+# Documentation build output
+/docs/_build/
+
 # ESP-IDF generated
 sdkconfig
 sdkconfig.old
@@ -33,6 +36,7 @@ vscode-extension/
 
 # Editors / IDE
 .vscode/
+.specs/
 .codex/
 .claude/
 .idea/

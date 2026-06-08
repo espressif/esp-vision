@@ -1,0 +1,117 @@
+Solution Architecture
+=====================
+
+:link_to_translation:`zh_CN:[中文]`
+
+ESP-VISION is organized around a MicroPython firmware build, board-specific
+hardware backends, shared platform services, and Python-facing vision modules.
+Code is layered by whether it touches MicroPython (``mp_obj_t`` / ``py/*.h``).
+
+Layered Overview
+----------------
+
+.. code-block:: text
+
+   MicroPython scripts (example/)
+                |
+                v
+   Bindings (modules/: sensor, image, display, espdl)
+        |                 |
+        v                 v
+   Platform services   imlib component
+   (platform/)         (components/imlib)
+        |
+        v
+   Board backends (boards/<BOARD>)
+        |
+        v
+   MicroPython + overlay (build/micropython, overlay/micropython)
+
+- **Bindings** (``modules/``): the ``USER_C_MODULES`` layer. The four real
+  modules ``image``, ``sensor``, ``display``, and ``espdl`` self-register via
+  ``MP_REGISTER_MODULE``. ``py_imageio.c`` provides the ``image.ImageIO`` type,
+  and ``py_helper.c`` is shared helper code. Bindings only do object conversion
+  and light API adaptation; heavy logic lives in pure C or ``platform/``.
+- **Platform services** (``platform/``): self-written ESP32 glue. ``preview.c``
+  (EVFRAME JPEG preview over USB CDC), ``display.c`` (generic display layer),
+  ``sdcard.c`` (mount at ``/sdcard``), ``usb_msc.c`` (exposes the ``ffat``
+  partition over TinyUSB MSC), ``jpeg.c`` (hardware or software JPEG),
+  ``debug.c``, and ``main.c`` (startup init plus the soft-reset loop).
+- **imlib component** (``components/imlib/``): pure-C vision algorithms, an IDF
+  component maintained as MIT, derived from OpenMV ``lib/imlib``.
+- **Board backends** (``boards/<BOARD>/``): per-board configuration and the real
+  camera/display/sdcard implementations. P4X uses ``esp_video``/V4L2 + PPA; S3
+  uses ``esp32-camera``.
+- **MicroPython + overlay**: MicroPython v1.28.0 is the fixed baseline;
+  project changes live in ``overlay/micropython/`` and are applied to a generated
+  build copy under ``build/micropython/``.
+
+Capture-to-Output Data Flow
+---------------------------
+
+.. code-block:: text
+
+   Camera sensor
+        |
+        v
+   sensor.snapshot()
+        |
+        v
+   image.Image (reusable framebuffer)
+        |-----------------------------+-----------------------------+
+        v                             v                             v
+   imlib processing /          display.write() -> LCD        img.flush() ->
+   espdl inference                                           USB CDC preview
+
+``sensor.snapshot()`` captures a frame into a reusable framebuffer wrapped as an
+``image.Image``. Scripts then run ``imlib`` processing or ``espdl`` inference on
+the image, and send it to the LCD with ``display.write()`` or to the host
+preview with ``img.flush()``.
+
+Source Tree
+-----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Path
+     - Responsibility
+   * - ``Makefile``
+     - Top-level ``make`` build entry wrapping ``idf.py``.
+   * - ``idf_ext.py``
+     - Board-aware ``idf.py`` extension for the repository root.
+   * - ``micropython.cmake``
+     - Integration hub: registers user modules, platform and board sources,
+       include paths, conditional ``zxing``, and ``ulab``.
+   * - ``lib/``
+     - Pinned third-party submodules (MicroPython, ``ulab``, ZXing-C++).
+   * - ``overlay/micropython/``
+     - ESP-VISION MicroPython delta, using the MicroPython path layout.
+   * - ``boards/``
+     - Per-board config, frozen manifests, and board peripheral backends.
+   * - ``platform/``
+     - Shared runtime services (camera, preview, storage, display, USB, JPEG).
+   * - ``modules/``
+     - MicroPython C/C++ bindings (``sensor``, ``image``, ``display``,
+       ``imageio``, ``espdl``).
+   * - ``components/``
+     - ESP-IDF components, including OpenMV ``imlib`` and the ZXing backend.
+   * - ``models/``
+     - Optional ``.espdl`` model assets loaded from board storage at runtime.
+   * - ``example/``
+     - MicroPython example scripts.
+   * - ``stubs/``
+     - ``.pyi`` type stubs describing the C modules.
+
+Board Composition
+-----------------
+
+A board's definition is split across two trees:
+
+- MicroPython port side: ``overlay/micropython/ports/esp32/boards/<BOARD>/``
+  (IDF target, sdkconfig, partitions, USB strings).
+- ESP-VISION side: ``boards/<BOARD>/`` (``boardconfig.h``, ``imlib_config.h``,
+  ``manifest.py``, and optional ``camera.c`` / ``display.c`` / ``sdcard.c``).
+
+See :doc:`../how-to/add-board` for the step-by-step procedure.
