@@ -145,15 +145,12 @@ list(APPEND MICROPY_SOURCE_PORT
     machine_rtc.c
     machine_sdcard.c
     modespnow.c
+    network_common.c
+    network_lan.c
+    network_ppp.c
+    network_wlan.c
+    modsocket.c
 )
-if($ENV{IDF_VERSION} VERSION_LESS "6.0")
-    list(APPEND MICROPY_SOURCE_PORT
-        network_common.c
-        network_lan.c
-        network_ppp.c
-        network_wlan.c
-        modsocket.c)
-endif()
 
 if(NOT CONFIG_IDF_TARGET_ESP32S31)
     list(APPEND MICROPY_SOURCE_PORT

@@ -175,15 +175,7 @@
 #define MICROPY_PY_MACHINE_WDT              (1)
 #define MICROPY_PY_MACHINE_WDT_INCLUDEFILE  "ports/esp32/machine_wdt.c"
 #ifndef MICROPY_PY_NETWORK
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
-#define MICROPY_PY_NETWORK (0)
-#else
 #define MICROPY_PY_NETWORK (1)
-#endif
-#endif
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
-#undef MICROPY_PY_NETWORK_WLAN
-#define MICROPY_PY_NETWORK_WLAN (0)
 #endif
 #ifndef MICROPY_PY_NETWORK_HOSTNAME_DEFAULT
 #if CONFIG_IDF_TARGET_ESP32
@@ -202,6 +194,8 @@
 #define MICROPY_PY_NETWORK_HOSTNAME_DEFAULT "mpy-esp32c6"
 #elif CONFIG_IDF_TARGET_ESP32P4
 #define MICROPY_PY_NETWORK_HOSTNAME_DEFAULT "mpy-esp32p4"
+#elif CONFIG_IDF_TARGET_ESP32S31
+#define MICROPY_PY_NETWORK_HOSTNAME_DEFAULT "mpy-esp32s31"
 #endif
 #endif
 #define MICROPY_PY_NETWORK_INCLUDEFILE      "ports/esp32/modnetwork.h"
@@ -225,8 +219,13 @@
 #define MICROPY_PY_SSL                      (MICROPY_PY_NETWORK)
 #define MICROPY_SSL_MBEDTLS                 (MICROPY_PY_SSL)
 #endif
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+#define MICROPY_PY_WEBSOCKET                (0)
+#define MICROPY_PY_WEBREPL                  (0)
+#else
 #define MICROPY_PY_WEBSOCKET                (MICROPY_PY_NETWORK)
 #define MICROPY_PY_WEBREPL                  (MICROPY_PY_NETWORK)
+#endif
 #define MICROPY_PY_ONEWIRE                  (1)
 #define MICROPY_PY_SOCKET_EVENTS            (MICROPY_PY_WEBREPL)
 #define MICROPY_PY_BLUETOOTH_RANDOM_ADDR    (1)
