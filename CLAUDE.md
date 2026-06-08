@@ -21,6 +21,7 @@ The top-level `Makefile` is the primary stable entry point, and repository-root 
 
 Notes:
 - `BOARD` must exist in both `boards/<BOARD>/` and `overlay/micropython/ports/esp32/boards/<BOARD>/`. Boards: `ESP32_P4X_EYE`, `ESP32_P4X_FUNCTION_EV_BOARD`, `ESP32_S3_EYE`, `ESP32_S31_KORVO`; `TEMPLATE` is for new-board bring-up.
+- `ESP32_S31_KORVO` is currently restricted by `boards/ESP32_S31_KORVO/board.cmake` to the ESP-VISION IDF `master` overlay; source an IDF master environment before building it.
 - After changing the build system, board config, platform drivers, or imlib options, verify the `ESP32_P4X_EYE` build first; other boards only when the task touches them.
 - Firmware build/flash/monitor/config targets first run `prepare-micropython`: it asserts `lib/micropython` is at the pinned commit (`v1.28.0`, `e0e9fbb17ed6fd06bb76e266ae554784c9c80804`), recreates a clean MicroPython copy under `build/micropython/`, then applies `overlay/micropython/` to that copy. The `idf_ext.py` entry follows the same build-copy strategy and does not dirty `lib/micropython`. Use `MICROPY_OVERLAY_TARGET=lib` only when intentionally inspecting the generated MicroPython diff in the submodule.
 

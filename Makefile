@@ -10,6 +10,10 @@ MP_REPO   := $(ROOT)/lib/micropython
 MP_OVERLAY := $(ROOT)/overlay/micropython
 MP_COMPONENT_YML := $(ROOT)/overlay/component_yml
 MP_BUILD  := $(ROOT)/build/micropython/idf$(ESP_IDF_VERSION)/micropython
+ESP_VISION_IDF_OVERLAY := release$(ESP_IDF_VERSION)
+ifeq ($(wildcard $(MP_COMPONENT_YML)/$(ESP_VISION_IDF_OVERLAY)/idf_component.yml),)
+ESP_VISION_IDF_OVERLAY := master
+endif
 
 ifeq ($(MICROPY_OVERLAY_TARGET),build)
 MP_WORKTREE := $(MP_BUILD)
@@ -27,6 +31,7 @@ MP_PORT   := $(MP_WORKTREE)/ports/esp32
 IDF_ARGS := -C $(MP_PORT) \
             -B $(BUILD) \
             -D MICROPY_BOARD=$(BOARD) \
+            -D ESP_VISION_IDF_OVERLAY=$(ESP_VISION_IDF_OVERLAY) \
             -D USER_C_MODULES=$(ROOT)/micropython.cmake \
             -D MICROPY_FROZEN_MANIFEST=$(ROOT)/boards/$(BOARD)/manifest.py \
             -D EXTRA_COMPONENT_DIRS=$(ROOT)/components
@@ -46,6 +51,7 @@ all: build
 prepare-micropython:
 	@if [ "$$(git -C $(MP_REPO) rev-parse HEAD)" != "$(MP_BASE_COMMIT)" ]; then echo "lib/micropython must be checked out at $(MP_BASE_REF) ($(MP_BASE_COMMIT))"; exit 1; fi
 	@if [ -z "$$ESP_IDF_VERSION" ]; then echo "ESP_IDF_VERSION is not set; source the ESP-IDF export script before building"; exit 1; fi
+	@if [ "$(BOARD)" = "ESP32_S31_KORVO" ] && [ "$(ESP_VISION_IDF_OVERLAY)" != "master" ]; then echo "ESP32_S31_KORVO is currently supported only with the ESP-VISION IDF master overlay (current: $(ESP_VISION_IDF_OVERLAY))"; exit 1; fi
 	@$(MAKE) --no-print-directory prepare-micropython-copy
 
 ifeq ($(MICROPY_OVERLAY_TARGET),build)

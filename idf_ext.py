@@ -143,6 +143,17 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
             f"No component manifest for ESP-IDF {version} and no overlay/component_yml/master fallback"
         )
 
+    def selected_idf_overlay_name() -> str:
+        manifest = select_component_manifest()
+        return os.path.basename(os.path.dirname(manifest))
+
+    def validate_board_idf_overlay(board: str, overlay_name: str) -> None:
+        if board == "ESP32_S31_KORVO" and overlay_name != "master":
+            raise FatalError(
+                "ESP32_S31_KORVO is currently supported only with the ESP-VISION "
+                f"IDF master overlay (current: {overlay_name})"
+            )
+
     def git_output(repo: str, *args: str) -> str:
         try:
             return subprocess.check_output(
@@ -257,7 +268,7 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
             paths.append(components_dir)
         set_define(args, "EXTRA_COMPONENT_DIRS", ";".join(paths))
 
-    def configure_idf_args(args: Any, board: str) -> None:
+    def configure_idf_args(args: Any, board: str, overlay_name: str) -> None:
         original_project_dir = os.path.realpath(args.project_dir)
         original_default_build_dir = os.path.realpath(os.path.join(original_project_dir, "build"))
 
@@ -268,6 +279,7 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
             args.build_dir = os.path.realpath(args.build_dir)
 
         require_or_set_define(args, "MICROPY_BOARD", board)
+        require_or_set_define(args, "ESP_VISION_IDF_OVERLAY", overlay_name)
         require_or_set_define(args, "USER_C_MODULES", os.path.join(root, "micropython.cmake"))
         require_or_set_define(
             args,
@@ -302,7 +314,9 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
 
         board = validate_board(args.board)
         ensure_idf_version_env()
-        configure_idf_args(args, board)
+        overlay_name = selected_idf_overlay_name()
+        validate_board_idf_overlay(board, overlay_name)
+        configure_idf_args(args, board, overlay_name)
 
         if should_prepare(tasks, args.dry_run):
             selected = prepare_micropython_tree()
