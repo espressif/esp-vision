@@ -3,8 +3,8 @@ ESP-VISION Programming Guide
 
 :link_to_translation:`zh_CN:[中文]`
 
-ESP-VISION is a MicroPython vision runtime for Espressif ESP32-P4 and ESP32-S3
-boards. It combines the MicroPython ESP32 port, the OpenMV ``imlib`` image
+ESP-VISION is a MicroPython vision runtime for Espressif ESP32-P4, ESP32-S3,
+and ESP32-S31 boards. It combines the MicroPython ESP32 port, the OpenMV ``imlib`` image
 processing algorithms, and ESP-DL model inference so you can build embedded
 vision applications in Python.
 
@@ -14,6 +14,7 @@ This guide is organized as follows.
    :maxdepth: 2
 
    introduction/index
+   target-support/index
    project-relationship/index
    get-started/index
    architecture/index

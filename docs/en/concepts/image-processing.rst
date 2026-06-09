@@ -99,10 +99,15 @@ Higher-level detectors find geometric structure:
   the ``*_margin`` keywords merge near-duplicate results.
 - :py:meth:`image.Image.find_rects` locates quadrilaterals (useful for fiducials
   and screens).
-- :py:meth:`image.Image.find_qrcodes`, :py:meth:`image.Image.find_barcodes`, and
+- :py:meth:`image.Image.find_qrcodes` and
   :py:meth:`image.Image.find_apriltags` detect and decode the corresponding
   marker types; AprilTags can additionally return 6-DoF pose when camera
   intrinsics are supplied.
+
+.. only:: esp32p4
+
+   The current ESP32-P4 board profiles additionally provide
+   :py:meth:`image.Image.find_barcodes` through the ZXing-C++ backend.
 
 .. note::
 

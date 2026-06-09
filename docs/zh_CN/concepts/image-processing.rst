@@ -81,9 +81,13 @@
 - :py:meth:`image.Image.find_lines` 与 :py:meth:`image.Image.find_circles` 使用霍夫
   变换；其 ``threshold`` 是最小累加器分数，``*_margin`` 关键字用于合并近似重复的结果。
 - :py:meth:`image.Image.find_rects` 定位四边形（适用于基准标记与屏幕）。
-- :py:meth:`image.Image.find_qrcodes`\ 、:py:meth:`image.Image.find_barcodes` 与
-  :py:meth:`image.Image.find_apriltags` 检测并解码相应的标记类型；在提供相机内参时，
-  AprilTag 还能返回 6 自由度位姿。
+- :py:meth:`image.Image.find_qrcodes` 与 :py:meth:`image.Image.find_apriltags`
+  检测并解码相应的标记类型；在提供相机内参时，AprilTag 还能返回 6 自由度位姿。
+
+.. only:: esp32p4
+
+   当前 ESP32-P4 板级配置还通过 ZXing-C++ 后端提供
+   :py:meth:`image.Image.find_barcodes`\ 。
 
 .. note::
 

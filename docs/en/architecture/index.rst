@@ -43,8 +43,8 @@ Layered Overview
 - **imlib component** (``components/imlib/``): pure-C vision algorithms, an IDF
   component maintained as MIT, derived from OpenMV ``lib/imlib``.
 - **Board backends** (``boards/<BOARD>/``): per-board configuration and the real
-  camera/display/sdcard implementations. P4X uses ``esp_video``/V4L2 + PPA; S3
-  uses ``esp32-camera``.
+  camera/display/sdcard implementations. P4X and S31 use ``esp_video``/V4L2;
+  P4X also uses PPA, while S3 uses ``esp32-camera``.
 - **MicroPython + overlay**: MicroPython v1.28.0 is the fixed baseline;
   project changes live in ``overlay/micropython/`` and are applied to a generated
   build copy under ``build/micropython/``.
@@ -101,7 +101,7 @@ Source Tree
      - Shared runtime services (camera, preview, storage, display, USB, JPEG).
    * - ``modules/``
      - MicroPython C/C++ bindings (``sensor``, ``image``, ``display``,
-       ``imageio``, ``espdl``).
+       ``imageio``, ``espdl``, plus target-dependent ``h264`` and ``rtsp``).
    * - ``components/``
      - ESP-IDF components, including OpenMV ``imlib`` and the ZXing backend.
    * - ``models/``
@@ -122,3 +122,11 @@ A board's definition is split across two trees:
   ``manifest.py``, and optional ``camera.c`` / ``display.c`` / ``sdcard.c``).
 
 See :doc:`../how-to/add-board` for the step-by-step procedure.
+
+Target-Dependent Sources
+------------------------
+
+``micropython.cmake`` selects modules from ``IDF_TARGET`` and the board profile.
+The ESP32-P4 build includes ``h264`` and ``rtsp``; the current P4 board profiles
+also enable the ZXing-C++ barcode backend. See
+:doc:`../target-support/index` for the resulting public API matrix.

@@ -15,8 +15,7 @@ ESP-VISION 在 ``example/`` 下提供可直接运行的 MicroPython 脚本。可
    * - ``00-HelloWorld``
      - 最简首个脚本（``helloworld.py``）。
    * - ``01-Camera``
-     - 拍照、H.264 录制与 RTSP 推流
-       （``00-Snapshot``、``01-H264``、``02-RTSP``）。
+     - 相机采集示例，从 ``00-Snapshot`` 开始。
    * - ``02-Image-Processing``
      - 绘图、滤波、颜色追踪与帧差分。
    * - ``03-Machine-Learning``
@@ -25,9 +24,14 @@ ESP-VISION 在 ``example/`` 下提供可直接运行的 MicroPython 脚本。可
    * - ``04-Barcodes``
      - 二维码检测（``find_qrcodes.py``）。
    * - ``05-Feature-Detection``
-     - 条形码、AprilTag、直线与圆。
+     - AprilTag、直线与圆。
    * - ``06-Peripherals``
      - 存储（SD 卡）、显示/预览与 Wi-Fi（WebREPL）。
+
+.. only:: esp32p4
+
+   ESP32-P4 构建还支持 ``01-Camera/01-H264``、``01-Camera/02-RTSP``，以及
+   ``05-Feature-Detection`` 下的一维条形码示例。
 
 与 API 参考的对应关系
 ---------------------
@@ -37,5 +41,8 @@ ESP-VISION 在 ``example/`` 下提供可直接运行的 MicroPython 脚本。可
 - ``02-Image-Processing``、``04-Barcodes`` 与 ``05-Feature-Detection`` 使用
   :doc:`../api-reference/image`。
 - ``03-Machine-Learning`` 使用 :doc:`../api-reference/espdl`。
-- ``01-Camera/01-H264`` 与 ``01-Camera/02-RTSP`` 使用
-  :doc:`../api-reference/h264` 与 :doc:`../api-reference/rtsp`。
+
+.. only:: esp32p4
+
+   - ``01-Camera/01-H264`` 与 ``01-Camera/02-RTSP`` 使用
+     :doc:`../api-reference/h264` 与 :doc:`../api-reference/rtsp`。

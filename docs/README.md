@@ -10,6 +10,8 @@ This folder holds the [ESP-Docs](https://github.com/espressif/esp-docs) source f
 | `en/`, `zh_CN/` | Per-language content trees, each rooted at `index.rst`. |
 | `en/conf.py`, `zh_CN/conf.py` | Language-specific configuration. |
 | `gen_api.py` | Generates the API reference fragments from `stubs/*.pyi`. |
+| `targets.py` | Target/board capability data used by the docs and API generator. |
+| `_static/versions.js` | Theme manifest that populates the version and target selectors. |
 | `requirements.txt` | Python build dependencies (`esp-docs`). |
 | `*/api-reference/_generated/` | Auto-generated API fragments (git-ignored). |
 | `_build/` | Generated output (git-ignored). |
@@ -33,30 +35,38 @@ python docs/gen_api.py
 ```
 
 To document a new symbol, add its signature and a `#:` comment block in the
-stub. The conceptual background (image model, image processing, AI inference,
-camera and codec pipelines) lives in the hand-written `concepts/` section.
+stub. If availability differs by target, add the module or symbol condition to
+`targets.py`; do not duplicate the condition in generated RST. The conceptual
+background lives in the hand-written `concepts/` section.
 
 ## Build
 
-The docs are chip-agnostic (no per-target slug), so no `-t` is needed.
+The docs support `esp32p4`, `esp32s3`, and `esp32s31`. The `-t` option accepts
+one or more targets and defaults to the build action, so do not append `build`
+after a multi-value `-t`.
 
 ```bash
 pip install -r requirements.txt
 
-# Build a single language (HTML):
+# Build a single language and target (HTML):
 cd docs
-build-docs -l en build
-build-docs -l zh_CN build
+build-docs -l en -t esp32p4
+build-docs -l zh_CN -t esp32s3
 
-# Build everything (all languages):
-build-docs build
+# Build all languages for all supported targets:
+build-docs -t esp32p4 esp32s3 esp32s31
 ```
 
-The rendered site is written to `docs/_build/<lang>/generic/html/`.
+The rendered site is written to `docs/_build/<lang>/<target>/html/`.
+
+Whole target-specific pages are excluded in `conf_common.py`. Use Sphinx
+`.. only:: <target>` blocks for target-specific paragraphs and references.
+Keep target conditions aligned with `micropython.cmake`, board `board.cmake`
+files, and `imlib_config.h`.
 
 ## Live preview
 
 ```bash
 cd docs
-build-docs -l en build && python -m http.server -d _build/en/generic/html
+build-docs -l en -t esp32p4 && python -m http.server -d _build/en/esp32p4/html
 ```

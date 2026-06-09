@@ -6,8 +6,13 @@ image -- Image Processing
 The ``image`` module provides the :py:class:`Image` object and the vision
 algorithms built on OpenMV ``imlib``: drawing, format conversion, filtering,
 color/blob analysis, and feature detection (lines, circles, rectangles, QR
-codes, barcodes, AprilTags). The codec stream type :py:class:`imageio.ImageIO`
+codes, and AprilTags). The codec stream type :py:class:`imageio.ImageIO`
 is documented in :doc:`imageio`.
+
+.. only:: esp32p4
+
+   The current ESP32-P4 board profiles also enable the ZXing-C++ barcode
+   backend and :py:meth:`image.Image.find_barcodes`.
 
 .. code-block:: python
 

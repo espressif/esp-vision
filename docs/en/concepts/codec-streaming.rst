@@ -27,33 +27,36 @@ writes a container on storage; a **memory stream** keeps frames in a
 pre-allocated PSRAM buffer for fast capture and replay. See
 :doc:`../api-reference/imageio`.
 
-Video codec: H.264
-------------------
+.. only:: esp32p4
 
-For continuous video, per-frame JPEG is wasteful because it cannot exploit the
-similarity between consecutive frames. :py:class:`h264.H264Encoder` produces an
-H.264 stream where occasional **keyframes** (IDR/I) are self-contained and the
-frames between them only encode what changed. The encoder's parameters tune this
-trade-off:
+   Video codec: H.264
+   ------------------
 
-- ``gop`` -- keyframe interval. Shorter means faster recovery and easier seeking
-  but larger output; ``0`` selects one keyframe per second.
-- ``bitrate`` -- target bits per second; the dominant size/quality control.
-- ``qp_min`` / ``qp_max`` -- bound the per-frame quantizer.
+   For continuous video, per-frame JPEG is wasteful because it cannot exploit
+   the similarity between consecutive frames. :py:class:`h264.H264Encoder`
+   produces an H.264 stream where occasional **keyframes** (IDR/I) are
+   self-contained and the frames between them only encode what changed. The
+   encoder's parameters tune this trade-off:
 
-A lost P-frame corrupts the picture until the next keyframe, which matters for
-the streaming transport below.
+   - ``gop`` -- keyframe interval. Shorter means faster recovery and easier
+     seeking but larger output; ``0`` selects one keyframe per second.
+   - ``bitrate`` -- target bits per second; the dominant size/quality control.
+   - ``qp_min`` / ``qp_max`` -- bound the per-frame quantizer.
 
-Network streaming: RTSP
------------------------
+   A lost P-frame corrupts the picture until the next keyframe, which matters
+   for the streaming transport below.
 
-:py:class:`rtsp.RTSPServer` serves encoded H.264 frames over RTSP so a client
-such as VLC or ffplay can view the camera at ``rtsp://<board-ip>:8554/``. The
-typical loop is *capture → encode → send*: feed each
-:py:meth:`h264.H264Encoder.encode` result to :py:meth:`rtsp.RTSPServer.send`.
-The server keeps a short, in-order frame queue; if a client is slow or absent it
-drops whole frames rather than blocking your capture loop or sending a partial
-frame that would corrupt the stream.
+   Network streaming: RTSP
+   -----------------------
+
+   :py:class:`rtsp.RTSPServer` serves encoded H.264 frames over RTSP so a client
+   such as VLC or ffplay can view the camera at
+   ``rtsp://<board-ip>:8554/``. The typical loop is *capture → encode → send*:
+   feed each :py:meth:`h264.H264Encoder.encode` result to
+   :py:meth:`rtsp.RTSPServer.send`. The server keeps a short, in-order frame
+   queue; if a client is slow or absent it drops whole frames rather than
+   blocking your capture loop or sending a partial frame that would corrupt the
+   stream.
 
 Host preview: USB CDC
 ---------------------

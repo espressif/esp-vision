@@ -24,9 +24,10 @@ ESP-VISION 是面向 ESP32 平台的 MicroPython 视觉运行时。它在 MicroP
 支持的开发板
 ------------
 
-ESP-VISION 面向 ESP32-P4 与 ESP32-S3 开发板。当前支持的板级包包括
+ESP-VISION 面向 ESP32-P4、ESP32-S3 与 ESP32-S31 开发板。当前支持的板级包包括
 ``ESP32_P4X_EYE``、``ESP32_P4X_FUNCTION_EV_BOARD``、``ESP32_S3_EYE`` 与
-``ESP32_S31_KORVO``，其中 ``TEMPLATE`` 用于新板卡的初始适配。
+``ESP32_S31_KORVO``，其中 ``TEMPLATE`` 用于新板卡的初始适配。各 target 的模块和
+限制见 :doc:`../target-support/index`\ 。
 
 构建与烧录固件请参阅 :doc:`../get-started/index`，整体架构请参阅
 :doc:`../architecture/index`。

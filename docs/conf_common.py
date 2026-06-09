@@ -21,6 +21,7 @@ _esp_docs_setup = globals().get('setup')
 # Make the API generator (docs/gen_api.py) importable.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_api  # noqa: E402
+from targets import TARGETS, unavailable_module_pages  # noqa: E402
 
 
 def setup(app):
@@ -37,6 +38,15 @@ def setup(app):
 # Supported documentation languages. Must contain at least the current
 # project's language.
 languages = ['en', 'zh_CN']
+idf_targets = list(TARGETS)
+
+def configure_target_docs(app, config):  # noqa: ARG001
+    """Exclude module pages which are not compiled for the selected target."""
+    if config.idf_target in TARGETS:
+        config.exclude_patterns.extend(unavailable_module_pages(config.idf_target))
+
+
+user_setup_callback = configure_target_docs
 
 # The generated API fragments under api-reference/_generated/ are pulled into the
 # curated module pages with ``.. include::``; exclude them so Sphinx does not
@@ -48,15 +58,11 @@ except NameError:
     exclude_patterns = []
 exclude_patterns += ['**/_generated/**']
 
-# The documentation is chip-agnostic: the Python API is identical across the
-# supported ESP32-P4 and ESP32-S3 boards, so no per-target ``idf_targets`` slug
-# is configured. This keeps ``build-docs build`` working without ``-t`` and
-# produces a single "generic" build per language.
-
 # Project metadata used by the ESP-Docs theme and the GitHub edit links.
 project_slug = 'esp-vision'
 project_homepage = 'https://github.com/espressif/esp-vision'
 github_repo = 'espressif/esp-vision'
+versions_url = './_static/versions.js'
 
 # -- HTML / PDF output -------------------------------------------------------
 

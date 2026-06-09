@@ -5,7 +5,12 @@ image -- 图像处理
 
 ``image`` 模块提供 :py:class:`Image` 对象以及基于 OpenMV ``imlib`` 的视觉算法：
 绘图、格式转换、滤波、颜色/色块分析，以及特征检测（直线、圆、矩形、二维码、
-条形码、AprilTag）。编解码流类型 :py:class:`imageio.ImageIO` 见 :doc:`imageio`\ 。
+AprilTag）。编解码流类型 :py:class:`imageio.ImageIO` 见 :doc:`imageio`\ 。
+
+.. only:: esp32p4
+
+   当前 ESP32-P4 板级配置还会启用 ZXing-C++ 条形码后端和
+   :py:meth:`image.Image.find_barcodes`\ 。
 
 .. code-block:: python
 

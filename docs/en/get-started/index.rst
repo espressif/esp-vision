@@ -8,7 +8,11 @@ Prerequisites
 
 - ESP-IDF ``release/v5.5``, ``release/v6.0``, or ``master`` with the export
   script sourced so that ``idf.py`` is on ``PATH``.
-- A supported ESP32-P4 or ESP32-S3 target board.
+- A board listed in :doc:`../target-support/index` for the selected target.
+
+.. only:: esp32s31
+
+   ESP32-S31 currently requires an ESP-IDF ``master`` environment.
 
 Build, Flash, and Monitor
 -------------------------
@@ -19,13 +23,44 @@ Clone the repository with submodules, then build with ``make``:
 
    git clone --recursive <this-repo> esp-vision
    cd esp-vision
-   make BOARD=ESP32_P4X_EYE ESPPORT=/dev/ttyACM0 build flash monitor
+
+.. only:: esp32p4
+
+   .. code-block:: bash
+
+      make BOARD=ESP32_P4X_EYE ESPPORT=/dev/ttyACM0 build flash monitor
+
+.. only:: esp32s3
+
+   .. code-block:: bash
+
+      make BOARD=ESP32_S3_EYE ESPPORT=/dev/ttyACM0 build flash monitor
+
+.. only:: esp32s31
+
+   .. code-block:: bash
+
+      make BOARD=ESP32_S31_KORVO ESPPORT=/dev/ttyACM0 build flash monitor
 
 Or use the board-aware ``idf.py`` extension from the repository root:
 
-.. code-block:: bash
+.. only:: esp32p4
 
-   idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
+   .. code-block:: bash
+
+      idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
+
+.. only:: esp32s3
+
+   .. code-block:: bash
+
+      idf.py --board ESP32_S3_EYE -p /dev/ttyACM0 build flash monitor
+
+.. only:: esp32s31
+
+   .. code-block:: bash
+
+      idf.py --board ESP32_S31_KORVO -p /dev/ttyACM0 build flash monitor
 
 Both entry points first run ``prepare-micropython``: they verify that
 ``lib/micropython`` is checked out at the pinned MicroPython v1.28.0 commit,

@@ -13,7 +13,7 @@ are loaded at runtime. This guide adds a new model and runs it.
 Get a ready ``.espdl`` from the `ESP-DL model zoo
 <https://github.com/espressif/esp-dl/tree/master/models>`_, or convert your own
 model to the ``.espdl`` format with the ESP-DL quantization/export toolchain,
-matching the target chip (ESP32-P4 or ESP32-S3).
+matching the target chip (ESP32-P4, ESP32-S3, or ESP32-S31).
 
 Keep the directory layout under ``models/`` in the repository when adding shared
 assets, mirroring ``models/espdet/``.

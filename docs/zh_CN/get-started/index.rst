@@ -8,7 +8,11 @@
 
 - ESP-IDF ``release/v5.5``、``release/v6.0`` 或 ``master``，并已 source 导出脚本，
   使 ``idf.py`` 位于 ``PATH`` 中。
-- 一块受支持的 ESP32-P4 或 ESP32-S3 目标开发板。
+- 一块列在 :doc:`../target-support/index` 中且与所选 target 对应的开发板。
+
+.. only:: esp32s31
+
+   ESP32-S31 当前需要 ESP-IDF ``master`` 环境。
 
 构建、烧录与监视
 ----------------
@@ -19,13 +23,44 @@
 
    git clone --recursive <this-repo> esp-vision
    cd esp-vision
-   make BOARD=ESP32_P4X_EYE ESPPORT=/dev/ttyACM0 build flash monitor
+
+.. only:: esp32p4
+
+   .. code-block:: bash
+
+      make BOARD=ESP32_P4X_EYE ESPPORT=/dev/ttyACM0 build flash monitor
+
+.. only:: esp32s3
+
+   .. code-block:: bash
+
+      make BOARD=ESP32_S3_EYE ESPPORT=/dev/ttyACM0 build flash monitor
+
+.. only:: esp32s31
+
+   .. code-block:: bash
+
+      make BOARD=ESP32_S31_KORVO ESPPORT=/dev/ttyACM0 build flash monitor
 
 或在仓库根目录使用板级感知的 ``idf.py`` 扩展：
 
-.. code-block:: bash
+.. only:: esp32p4
 
-   idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
+   .. code-block:: bash
+
+      idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
+
+.. only:: esp32s3
+
+   .. code-block:: bash
+
+      idf.py --board ESP32_S3_EYE -p /dev/ttyACM0 build flash monitor
+
+.. only:: esp32s31
+
+   .. code-block:: bash
+
+      idf.py --board ESP32_S31_KORVO -p /dev/ttyACM0 build flash monitor
 
 两种入口都会先运行 ``prepare-micropython``：校验 ``lib/micropython`` 已检出到固定的
 MicroPython v1.28.0 提交，在 ``build/micropython/`` 下导出干净的 MicroPython 构建副本，

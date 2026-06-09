@@ -29,9 +29,10 @@ Key Features
 Supported Boards
 ----------------
 
-ESP-VISION targets ESP32-P4 and ESP32-S3 boards. The supported board packages
+ESP-VISION targets ESP32-P4, ESP32-S3, and ESP32-S31 boards. The supported board packages
 are ``ESP32_P4X_EYE``, ``ESP32_P4X_FUNCTION_EV_BOARD``, ``ESP32_S3_EYE``, and
-``ESP32_S31_KORVO``. ``TEMPLATE`` is provided for new-board bring-up.
+``ESP32_S31_KORVO``. ``TEMPLATE`` is provided for new-board bring-up. See
+:doc:`../target-support/index` for target-specific modules and constraints.
 
 See :doc:`../get-started/index` to build and flash the firmware, and
 :doc:`../architecture/index` for how the pieces fit together.

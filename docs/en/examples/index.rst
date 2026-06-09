@@ -15,8 +15,7 @@ to the board or run it from the host tool. The folders are organized by topic.
    * - ``00-HelloWorld``
      - Minimal first script (``helloworld.py``).
    * - ``01-Camera``
-     - Snapshot, H.264 recording, and RTSP streaming
-       (``00-Snapshot``, ``01-H264``, ``02-RTSP``).
+     - Camera capture examples, starting with ``00-Snapshot``.
    * - ``02-Image-Processing``
      - Drawing, filters, color tracking, and frame differencing.
    * - ``03-Machine-Learning``
@@ -25,9 +24,15 @@ to the board or run it from the host tool. The folders are organized by topic.
    * - ``04-Barcodes``
      - QR code detection (``find_qrcodes.py``).
    * - ``05-Feature-Detection``
-     - Barcodes, AprilTags, lines, and circles.
+     - AprilTags, lines, and circles.
    * - ``06-Peripherals``
      - Storage (SD card), display/preview, and Wi-Fi (WebREPL).
+
+.. only:: esp32p4
+
+   The ESP32-P4 build also supports ``01-Camera/01-H264``,
+   ``01-Camera/02-RTSP``, and the 1D barcode examples under
+   ``05-Feature-Detection``.
 
 Mapping to the API Reference
 ----------------------------
@@ -37,5 +42,8 @@ Mapping to the API Reference
 - ``02-Image-Processing``, ``04-Barcodes``, and ``05-Feature-Detection`` use
   :doc:`../api-reference/image`.
 - ``03-Machine-Learning`` uses :doc:`../api-reference/espdl`.
-- ``01-Camera/01-H264`` and ``01-Camera/02-RTSP`` use
-  :doc:`../api-reference/h264` and :doc:`../api-reference/rtsp`.
+
+.. only:: esp32p4
+
+   - ``01-Camera/01-H264`` and ``01-Camera/02-RTSP`` use
+     :doc:`../api-reference/h264` and :doc:`../api-reference/rtsp`.
