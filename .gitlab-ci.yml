@@ -4,6 +4,9 @@
 stages:
   - check
   - build
+  - build_docs
+  - deploy
+  - post_deploy
 
 workflow:
   rules:
@@ -15,10 +18,17 @@ variables:
   GIT_SUBMODULE_STRATEGY: none
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   PRE_COMMIT_HOME: "$CI_PROJECT_DIR/.cache/pre-commit"
+  ESP_DOCS_BUILD_IMAGE: "$CI_DOCKER_REGISTRY/esp-idf-doc-env-v5.5:1-1"
+  ESP_DOCS_DEPLOY_IMAGE: "$CI_DOCKER_REGISTRY/esp-idf-doc-env-v5.5"
+
+include:
+  - local: '.gitlab/ci/rules.yml'
+  - local: '.gitlab/ci/docs.yml'
+  - local: '.gitlab/ci/deploy.yml'
 
 pre_commit:
   stage: check
-  tags: 
+  tags:
     - build
   image: python:3.11-slim
   cache:
@@ -39,7 +49,7 @@ pre_commit:
 
 python_stubs:
   stage: check
-  tags: 
+  tags:
     - build
   image: python:3.11-slim
   script:

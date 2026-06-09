@@ -49,10 +49,24 @@ Standard MicroPython Features
 Standard MicroPython features use a separate configuration path:
 ``overlay/micropython/ports/esp32/mpconfigport.h`` plus each board's
 ``mpconfigboard.h``. Some conditions also depend on the ESP-IDF version or SoC
-capability macros. For example, ESP-IDF 6.0 or newer disables the current port's
-``network``, WLAN, SSL, ``cryptolib``, ``machine.I2S``, and ESP32 PCNT support.
-The current board headers also disable Bluetooth and ESP-NOW; the S31 board
-additionally disables ``machine.ADC`` and ``machine.ADCBlock``.
+capability macros.
+
+ESP-IDF 5.5 provides the more complete standard MicroPython feature set. In
+addition to the ``network`` module, WLAN, and sockets, it enables SSL/TLS,
+``cryptolib``, WebSocket, WebREPL, and socket events. ``machine.I2S`` and ESP32
+PCNT are also enabled when supported by the selected SoC. Supported chips can
+use the I2C target mode introduced for ESP-IDF 5.4 and newer.
+
+With the ESP-VISION overlay, ESP-IDF 6.0 or newer continues to support the
+standard ``network`` module, WLAN, and sockets. SSL/TLS, ``cryptolib``,
+WebSocket, WebREPL, socket events, ``machine.I2S``, and ESP32 PCNT remain
+disabled on that IDF line. The S31 port also provides the default hostname
+``mpy-esp32s31``.
+
+The current board headers disable Bluetooth and ESP-NOW; the S31 board
+additionally disables ``machine.ADC`` and ``machine.ADCBlock``. A board must
+still provide suitable networking hardware and firmware configuration before
+``network.WLAN`` can connect.
 
 Because these conditions are not target-only, the target selector filters the
 ESP-VISION API reference but does not claim to be a complete standard

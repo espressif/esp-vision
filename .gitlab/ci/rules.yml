@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+.docs_changes: &docs_changes
+  - ".gitlab-ci.yml"
+  - ".gitlab/ci/**/*"
+  - "docs/**/*"
+  - "stubs/**/*"
+  - "example/**/*"
+  - "modules/**/*"
+  - "components/imlib/**/*"
+  - "components/zxing/**/*"
+  - "boards/**/*.cmake"
+  - "boards/**/*.h"
+  - "boards/**/manifest.py"
+  - "boards/**/board_inisetup.py"
+  - "micropython.cmake"
+  - "overlay/micropython/**/*.c"
+  - "overlay/micropython/**/*.h"
+  - "overlay/micropython/**/*.cmake"
+
+.docs_source_changes: &docs_source_changes
+  - "example/**/*"
+  - "modules/**/*"
+  - "components/imlib/**/*"
+  - "components/zxing/**/*"
+  - "boards/**/*.cmake"
+  - "boards/**/*.h"
+  - "boards/**/manifest.py"
+  - "boards/**/board_inisetup.py"
+  - "micropython.cmake"
+  - "overlay/micropython/**/*.c"
+  - "overlay/micropython/**/*.h"
+  - "overlay/micropython/**/*.cmake"
+
+.rules:docs:build:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *docs_changes
+
+.rules:docs:impact:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *docs_source_changes
+
+.rules:docs:preview:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *docs_changes
+
+.rules:docs:production:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'

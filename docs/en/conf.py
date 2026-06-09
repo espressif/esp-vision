@@ -20,3 +20,4 @@ from conf_common import *  # noqa: E402, F403, F401
 project = u'ESP-VISION Programming Guide'
 copyright = u'2026 - {}, Espressif Systems (Shanghai) Co., Ltd'.format(datetime.datetime.now().year)
 language = 'en'
+pdf_title = u'ESP-VISION Programming Guide'

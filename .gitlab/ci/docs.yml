@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+docs_impact_check:
+  stage: check
+  extends: .rules:docs:impact
+  image: python:3.11-slim
+  tags:
+    - build
+  variables:
+    GIT_DEPTH: "0"
+  script:
+    - python tools/ci/check_docs_impact.py
+  allow_failure: true
+
+.build_docs_template:
+  stage: build_docs
+  extends: .rules:docs:build
+  image: $ESP_DOCS_BUILD_IMAGE
+  tags:
+    - build_docs
+  dependencies: []
+  before_script:
+    - python -m pip install --upgrade -r docs/requirements.txt
+    - python -m pip show esp-docs
+    - build-docs --help | grep -q esp32s31
+    - python tools/ci/check_docs_lang_sync.py
+  script:
+    - cd docs
+    - build-docs -bs "$DOC_BUILDER" -l "$DOC_LANG" -t esp32p4 esp32s3 esp32s31
+  parallel:
+    matrix:
+      - DOC_LANG:
+          - en
+          - zh_CN
+
+build_docs_html:
+  extends: .build_docs_template
+  variables:
+    DOC_BUILDER: html
+  artifacts:
+    when: always
+    expire_in: 4 days
+    paths:
+      - docs/_build/*/*/*.txt
+      - docs/_build/*/*/html/
+
+build_docs_pdf:
+  extends: .build_docs_template
+  variables:
+    DOC_BUILDER: latex
+  artifacts:
+    when: always
+    expire_in: 4 days
+    paths:
+      - docs/_build/*/*/*.txt
+      - docs/_build/*/*/latex/

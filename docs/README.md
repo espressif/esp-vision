@@ -70,3 +70,31 @@ files, and `imlib_config.h`.
 cd docs
 build-docs -l en -t esp32p4 && python -m http.server -d _build/en/esp32p4/html
 ```
+
+## GitLab CI
+
+Merge requests that change documentation or public-facing firmware sources
+build HTML and PDF output for both languages and all supported targets. The
+result is deployed to the preview documentation server. CI exposes the Chinese
+entry URL, which redirects to the default ``esp32p4`` build; readers can switch
+both language and target from the selectors in the rendered documentation. A
+source-only change also runs an advisory check that lists files which may
+require a corresponding ``docs/`` or ``stubs/`` update.
+
+Successful ``master`` pipelines publish the same matrix as ``latest`` on the
+production documentation server. Deployment uses these protected GitLab CI
+variables:
+
+- ``DOCS_PREVIEW_DEPLOY_KEY``, ``DOCS_PREVIEW_SERVER``,
+  ``DOCS_PREVIEW_SERVER_USER``, ``DOCS_PREVIEW_PATH``, and
+  ``DOCS_PREVIEW_URL_BASE``
+- ``DOCS_PROD_DEPLOY_KEY``, ``DOCS_PROD_SERVER``,
+  ``DOCS_PROD_SERVER_USER``, ``DOCS_PROD_PATH``, and ``DOCS_PROD_URL_BASE``
+- ``GITLAB_MR_NOTE_TOKEN`` to post preview links to merge requests; posting is
+  skipped without this optional token
+
+The preview and production SSH accounts must be provisioned for the
+``esp-vision`` project web root. Reusing another project's deployment user may
+allow SSH uploads while every public URL still returns HTTP 404. The deployment
+job verifies both language entry URLs after upload and fails when they are not
+publicly reachable.

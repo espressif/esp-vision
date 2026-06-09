@@ -15,7 +15,7 @@ ESP-VISION 在 ``example/`` 下提供可直接运行的 MicroPython 脚本。可
    * - ``00-HelloWorld``
      - 最简首个脚本（``helloworld.py``）。
    * - ``01-Camera``
-     - 相机采集示例，从 ``00-Snapshot`` 开始。
+     - 相机采集与串流示例，从 ``00-Snapshot`` 开始。
    * - ``02-Image-Processing``
      - 绘图、滤波、颜色追踪与帧差分。
    * - ``03-Machine-Learning``
@@ -33,11 +33,24 @@ ESP-VISION 在 ``example/`` 下提供可直接运行的 MicroPython 脚本。可
    ESP32-P4 构建还支持 ``01-Camera/01-H264``、``01-Camera/02-RTSP``，以及
    ``05-Feature-Detection`` 下的一维条形码示例。
 
+Wi-Fi MJPEG 串流
+----------------
+
+``01-Camera/03-MJPEG/wifi_mjpeg_stream.py`` 采集 JPEG 图像，并通过 HTTP MJPEG
+串流输出。请先在脚本中设置 ``SSID`` 和 ``PASSWORD``，然后在固件提供
+``network.WLAN`` 的相机开发板上运行，并用浏览器打开串口输出的
+``http://<board-ip>/`` 地址。
+
+该示例提供适合浏览器查看的 MJPEG 串流，并非 RTSP。可通过 ``JPEG_QUALITY`` 和
+``FRAME_DELAY_MS`` 调整图像质量与帧间隔。实际可用性取决于开发板的相机、网络硬件
+及固件配置。
+
 与 API 参考的对应关系
 ---------------------
 
 - ``01-Camera`` 与 ``06-Peripherals/01-Display`` 使用
   :doc:`../api-reference/sensor` 与 :doc:`../api-reference/display`。
+- ``01-Camera/03-MJPEG`` 还使用标准 MicroPython ``network`` 和 ``socket`` 模块。
 - ``02-Image-Processing``、``04-Barcodes`` 与 ``05-Feature-Detection`` 使用
   :doc:`../api-reference/image`。
 - ``03-Machine-Learning`` 使用 :doc:`../api-reference/espdl`。

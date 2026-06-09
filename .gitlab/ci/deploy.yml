@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+.deploy_docs_template:
+  stage: deploy
+  image: $ESP_DOCS_DEPLOY_IMAGE
+  tags:
+    - deploy_docs
+  needs:
+    - job: build_docs_html
+      artifacts: true
+    - job: build_docs_pdf
+      artifacts: true
+  before_script:
+    - python -m pip install -r docs/requirements.txt
+    - source "$CI_PROJECT_DIR/.gitlab/ci/utils.sh"
+    - add_doc_server_ssh_keys "$DOCS_DEPLOY_PRIVATEKEY" "$DOCS_DEPLOY_SERVER" "$DOCS_DEPLOY_SERVER_USER"
+  script:
+    - python tools/ci/prepare_docs_landing.py "$DOCS_BUILD_DIR"
+    - mkdir -p logs
+    - deploy-docs | tee logs/doc-url.txt
+    - python tools/ci/check_docs_deployment.py logs/doc-url.txt
+  artifacts:
+    when: always
+    expire_in: 4 days
+    paths:
+      - logs/doc-url.txt
+
+deploy_docs_preview:
+  extends:
+    - .deploy_docs_template
+    - .rules:docs:preview
+  environment:
+    name: "esp-vision-docs/$CI_COMMIT_REF_SLUG"
+    url: "$DOCS_PREVIEW_URL_BASE/zh_CN/$CI_COMMIT_REF_SLUG/index.html"
+  variables:
+    TYPE: preview
+    GIT_VER: "$CI_COMMIT_REF_SLUG"
+    DOCS_BUILD_DIR: "$CI_PROJECT_DIR/docs/_build"
+    DOCS_DEPLOY_PRIVATEKEY: "$DOCS_PREVIEW_DEPLOY_KEY"
+    DOCS_DEPLOY_SERVER: "$DOCS_PREVIEW_SERVER"
+    DOCS_DEPLOY_SERVER_USER: "$DOCS_PREVIEW_SERVER_USER"
+    DOCS_DEPLOY_PATH: "$DOCS_PREVIEW_PATH"
+    DOCS_DEPLOY_URL_BASE: "$DOCS_PREVIEW_URL_BASE"
+
+deploy_docs_production:
+  extends:
+    - .deploy_docs_template
+    - .rules:docs:production
+  environment:
+    name: esp-vision-docs-production
+    url: "$DOCS_PROD_URL_BASE/zh_CN/latest/index.html"
+  variables:
+    TYPE: production
+    GIT_VER: latest
+    DOCS_BUILD_DIR: "$CI_PROJECT_DIR/docs/_build"
+    DOCS_DEPLOY_PRIVATEKEY: "$DOCS_PROD_DEPLOY_KEY"
+    DOCS_DEPLOY_SERVER: "$DOCS_PROD_SERVER"
+    DOCS_DEPLOY_SERVER_USER: "$DOCS_PROD_SERVER_USER"
+    DOCS_DEPLOY_PATH: "$DOCS_PROD_PATH"
+    DOCS_DEPLOY_URL_BASE: "$DOCS_PROD_URL_BASE"
+
+post_docs_preview:
+  stage: post_deploy
+  extends: .rules:docs:preview
+  image: python:3.11-slim
+  tags:
+    - deploy_docs
+  needs:
+    - job: deploy_docs_preview
+      artifacts: true
+  script:
+    - python tools/ci/post_docs_preview.py logs/doc-url.txt
+  allow_failure: true
