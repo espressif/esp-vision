@@ -14,8 +14,10 @@ This guide is organized as follows.
    :maxdepth: 2
 
    introduction/index
+   project-relationship/index
    get-started/index
    architecture/index
+   concepts/index
    api-reference/index
    how-to/index
    examples/index

@@ -3,13 +3,8 @@ rtsp -- RTSP 推流
 
 :link_to_translation:`en:[English]`
 
-.. py:module:: rtsp
-
-``rtsp`` 模块通过 RTSP 提供 H.264 NAL 单元，使客户端可在网络上观看相机画面。通常与
-:doc:`h264` 配合使用。本页内容以 ``stubs/rtsp.pyi`` 为准。
-
-示例
-----
+``rtsp`` 模块通过 RTSP 协议发送 H.264 NAL 单元，使客户端（如 VLC 或 ffplay）能在
+网络上观看摄像头画面。需与 :doc:`h264` 配合使用。
 
 .. code-block:: python
 
@@ -20,17 +15,8 @@ rtsp -- RTSP 推流
    while True:
        server.send(enc.encode(sensor.snapshot()))
 
-RTSPServer 类
--------------
+.. seealso::
 
-.. py:class:: RTSPServer(width, height, *, fps=15, listen_port=8554, max_frame_len=0)
+   :doc:`../concepts/codec-streaming` 完整介绍了采集、编码与推流的整个流程。
 
-   为 ``width`` x ``height`` 的帧在 ``listen_port`` 上启动 RTSP 服务。
-
-   .. py:method:: send(nal)
-
-      向已连接的客户端发送一个 H.264 NAL 单元（bytes）。
-
-   .. py:method:: stop()
-
-      停止服务。
+.. include:: _generated/rtsp.rst

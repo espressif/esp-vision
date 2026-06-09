@@ -13,8 +13,10 @@ ESP-VISION 是面向乐鑫 ESP32-P4 与 ESP32-S3 开发板的 MicroPython 视觉
    :maxdepth: 2
 
    introduction/index
+   project-relationship/index
    get-started/index
    architecture/index
+   concepts/index
    api-reference/index
    how-to/index
    examples/index

@@ -3,14 +3,9 @@ rtsp -- RTSP Streaming
 
 :link_to_translation:`zh_CN:[中文]`
 
-.. py:module:: rtsp
-
-The ``rtsp`` module serves H.264 NAL units over RTSP so a client can view the
-camera stream over the network. Pair it with :doc:`h264`. The source of truth for
-this page is ``stubs/rtsp.pyi``.
-
-Example
--------
+The ``rtsp`` module serves H.264 NAL units over RTSP so a client (for example
+VLC or ffplay) can view the camera stream over the network. Pair it with
+:doc:`h264`.
 
 .. code-block:: python
 
@@ -21,17 +16,9 @@ Example
    while True:
        server.send(enc.encode(sensor.snapshot()))
 
-The RTSPServer Class
---------------------
+.. seealso::
 
-.. py:class:: RTSPServer(width, height, *, fps=15, listen_port=8554, max_frame_len=0)
+   :doc:`../concepts/codec-streaming` covers the full capture, encode, and
+   stream pipeline.
 
-   Start an RTSP server for ``width`` x ``height`` frames on ``listen_port``.
-
-   .. py:method:: send(nal)
-
-      Send one H.264 NAL unit (bytes) to connected clients.
-
-   .. py:method:: stop()
-
-      Stop the server.
+.. include:: _generated/rtsp.rst

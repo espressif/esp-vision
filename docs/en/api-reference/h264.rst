@@ -3,14 +3,8 @@ h264 -- H.264 Encoding
 
 :link_to_translation:`zh_CN:[中文]`
 
-.. py:module:: h264
-
 The ``h264`` module encodes images into H.264 NAL units, for example to record
-video to storage or to feed the :doc:`rtsp` server. The source of truth for this
-page is ``stubs/h264.pyi``.
-
-Example
--------
+video to storage or to feed the :doc:`rtsp` server.
 
 .. code-block:: python
 
@@ -19,22 +13,9 @@ Example
    enc = h264.H264Encoder(320, 240, fps=15)
    nal = enc.encode(sensor.snapshot())
 
-The H264Encoder Class
----------------------
+.. seealso::
 
-.. py:class:: H264Encoder(width, height, *, fps=15, gop=0, bitrate=0, qp_min=25, qp_max=45)
+   :doc:`../concepts/codec-streaming` explains the encode-then-stream pipeline
+   and how H.264 keyframes interact with RTSP delivery.
 
-   Create an encoder for ``width`` x ``height`` frames.
-
-   .. py:method:: encode(image)
-
-      Encode one image and return the H.264 NAL bytes.
-
-   .. py:method:: keyframe()
-
-      :return: whether the next encoded frame is a keyframe.
-      :rtype: bool
-
-   .. py:method:: close()
-
-      Release encoder resources.
+.. include:: _generated/h264.rst

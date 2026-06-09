@@ -10,22 +10,25 @@ Code is layered by whether it touches MicroPython (``mp_obj_t`` / ``py/*.h``).
 Layered Overview
 ----------------
 
-.. code-block:: text
+.. blockdiag::
 
-   MicroPython scripts (example/)
-                |
-                v
-   Bindings (modules/: sensor, image, display, espdl)
-        |                 |
-        v                 v
-   Platform services   imlib component
-   (platform/)         (components/imlib)
-        |
-        v
-   Board backends (boards/<BOARD>)
-        |
-        v
-   MicroPython + overlay (build/micropython, overlay/micropython)
+   blockdiag {
+     orientation = portrait;
+     default_group_color = none;
+
+     scripts  [label = "MicroPython scripts\n(example/)"];
+     bindings [label = "Bindings (modules/)\nsensor / image / display / espdl"];
+     platform [label = "Platform services\n(platform/)"];
+     imlib    [label = "imlib component\n(components/imlib)"];
+     boards   [label = "Board backends\n(boards/<BOARD>)"];
+     mp       [label = "MicroPython + overlay\n(build/, overlay/)"];
+
+     scripts  -> bindings;
+     bindings -> platform;
+     bindings -> imlib;
+     platform -> boards;
+     boards   -> mp;
+   }
 
 - **Bindings** (``modules/``): the ``USER_C_MODULES`` layer. The four real
   modules ``image``, ``sensor``, ``display``, and ``espdl`` self-register via
@@ -49,19 +52,23 @@ Layered Overview
 Capture-to-Output Data Flow
 ---------------------------
 
-.. code-block:: text
+.. blockdiag::
 
-   Camera sensor
-        |
-        v
-   sensor.snapshot()
-        |
-        v
-   image.Image (reusable framebuffer)
-        |-----------------------------+-----------------------------+
-        v                             v                             v
-   imlib processing /          display.write() -> LCD        img.flush() ->
-   espdl inference                                           USB CDC preview
+   blockdiag {
+     orientation = portrait;
+
+     sensor [label = "Camera sensor"];
+     snap   [label = "sensor.snapshot()"];
+     img    [label = "image.Image\n(reusable framebuffer)"];
+     proc   [label = "imlib processing /\nespdl inference"];
+     lcd    [label = "display.write()\n-> LCD"];
+     prev   [label = "img.flush()\n-> USB CDC preview"];
+
+     sensor -> snap -> img;
+     img -> proc;
+     img -> lcd;
+     img -> prev;
+   }
 
 ``sensor.snapshot()`` captures a frame into a reusable framebuffer wrapped as an
 ``image.Image``. Scripts then run ``imlib`` processing or ``espdl`` inference on
