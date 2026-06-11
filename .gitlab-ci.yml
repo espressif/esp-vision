@@ -50,6 +50,12 @@ python_stubs:
   stage: build
   tags:
     - build
+  variables:
+    # Cap ninja compile parallelism so the heavy ESP-DL + zxing C++ translation
+    # units stay below the CI runner memory limit. ESP-IDF v6.0's idf.py dropped
+    # IDF_PY_BUILD_JOBS and runs `ninja` with no -j, so we inject -j via a ninja
+    # wrapper in before_script instead (see below). Raise once runner RAM allows.
+    NINJA_MAX_JOBS: "2"
   image:
     name: espressif/idf:$IDF_IMAGE
     entrypoint: [""]
@@ -59,8 +65,26 @@ python_stubs:
     - git -C lib/micropython submodule sync -- lib/micropython-lib
     - git -C lib/micropython submodule update --init --depth 1 lib/micropython-lib
     - . /opt/esp/idf/export.sh
+    # idf.py (esp. v6.0) invokes `ninja` with no job limit, so ESP-DL + zxing
+    # compile at full core count and OOM the runner. Shadow ninja with a wrapper
+    # that injects `-j $NINJA_MAX_JOBS`. This is resolved via PATH by idf.py, so
+    # it covers both the `make` and `idf.py --board` build paths on every IDF
+    # version. The real ninja is captured by absolute path to avoid recursion.
+    - REAL_NINJA="$(command -v ninja)"
+    - mkdir -p "$CI_PROJECT_DIR/.ci-bin"
+    - printf '#!/bin/sh\nexec "%s" -j "%s" "$@"\n' "$REAL_NINJA" "${NINJA_MAX_JOBS:-2}" > "$CI_PROJECT_DIR/.ci-bin/ninja"
+    - chmod +x "$CI_PROJECT_DIR/.ci-bin/ninja"
+    - export PATH="$CI_PROJECT_DIR/.ci-bin:$PATH"
+    - echo "ninja wrapper active -> $REAL_NINJA -j ${NINJA_MAX_JOBS:-2}"
   script:
     - make BOARD="$BOARD" build
+  after_script:
+    - |
+      if [ -d "build/$BOARD" ]; then
+        find "build/$BOARD" -path '*/log/idf_py_*_output_*' -type f ! -name '*.txt' | while IFS= read -r log; do
+          mv "$log" "$log.txt"
+        done
+      fi
   artifacts:
     when: always
     expire_in: 1 week
