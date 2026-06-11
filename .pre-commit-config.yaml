@@ -10,6 +10,7 @@ exclude: |
     lib/micropython/|
     lib/ulab/|
     overlay/micropython/|
+    boards/[^/]+/port/|
     modules/py_assert\.h$|
     modules/py_helper\.[ch]$|
     modules/py_image\.[ch]$|
