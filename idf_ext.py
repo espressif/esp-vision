@@ -59,9 +59,10 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
 
         boards = []
         for name in sorted(os.listdir(boards_dir)):
-            board_path = os.path.join(boards_dir, name)
-            mp_board_path = os.path.join(mp_overlay, "ports", "esp32", "boards", name)
-            if os.path.isdir(board_path) and os.path.isdir(mp_board_path):
+            # boards/<name>/port/ holds the MicroPython-port files and marks a
+            # buildable board; it is projected onto the port at prepare time.
+            port_path = os.path.join(boards_dir, name, "port")
+            if os.path.isdir(port_path):
                 boards.append(name)
         return boards
 
@@ -103,7 +104,7 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
 
         required_paths = [
             os.path.join(boards_dir, board, "manifest.py"),
-            os.path.join(mp_overlay, "ports", "esp32", "boards", board, "mpconfigboard.cmake"),
+            os.path.join(boards_dir, board, "port", "mpconfigboard.cmake"),
         ]
         for path in required_paths:
             if not os.path.exists(path):
@@ -233,6 +234,19 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
 
         if os.path.isdir(mp_overlay):
             shutil.copytree(mp_overlay, mp_build, dirs_exist_ok=True)
+
+        # Project each board's MicroPython-port files (boards/<board>/port/)
+        # onto the prepared port. boards/<board>/ is the single authoring
+        # location; the matching ports/esp32/boards/<board>/ is generated here
+        # rather than tracked under overlay/.
+        for name in sorted(os.listdir(boards_dir)):
+            port_dir = os.path.join(boards_dir, name, "port")
+            if not os.path.isdir(port_dir):
+                continue
+            dst = os.path.join(mp_port_dir(), "boards", name)
+            if os.path.exists(dst):
+                shutil.rmtree(dst)
+            shutil.copytree(port_dir, dst)
 
         src = select_component_manifest()
         dst = os.path.join(mp_port_dir(), "main", "idf_component.yml")
