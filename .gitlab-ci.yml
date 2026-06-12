@@ -1,6 +1,14 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
+spec:
+  inputs:
+    force_push_to_github:
+      type: boolean
+      default: false
+
+---
+
 stages:
   - check
   - build
@@ -20,6 +28,7 @@ variables:
   PRE_COMMIT_HOME: "$CI_PROJECT_DIR/.cache/pre-commit"
   ESP_DOCS_BUILD_IMAGE: "$CI_DOCKER_REGISTRY/esp-idf-doc-env-v5.5:1-1"
   ESP_DOCS_DEPLOY_IMAGE: "$CI_DOCKER_REGISTRY/esp-idf-doc-env-v5.5"
+  CI_FORCE_PUSH_TO_GITHUB: "$[[ inputs.force_push_to_github ]]"
 
 include:
   - local: '.gitlab/ci/rules.yml'

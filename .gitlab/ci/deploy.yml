@@ -1,6 +1,36 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
+push_to_github:
+  stage: deploy
+  rules:
+    # Manual force push from a web-triggered pipeline (CI/CD -> Run pipeline,
+    # set force_push_to_github to true), regardless of branch.
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_FORCE_PUSH_TO_GITHUB == "true"'
+      when: manual
+    # Automatic sync for tags and for master / release branches.
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^release\/v/'
+  image: $CI_DOCKER_REGISTRY/esp32-ci-env
+  tags:
+    - github_sync
+  variables:
+    GIT_STRATEGY: clone
+    SUBMODULES_TO_FETCH: "none"
+  dependencies: []
+  before_script:
+    - echo "skip default before_script"
+  script:
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -n "$GH_PUSH_KEY" > ~/.ssh/id_rsa_base64
+    - base64 --decode --ignore-garbage ~/.ssh/id_rsa_base64 > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - echo -e "Host github.com\n\tStrictHostKeyChecking no\n" >> ~/.ssh/config
+    - git remote remove github &>/dev/null || true
+    - git remote add github git@github.com:espressif/esp-vision.git
+    - tools/ci/push_to_github.sh
+
 .deploy_docs_template:
   stage: deploy
   image: $ESP_DOCS_DEPLOY_IMAGE
