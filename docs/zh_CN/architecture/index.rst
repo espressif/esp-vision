@@ -5,6 +5,12 @@
 
 ESP-VISION 围绕 MicroPython 固件构建、板级硬件后端、共享平台服务以及面向 Python 的 视觉模块进行组织。代码按是否触及 MicroPython（``mp_obj_t`` / ``py/*.h``）进行分层。
 
+.. figure:: ../../_static/esp-vision-architecture.svg
+   :align: center
+   :alt: ESP-VISION 分层架构
+
+   ESP-VISION 分层架构总览
+
 分层概览
 --------
 

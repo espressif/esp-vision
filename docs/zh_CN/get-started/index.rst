@@ -16,7 +16,7 @@
 
 .. code-block:: bash
 
-   git clone --recursive <this-repo> esp-vision
+   git clone --recursive https://github.com/espressif/esp-vision.git esp-vision
    cd esp-vision
 
 .. only:: esp32p4

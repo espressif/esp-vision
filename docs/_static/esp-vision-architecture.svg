@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="730" viewBox="0 0 960 730" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+  <!-- background -->
+  <rect width="960" height="730" fill="#0d1117"/>
+
+  <!-- ===== top bar ===== -->
+  <g>
+    <text x="22" y="35" font-size="18" font-weight="700" fill="#eef2f6">ESP-<tspan fill="#9aa7b4" font-weight="400">VISION</tspan></text>
+  </g>
+
+  <!-- ===== Application band : Python yellow ===== -->
+  <g>
+    <rect x="16" y="60" width="928" height="96" rx="8" fill="#231d0d" stroke="#d4a72c" stroke-width="1.5"/>
+    <text x="116" y="113" font-size="15" font-weight="700" fill="#f5e2a8" text-anchor="middle">Application</text>
+
+    <rect x="230" y="78" width="320" height="60" rx="6" fill="#33290f" stroke="#ffd43b"/>
+    <text x="390" y="103" font-size="13" font-weight="600" fill="#fbeec0" text-anchor="middle">MicroPython App Scripts</text>
+    <text x="390" y="122" font-size="11" fill="#cdb670" text-anchor="middle">example/ &#183; /lib &#183; frozen packages</text>
+
+    <rect x="580" y="78" width="330" height="60" rx="6" fill="#2a220f" stroke="#d4a72c" stroke-dasharray="5 4"/>
+    <text x="745" y="103" font-size="13" font-weight="600" fill="#fbeec0" text-anchor="middle">VSCode Host Tool / Web IDE</text>
+    <text x="745" y="122" font-size="11" fill="#cdb670" text-anchor="middle">(separate repository)</text>
+  </g>
+
+  <!-- ===== Service & Framework band : neutral shell ===== -->
+  <g>
+    <rect x="16" y="172" width="928" height="430" rx="8" fill="#161b22" stroke="#3d444d" stroke-width="1.5"/>
+    <text x="116" y="378" font-size="15" font-weight="700" fill="#dce3ea" text-anchor="middle">Service &amp;</text>
+    <text x="116" y="398" font-size="15" font-weight="700" fill="#dce3ea" text-anchor="middle">Framework</text>
+
+    <!-- Python API Bindings : Python blue -->
+    <g>
+      <rect x="230" y="190" width="698" height="84" rx="6" fill="#13233a" stroke="#4b8bbe" stroke-dasharray="5 4"/>
+      <text x="579" y="210" font-size="12.5" font-weight="600" fill="#8ec2ee" text-anchor="middle">Python API Bindings (modules/)</text>
+      <g font-size="12" fill="#d6e7f7" text-anchor="middle">
+        <rect x="265" y="224" width="90" height="34" rx="5" fill="#1b3050" stroke="#5e9fd4"/>
+        <text x="310" y="245">sensor</text>
+        <rect x="367" y="224" width="130" height="34" rx="5" fill="#1b3050" stroke="#5e9fd4"/>
+        <text x="432" y="245">image / ImageIO</text>
+        <rect x="509" y="224" width="90" height="34" rx="5" fill="#1b3050" stroke="#5e9fd4"/>
+        <text x="554" y="245">display</text>
+        <rect x="611" y="224" width="80" height="34" rx="5" fill="#1b3050" stroke="#5e9fd4"/>
+        <text x="651" y="245">espdl</text>
+        <rect x="703" y="224" width="90" height="34" rx="5" fill="#1b3050" stroke="#5e9fd4"/>
+        <text x="748" y="245">h264</text>
+        <rect x="805" y="224" width="88" height="34" rx="5" fill="#1b3050" stroke="#5e9fd4"/>
+        <text x="849" y="245">rtsp</text>
+      </g>
+    </g>
+
+    <!-- Vision Library (imlib) : emerald -->
+    <g>
+      <rect x="230" y="290" width="300" height="150" rx="6" fill="#0e2a23" stroke="#2ea58a" stroke-dasharray="5 4"/>
+      <text x="380" y="310" font-size="12.5" font-weight="600" fill="#7fd4ba" text-anchor="middle">Vision Library (imlib)</text>
+      <g font-size="11.5" fill="#d4efe5" text-anchor="middle">
+        <rect x="237" y="322" width="138" height="30" rx="5" fill="#143c31" stroke="#3cbf9f"/>
+        <text x="306" y="341">Drawing / Filters</text>
+        <rect x="385" y="322" width="138" height="30" rx="5" fill="#143c31" stroke="#3cbf9f"/>
+        <text x="454" y="341">Color Tracking</text>
+        <rect x="237" y="360" width="138" height="30" rx="5" fill="#143c31" stroke="#3cbf9f"/>
+        <text x="306" y="379">Feature Detection</text>
+        <rect x="385" y="360" width="138" height="30" rx="5" fill="#143c31" stroke="#3cbf9f"/>
+        <text x="454" y="379">QR Code</text>
+        <rect x="237" y="398" width="138" height="30" rx="5" fill="#143c31" stroke="#3cbf9f"/>
+        <text x="306" y="417">Barcode (ZXing)</text>
+        <rect x="385" y="398" width="138" height="30" rx="5" fill="#143c31" stroke="#3cbf9f"/>
+        <text x="454" y="417">AprilTag</text>
+      </g>
+    </g>
+
+    <!-- AI Inference : violet -->
+    <g>
+      <rect x="542" y="290" width="190" height="150" rx="6" fill="#221634" stroke="#9b6dd6" stroke-dasharray="5 4"/>
+      <text x="637" y="310" font-size="12.5" font-weight="600" fill="#c5a8ec" text-anchor="middle">AI Inference</text>
+      <g font-size="11.5" fill="#e9def8" text-anchor="middle">
+        <rect x="552" y="322" width="170" height="30" rx="5" fill="#2f1e4a" stroke="#ab82e0"/>
+        <text x="637" y="341">ESP-DL Runtime</text>
+        <rect x="552" y="360" width="170" height="30" rx="5" fill="#2f1e4a" stroke="#ab82e0"/>
+        <text x="637" y="379">.espdl Models</text>
+        <rect x="552" y="398" width="170" height="30" rx="5" fill="#2f1e4a" stroke="#ab82e0"/>
+        <text x="637" y="417">Detect / Classify / Pose</text>
+      </g>
+    </g>
+
+    <!-- Runtime : Python blue -->
+    <g>
+      <rect x="744" y="290" width="184" height="150" rx="6" fill="#13233a" stroke="#4b8bbe" stroke-dasharray="5 4"/>
+      <text x="836" y="310" font-size="12.5" font-weight="600" fill="#8ec2ee" text-anchor="middle">Runtime</text>
+      <g font-size="11.5" fill="#d6e7f7" text-anchor="middle">
+        <rect x="754" y="322" width="164" height="30" rx="5" fill="#1b3050" stroke="#5e9fd4"/>
+        <text x="836" y="341">MicroPython v1.28.0</text>
+        <rect x="754" y="360" width="164" height="30" rx="5" fill="#1b3050" stroke="#5e9fd4"/>
+        <text x="836" y="379">ESP-VISION Overlay</text>
+        <rect x="754" y="398" width="164" height="30" rx="5" fill="#1b3050" stroke="#5e9fd4"/>
+        <text x="836" y="417">ulab</text>
+      </g>
+    </g>
+
+    <!-- Platform Services : Espressif coral -->
+    <g>
+      <rect x="230" y="456" width="420" height="130" rx="6" fill="#2d1712" stroke="#e0735a" stroke-dasharray="5 4"/>
+      <text x="440" y="476" font-size="12.5" font-weight="600" fill="#f0a892" text-anchor="middle">Platform Services (platform/)</text>
+      <g font-size="11.5" fill="#f8e2da" text-anchor="middle">
+        <rect x="238" y="488" width="128" height="30" rx="5" fill="#40211a" stroke="#ec8a6e"/>
+        <text x="302" y="507">Preview (USB CDC)</text>
+        <rect x="376" y="488" width="128" height="30" rx="5" fill="#40211a" stroke="#ec8a6e"/>
+        <text x="440" y="507">JPEG Codec</text>
+        <rect x="514" y="488" width="128" height="30" rx="5" fill="#40211a" stroke="#ec8a6e"/>
+        <text x="578" y="507">Display Layer</text>
+        <rect x="238" y="526" width="128" height="30" rx="5" fill="#40211a" stroke="#ec8a6e"/>
+        <text x="302" y="545">SD Card</text>
+        <rect x="376" y="526" width="128" height="30" rx="5" fill="#40211a" stroke="#ec8a6e"/>
+        <text x="440" y="545">USB MSC</text>
+        <rect x="514" y="526" width="128" height="30" rx="5" fill="#40211a" stroke="#ec8a6e"/>
+        <text x="578" y="545">Boot / Soft-reset</text>
+      </g>
+    </g>
+
+    <!-- Board Backends : Espressif red -->
+    <g>
+      <rect x="666" y="456" width="262" height="130" rx="6" fill="#2d1216" stroke="#d4485a" stroke-dasharray="5 4"/>
+      <text x="797" y="476" font-size="12.5" font-weight="600" fill="#ef9aa6" text-anchor="middle">Board Backends (boards/)</text>
+      <g font-size="11.5" fill="#f8dde1" text-anchor="middle">
+        <rect x="676" y="488" width="242" height="30" rx="5" fill="#3f1a20" stroke="#e0606f"/>
+        <text x="797" y="507" font-size="11">Camera (V4L2 + PPA / esp32-camera)</text>
+        <rect x="676" y="526" width="116" height="30" rx="5" fill="#3f1a20" stroke="#e0606f"/>
+        <text x="734" y="545">Display</text>
+        <rect x="802" y="526" width="116" height="30" rx="5" fill="#3f1a20" stroke="#e0606f"/>
+        <text x="860" y="545">SD Card</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===== Environment & Dependency band : Espressif red ===== -->
+  <g>
+    <rect x="16" y="614" width="928" height="96" rx="8" fill="#260f13" stroke="#b03a48" stroke-width="1.5"/>
+    <text x="116" y="657" font-size="15" font-weight="700" fill="#efb3bc" text-anchor="middle">Environment &amp;</text>
+    <text x="116" y="677" font-size="15" font-weight="700" fill="#efb3bc" text-anchor="middle">Dependency</text>
+
+    <rect x="230" y="634" width="200" height="56" rx="6" fill="#38151b" stroke="#d4596a"/>
+    <text x="330" y="667" font-size="13" font-weight="600" fill="#fae3e7" text-anchor="middle">ESP-IDF</text>
+
+    <rect x="440" y="634" width="300" height="56" rx="6" fill="#38151b" stroke="#d4596a"/>
+    <text x="590" y="657" font-size="13" font-weight="600" fill="#fae3e7" text-anchor="middle">ESP Component Registry</text>
+    <text x="590" y="676" font-size="10.5" fill="#dba0a9" text-anchor="middle">esp_video &#183; esp32-camera &#183; esp_new_jpeg &#183; ESP-DL</text>
+
+    <rect x="750" y="634" width="178" height="56" rx="6" fill="#38151b" stroke="#d4596a"/>
+    <text x="839" y="657" font-size="13" font-weight="600" fill="#fae3e7" text-anchor="middle">ESP32 SoCs</text>
+    <text x="839" y="676" font-size="10.5" fill="#dba0a9" text-anchor="middle">P4 &#183; S3 &#183; S31</text>
+  </g>
+</svg>

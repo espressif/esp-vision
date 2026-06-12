@@ -5,6 +5,12 @@ Solution Architecture
 
 ESP-VISION is organized around a MicroPython firmware build, board-specific hardware backends, shared platform services, and Python-facing vision modules. Code is layered by whether it touches MicroPython (``mp_obj_t`` / ``py/*.h``).
 
+.. figure:: ../../_static/esp-vision-architecture.svg
+   :align: center
+   :alt: ESP-VISION layered architecture
+
+   ESP-VISION layered architecture overview
+
 Layered Overview
 ----------------
 
