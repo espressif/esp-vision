@@ -65,6 +65,23 @@ python_stubs:
     - python -m py_compile stubs/*.pyi
     - python -m py_compile idf_ext.py
 
+# Dead-link check for markdown files (relative paths + web URLs). Network
+# flakiness shouldn't block the pipeline, so only report 404s and allow failure.
+check_readme_links:
+  stage: check
+  tags:
+    - build
+  image: python:3.11-slim
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - "**/*.md"
+        - "tools/ci/check_readme_links.py"
+  script:
+    - python tools/ci/check_readme_links.py
+
 .firmware_base:
   stage: build
   extends: .rules:build:firmware
