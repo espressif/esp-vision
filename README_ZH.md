@@ -21,11 +21,11 @@ ESP-VISION 是乐鑫面向端侧智能视觉打造的低代码开发框架，深
 
 ![ESP-VISION 分层架构](docs/_static/esp-vision-architecture.svg)
 
-各层的职责说明见 [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/architecture/index.html)。
+各层的职责说明见 [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)。
 
 ## 快速开始
 
-环境要求：ESP-IDF release/v5.5、release/v6.0 或 master（已 source `export.sh`， `idf.py` 可用），以及一块 [受支持的开发板](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/target-support/index.html)。
+环境要求：ESP-IDF release/v5.5、release/v6.0 或 master（已 source `export.sh`， `idf.py` 可用），以及一块 [受支持的开发板](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/target-support/index.html)。
 
 ```bash
 git clone --recursive https://github.com/espressif/esp-vision.git esp-vision
@@ -61,8 +61,8 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 
 ## 资源
 
-- [芯片与开发板支持](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/target-support/index.html)
+- [芯片与开发板支持](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/target-support/index.html)
 - [Web IDE](https://esp-vision-ide.espressif.tools/)
 - [示例](example/)
-- [客制化固件功能](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/how-to/customize-firmware.html)
-- [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/architecture/index.html)
+- [客制化固件功能](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/how-to/customize-firmware.html)
+- [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)

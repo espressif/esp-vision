@@ -21,11 +21,11 @@ ESP-VISION is Espressif's low-code framework for intelligent edge vision. It dee
 
 ![ESP-VISION layered architecture](docs/_static/esp-vision-architecture.svg)
 
-See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/architecture/index.html) for the role of each layer.
+See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html) for the role of each layer.
 
 ## Quickstart
 
-Prerequisites: ESP-IDF release/v5.5, release/v6.0, or master with the export script sourced (`idf.py` on `PATH`), and a [supported board](https://docs.espressif.com/projects/esp-vision/en/latest/target-support/index.html).
+Prerequisites: ESP-IDF release/v5.5, release/v6.0, or master with the export script sourced (`idf.py` on `PATH`), and a [supported board](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/target-support/index.html).
 
 ```bash
 git clone --recursive https://github.com/espressif/esp-vision.git esp-vision
@@ -61,8 +61,8 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 
 ## Resources
 
-- [Supported Chips and Boards](https://docs.espressif.com/projects/esp-vision/en/latest/target-support/index.html)
+- [Supported Chips and Boards](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/target-support/index.html)
 - [Web IDE](https://esp-vision-ide.espressif.tools/)
 - [Examples](example/)
-- [Customize firmware features](https://docs.espressif.com/projects/esp-vision/en/latest/how-to/customize-firmware.html)
-- [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/architecture/index.html)
+- [Customize firmware features](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/how-to/customize-firmware.html)
+- [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html)
