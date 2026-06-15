@@ -8,6 +8,7 @@ import argparse
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -20,8 +21,8 @@ LINK_PATTERN = re.compile(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('url_log', type=Path)
-    parser.add_argument('--attempts', type=int, default=6)
-    parser.add_argument('--delay', type=int, default=5)
+    parser.add_argument('--attempts', type=int, default=12)
+    parser.add_argument('--delay', type=int, default=10)
     args = parser.parse_args()
 
     urls = {}
@@ -48,8 +49,21 @@ def main():
     for (language, page), url in sorted(urls.items()):
         last_status = None
         for attempt in range(1, args.attempts + 1):
+            parsed_url = urllib.parse.urlsplit(url)
+            query = urllib.parse.parse_qsl(parsed_url.query, keep_blank_values=True)
+            query.append(('_deployment_check', str(time.time_ns())))
+            check_url = urllib.parse.urlunsplit(
+                parsed_url._replace(query=urllib.parse.urlencode(query))
+            )
+            request = urllib.request.Request(
+                check_url,
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                },
+            )
             try:
-                with urllib.request.urlopen(url, timeout=15) as response:
+                with urllib.request.urlopen(request, timeout=15) as response:
                     last_status = response.status
                     response.read(1)
                 if 200 <= last_status < 400:

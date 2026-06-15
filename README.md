@@ -1,10 +1,16 @@
+<p align="center">
+  <img src="docs/_static/ESP-VISION_logo.svg" alt="ESP-VISION logo" width="100%" height="240">
+</p>
+
 # ESP-VISION
+
+**Low-Code Edge AI & Computer Vision Framework for Espressif SoCs**
 
 [English](README.md) | [简体中文](README_ZH.md)
 
 ## Overview
 
-ESP-VISION is Espressif's low-code framework for intelligent edge vision. It deeply integrates essential capabilities including camera capture, image processing, video encoding and decoding, network transmission, model deployment, and AI inference, while providing unified and standardized Python APIs that enable developers to rapidly build edge applications combining visual capture, intelligent recognition, display, and media streaming.
+ESP-VISION is a Low-Code Edge AI & Computer Vision Framework for Espressif SoCs. It deeply integrates essential capabilities including camera capture, image processing, video encoding and decoding, network transmission, model deployment, and AI inference, while providing unified and standardized Python APIs that enable developers to rapidly build edge applications combining visual capture, intelligent recognition, display, and media streaming.
 
 - Unified and standardized Python APIs for camera capture, image input, display, video encoding, preview, and streaming across supported chips and boards, enabling low-code application development.
 - Image processing capabilities covering drawing, filtering, color tracking, feature detection, QR codes, barcodes, and AprilTags.

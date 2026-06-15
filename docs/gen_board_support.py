@@ -39,6 +39,10 @@ BOARD_URLS = {
         'https://github.com/espressif/esp-who/blob/master/docs/en/get-started/'
         'ESP32-S3-EYE_Getting_Started_Guide.md'
     ),
+    'ESP32_S31_KORVO': (
+        'https://docs.espressif.com/projects/esp-dev-kits/en/latest/'
+        'esp32s31/esp32-s31-korvo-1/index.html'
+    ),
 }
 
 CHIP_NAMES = {
