@@ -68,6 +68,7 @@ versions_url = './_static/versions.js'
 # -- HTML / PDF output -------------------------------------------------------
 
 html_static_path = ['../_static']
+html_logo = '../_static/ESP-VISION_logo.svg'
 
 # PDF output filename prefix; ESP-Docs appends language and version.
 pdf_file_prefix = u'esp-vision'

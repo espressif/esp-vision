@@ -1,10 +1,16 @@
+<p align="center">
+  <img src="docs/_static/ESP-VISION_logo.svg" alt="ESP-VISION logo" width="100%" height="240">
+</p>
+
 # ESP-VISION
+
+**Low-Code Edge AI & Computer Vision Framework for Espressif SoCs**
 
 [English](README.md) | [简体中文](README_ZH.md)
 
 ## 概述
 
-ESP-VISION 是乐鑫面向端侧智能视觉打造的低代码开发框架，深度整合了摄像头采集、图像处理、视频编解码、网络传输、模型部署和 AI 推理等核心能力，并提供统一标准化的 Python 接口，赋能开发者快速构建集视觉采集、智能识别、画面显示与流媒体传输于一体的边缘应用。
+ESP-VISION 是面向乐鑫 SoC 的低代码端侧 AI 与计算机视觉框架，深度整合了摄像头采集、图像处理、视频编解码、网络传输、模型部署和 AI 推理等核心能力，并提供统一标准化的 Python 接口，赋能开发者快速构建集视觉采集、智能识别、画面显示与流媒体传输于一体的边缘应用。
 
 - 为受支持的芯片和开发板统一提供标准化的 Python 接口，覆盖摄像头采集、图像输入、显示、视频编码、预览与推流，支持低代码应用开发。
 - 提供绘图、滤波、颜色追踪、特征检测、二维码、条码和 AprilTag 等图像处理能力。
