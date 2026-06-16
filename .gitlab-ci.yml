@@ -113,6 +113,11 @@ python_stubs:
       - build/$BOARD/idf*/bootloader/bootloader.bin
       - build/$BOARD/idf*/partition_table/partition-table.bin
       - build/$BOARD/idf*/micropython.bin
+      # flash_args lists the {offset, file} pairs consumed by `esptool merge_bin`
+      # in the tag-release pack_launchpad job (see .gitlab/ci/deploy.yml). These
+      # boards use a single factory app with no OTA, so flash_args references
+      # only the three .bin files already collected above.
+      - build/$BOARD/idf*/flash_args
 
 # Stable release lines (blocking): every board on every supported IDF release.
 firmware:

@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+#
+# ESP-VISION esp-launchpad publish manifest.
+#
+# Only the boards listed here are merged and published to dl.espressif.com on a
+# tag release (see tools/ci/launchpad/generate_launchpad.py and the
+# pack_launchpad job in .gitlab/ci/deploy.yml). TEMPLATE (bring-up only) is
+# excluded.
+#
+# A board may be marked `optional: true`. Optional boards are published on a
+# best-effort basis: if their firmware artifacts are absent from the pipeline
+# (e.g. the build failed), they are skipped instead of failing the release.
+# ESP32_S31_KORVO is optional because it only builds on the moving IDF-master
+# target (firmware_master, allow_failure), so it must never block a release of
+# the stable boards.
+
+# Root key for the esp-launchpad config.toml. ae_upload_dl publishes the merged
+# *.bin files under AE/esp-vision/bin/ and config.toml at AE/esp-vision/ (root),
+# so firmware_images_url must point at the bin/ subdirectory. The uploader also
+# re-corrects this field before upload, but keep it right at the source.
+app_name: esp-vision
+firmware_images_url: "https://dl.espressif.com/AE/esp-vision/bin/"
+
+# board -> chip target. The board name doubles as the launchpad "developKit"
+# name shown in the chip/board picker.
+boards:
+  ESP32_P4X_EYE:
+    target: esp32p4
+  ESP32_P4X_FUNCTION_EV_BOARD:
+    target: esp32p4
+  ESP32_S3_EYE:
+    target: esp32s3
+  ESP32_S31_KORVO:
+    target: esp32s31
+    optional: true

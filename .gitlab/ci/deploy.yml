@@ -102,3 +102,76 @@ post_docs_preview:
   script:
     - python tools/ci/post_docs_preview.py logs/doc-url.txt
   allow_failure: true
+
+# --------------------------------------------------------------------------- #
+# esp-launchpad release (tag only)
+#
+# On a semver tag, reuse the release-v5.5 firmware artifacts, merge each
+# published board into a single flashable image suffixed with the tag, generate
+# the launchpad config.toml, and hand the binaries/ directory to the AE
+# ae_upload_dl pipeline, which copies them additively to
+# https://dl.espressif.com/AE/esp-vision/ (no deletion of previous releases).
+# --------------------------------------------------------------------------- #
+
+pack_launchpad:
+  stage: deploy
+  extends: .rules:release
+  image: espressif/idf:release-v5.5
+  tags:
+    - build
+  # Reuse the already-built v5.5 firmware artifacts; do not rebuild. Keep this
+  # list in sync with tools/ci/launchpad/boards.yml.
+  needs:
+    - job: "firmware: [release-v5.5, ESP32_P4X_EYE]"
+      artifacts: true
+    - job: "firmware: [release-v5.5, ESP32_P4X_FUNCTION_EV_BOARD]"
+      artifacts: true
+    - job: "firmware: [release-v5.5, ESP32_S3_EYE]"
+      artifacts: true
+    # ESP32_S31_KORVO only builds on the IDF-master matrix (allow_failure), so
+    # pull it in best-effort: optional needs means a missing/failed S31 build
+    # does not block the release, and generate_launchpad.py skips it when its
+    # artifacts are absent (boards.yml marks it optional).
+    - job: "firmware_master: [latest, ESP32_S31_KORVO]"
+      artifacts: true
+      optional: true
+  before_script:
+    # Pin esptool >= 5.3: release-v5.5's bundled version predates the esp32s31
+    # target (ESP32_S31_KORVO, IDF_TARGET esp32s31). esptool 5.3 adds esp32s31
+    # support and still merges the esp32p4 / esp32s3 images built by this same
+    # IDF release.
+    - python -m pip install --upgrade "esptool>=5.3" rtoml pyyaml
+  script:
+    - python tools/ci/launchpad/generate_launchpad.py "$CI_COMMIT_TAG"
+  artifacts:
+    when: on_success
+    expire_in: 1 month
+    paths:
+      - binaries/
+
+# trigger.yml defines the upload-dl-trigger job (image / script / tags) that
+# triggers the AE ae_upload_dl pipeline. The override below only adds the
+# release gate, the dependency on the packed binaries, the source-project token
+# and the launchpad environment link.
+include:
+  - project: 'ae_group/test-related/ae_upload_dl'
+    file: 'trigger.yml'
+
+upload-dl-trigger:
+  extends: .rules:release
+  needs:
+    - job: pack_launchpad
+      artifacts: false
+  # environment.url is only the clickable link shown in GitLab's Environments
+  # UI; it does not affect the upload or config.toml. Point it at the published
+  # directory rather than any specific frontend. The config.toml itself stays
+  # esp-launchpad-compatible, so it can also be opened with the online flasher:
+  #   https://espressif.github.io/esp-launchpad/?flashConfigURL=https://dl.espressif.com/AE/esp-vision/config.toml
+  environment:
+    name: esp-vision_release
+    url: https://dl.espressif.com/AE/esp-vision/
+  variables:
+    # Project access token (api + read_api) so ae_upload_dl can download the
+    # pack_launchpad artifacts from this pipeline. Define UPLOAD_ACCESS_TOKEN as
+    # a masked/protected CI/CD variable in the esp-vision project settings.
+    SOURCE_PROJECT_TOKEN: ${UPLOAD_ACCESS_TOKEN}
