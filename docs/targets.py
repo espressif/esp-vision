@@ -22,7 +22,7 @@ BOARD_ROOT = REPO_ROOT / 'boards'
 # projected onto ports/esp32/boards/<BOARD>/ at build time.
 MP_BOARD_ROOT = BOARD_ROOT
 
-TARGETS = ('esp32p4', 'esp32s3', 'esp32s31')
+TARGETS = ('esp32s31', 'esp32p4', 'esp32s3')
 DOCUMENTED_MODULES = ('sensor', 'image', 'display', 'espdl', 'imageio', 'h264', 'rtsp')
 
 _SOURCE_MODULES = {

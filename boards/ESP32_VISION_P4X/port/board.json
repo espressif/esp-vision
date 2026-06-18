@@ -1,0 +1,13 @@
+{
+    "deploy": [
+        "../deploy.md"
+    ],
+    "docs": "",
+    "features": [
+        "DVP",
+        "SC101IOT"
+    ],
+    "mcu": "esp32p4x",
+    "product": "ESP32-VISION-P4X",
+    "vendor": "Espressif"
+}

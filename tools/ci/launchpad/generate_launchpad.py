@@ -162,7 +162,7 @@ def build_website(cfg: dict, images: dict, tag: str) -> dict:
             "board": board,
             "chip": info["chip"],
             "target": target,
-            "image": info["image"],
+            "image": info.get("website_image", info["image"]),
             # canonical (en) doc URL; website swaps /en/ <-> /zh_CN/ per locale
             "docsUrl": info["url"],
             "status": (

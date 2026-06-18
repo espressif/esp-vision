@@ -73,6 +73,9 @@ def _render(lang):
             status = labels['supported']
             if info['requires_idf_master']:
                 status = '{} ({})'.format(status, labels['idf_master'])
+            board_name = info['name']
+            if info['url']:
+                board_name = '`{} <{}>`__'.format(info['name'], info['url'])
             support = (
                 '**{supported}** | {modules}: ``{module_values}`` | '
                 '{micropython}: {port_values} | {vision}: {vision_values}'
@@ -90,7 +93,7 @@ def _render(lang):
                     '   * - .. image:: {}'.format(info['image']),
                     '          :width: 180px',
                     '          :alt: {}'.format(info['name']),
-                    '     - `{} <{}>`__'.format(info['name'], info['url']),
+                    '     - {}'.format(board_name),
                     '     - ``{}``'.format(info['chip']),
                     '     - {}'.format(support),
                 ]

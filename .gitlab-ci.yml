@@ -158,6 +158,7 @@ firmware:
         BOARD:
           - ESP32_P4X_EYE
           - ESP32_P4X_FUNCTION_EV_BOARD
+          - ESP32_VISION_P4X
           - ESP32_S3_EYE
           - TEMPLATE
 
@@ -183,6 +184,7 @@ firmware_master:
         BOARD:
           - ESP32_P4X_EYE
           - ESP32_P4X_FUNCTION_EV_BOARD
+          - ESP32_VISION_P4X
           - ESP32_S3_EYE
           - ESP32_S31_KORVO
           - TEMPLATE
