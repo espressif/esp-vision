@@ -24,7 +24,11 @@ import re
 
 from targets import BOARD_ROOT, MP_BOARD_ROOT, MP_CONFIG_PORT, TARGET_CAPABILITIES
 
-# Board render image (isometric photo) used by both docs and the website.
+LOCAL_STATIC_PREFIX = '../../_static/'
+WEBSITE_STATIC_PREFIX = (
+    'https://raw.githubusercontent.com/espressif/esp-vision/master/docs/_static/'
+)
+
 BOARD_IMAGES = {
     'ESP32_P4X_EYE': (
         'https://raw.githubusercontent.com/espressif/esp-dev-kits/master/'
@@ -43,6 +47,7 @@ BOARD_IMAGES = {
         'https://raw.githubusercontent.com/espressif/esp-who/master/'
         'docs/_static/get-started/ESP32-S3-EYE-isometric.png'
     ),
+    'ESP32_VISION_P4X': '../../_static/boards/ESP32_VISION_P4X/ESP32-VISION-P4X.png',
 }
 
 # Canonical (English) getting-started URL override; falls back to board.json's
@@ -108,6 +113,12 @@ def _defined_macros(path):
     return set(re.findall(r'^\s*#define\s+([A-Za-z0-9_]+)\b', text, re.MULTILINE))
 
 
+def _website_image(image):
+    if image.startswith(LOCAL_STATIC_PREFIX):
+        return WEBSITE_STATIC_PREFIX + image[len(LOCAL_STATIC_PREFIX):]
+    return image
+
+
 def board_info(board, target):
     """Normalize one board's firmware config into a capability record.
 
@@ -128,11 +139,13 @@ def board_info(board, target):
         and 'ESP_VISION_IDF_OVERLAY STREQUAL "master"'
         in board_cmake.read_text(encoding='utf-8')
     )
+    image = BOARD_IMAGES[board]
     return {
         'name': metadata['product'],
-        'url': BOARD_URLS.get(board, metadata['url']),
+        'url': BOARD_URLS.get(board, metadata.get('url', '')),
         'chip': CHIP_NAMES[target],
-        'image': BOARD_IMAGES[board],
+        'image': image,
+        'website_image': _website_image(image),
         'modules': modules,
         'requires_idf_master': requires_idf_master,
         'port_features': tuple(
