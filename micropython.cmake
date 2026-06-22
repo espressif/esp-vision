@@ -35,6 +35,7 @@ set(ESP_VISION_MODULE_SOURCES
 if((IDF_TARGET STREQUAL "esp32p4") OR (IDF_TARGET STREQUAL "esp32s3") OR (IDF_TARGET STREQUAL "esp32s31"))
     list(APPEND ESP_VISION_MODULE_SOURCES
         ${ESP_VISION_ROOT}/modules/py_espdl.cpp
+        ${ESP_VISION_ROOT}/modules/py_tflite.cpp
     )
 endif()
 

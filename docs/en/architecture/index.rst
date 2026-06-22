@@ -21,7 +21,7 @@ Layered Overview
      default_group_color = none;
 
      scripts  [label = "MicroPython scripts\n(example/)"];
-     bindings [label = "Bindings (modules/)\nsensor / image / display / espdl"];
+     bindings [label = "Bindings (modules/)\nsensor / image / display / espdl / tflite"];
      platform [label = "Platform services\n(platform/)"];
      imlib    [label = "imlib component\n(components/imlib)"];
      boards   [label = "Board backends\n(boards/<BOARD>)"];
@@ -34,7 +34,7 @@ Layered Overview
      boards   -> mp;
    }
 
-- **Bindings** (``modules/``): the ``USER_C_MODULES`` layer. The four real modules ``image``, ``sensor``, ``display``, and ``espdl`` self-register via ``MP_REGISTER_MODULE``. ``py_imageio.c`` provides the ``image.ImageIO`` type, and ``py_helper.c`` is shared helper code. Bindings only do object conversion and light API adaptation; heavy logic lives in pure C or ``platform/``.
+- **Bindings** (``modules/``): the ``USER_C_MODULES`` layer. The main modules ``image``, ``sensor``, ``display``, ``espdl``, and ``tflite`` self-register via ``MP_REGISTER_MODULE``. ``py_imageio.c`` provides the ``image.ImageIO`` type, and ``py_helper.c`` is shared helper code. Bindings only do object conversion and light API adaptation; heavy logic lives in pure C or ``platform/``.
 - **Platform services** (``platform/``): self-written ESP32 glue. ``preview.c`` (EVFRAME JPEG preview over USB CDC), ``display.c`` (generic display layer), ``sdcard.c`` (mount at ``/sdcard``), ``usb_msc.c`` (exposes the ``ffat`` partition over TinyUSB MSC), ``jpeg.c`` (hardware or software JPEG), ``debug.c``, and ``main.c`` (startup init plus the soft-reset loop).
 - **imlib component** (``components/imlib/``): pure-C vision algorithms, an IDF component maintained as MIT, derived from OpenMV ``lib/imlib``.
 - **Board backends** (``boards/<BOARD>/``): per-board configuration and the real camera/display/sdcard implementations. P4X and S31 use ``esp_video``/V4L2; P4X also uses PPA, while S3 uses ``esp32-camera``.
@@ -51,7 +51,7 @@ Capture-to-Output Data Flow
      sensor [label = "Camera sensor"];
      snap   [label = "sensor.snapshot()"];
      img    [label = "image.Image\n(reusable framebuffer)"];
-     proc   [label = "imlib processing /\nespdl inference"];
+     proc   [label = "imlib processing /\nAI inference"];
      lcd    [label = "display.write()\n-> LCD"];
      prev   [label = "img.flush()\n-> USB CDC preview"];
 
@@ -61,7 +61,7 @@ Capture-to-Output Data Flow
      img -> prev;
    }
 
-``sensor.snapshot()`` captures a frame into a reusable framebuffer wrapped as an ``image.Image``. Scripts then run ``imlib`` processing or ``espdl`` inference on the image, and send it to the LCD with ``display.write()`` or to the host preview with ``img.flush()``.
+``sensor.snapshot()`` captures a frame into a reusable framebuffer wrapped as an ``image.Image``. Scripts then run ``imlib`` processing, ESP-DL inference, or TFLite Micro inference on the image, and send it to the LCD with ``display.write()`` or to the host preview with ``img.flush()``.
 
 Source Tree
 -----------
@@ -85,11 +85,11 @@ Source Tree
    * - ``platform/``
      - Shared runtime services (camera, preview, storage, display, USB, JPEG).
    * - ``modules/``
-     - MicroPython C/C++ bindings (``sensor``, ``image``, ``display``, ``imageio``, ``espdl``, plus chip-dependent ``h264`` and ``rtsp``).
+     - MicroPython C/C++ bindings (``sensor``, ``image``, ``display``, ``imageio``, ``espdl``, ``tflite``, plus chip-dependent ``h264`` and ``rtsp``).
    * - ``components/``
      - ESP-IDF components, including OpenMV ``imlib`` and the ZXing backend.
    * - ``models/``
-     - Optional ``.espdl`` model assets loaded from board storage at runtime.
+     - Optional model assets loaded from board storage at runtime.
    * - ``example/``
      - MicroPython example scripts.
    * - ``stubs/``

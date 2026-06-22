@@ -48,6 +48,10 @@ The following table lists the direct dependencies most relevant to redistributio
      - Component Registry
      - Model inference runtime
      - MIT
+   * - `TensorFlow Lite Micro / esp-tflite-micro <https://github.com/espressif/esp-tflite-micro>`__
+     - Component Registry
+     - TensorFlow Lite Micro inference runtime
+     - Apache-2.0
    * - `esp_new_jpeg <https://github.com/espressif/esp-adf-libs/tree/master/esp_new_jpeg>`__
      - Component Registry
      - Software JPEG codec

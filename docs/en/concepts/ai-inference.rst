@@ -3,58 +3,58 @@ AI Inference
 
 :link_to_translation:`zh_CN:[中文]`
 
-The :doc:`../api-reference/espdl` module runs neural networks on the device using `ESP-DL <https://github.com/espressif/esp-dl>`_, Espressif's deep-learning inference library. ESP-VISION wraps ESP-DL in task-specific classes so a script can go from an image to detections, poses, or class labels in a few lines, while ESP-DL handles the heavy tensor math on the chip's vector unit (and, on ESP32-P4, additional acceleration).
+ESP-VISION provides on-device neural-network execution through :doc:`../api-reference/espdl`, which uses `ESP-DL <https://github.com/espressif/esp-dl>`_, and :doc:`../api-reference/tflite`, which uses TensorFlow Lite Micro for TensorFlow Lite ``.tflite`` models. The available APIs range from task-oriented helpers to general model execution, and model-specific preprocessing or post-processing can live in module bindings, helper code, or Python scripts depending on the model family.
 
-The ``.espdl`` model format
----------------------------
+Model Runtimes
+--------------
 
-Models are distributed as ``.espdl`` files. An ``.espdl`` bundle contains the network graph, the trained weights, and -- crucially -- **quantization** information. A model is converted from a floating-point framework (PyTorch, TensorFlow) into ESP-DL format ahead of time; see :doc:`../how-to/add-model` for the deployment workflow. Models live on storage (``/sdcard/...``) or the flash data partition (``/flash/...``) and are loaded with the wrapper constructor or :py:func:`espdl.load_model`.
+ESP-DL and TFLite Micro are the current model runtime paths exposed by ESP-VISION. ``espdl`` works with ``.espdl`` files, and ``tflite.Model`` works with ``.tflite`` files. Model files are stored on board storage, such as ``/sdcard`` or ``/flash``, and loaded at runtime. The API shape, quantization metadata, and input/output interpretation are defined by the selected runtime and model.
 
-Quantization
-------------
+Model Files and Quantization
+----------------------------
 
-Microcontrollers have no FPU budget for full 32-bit float inference at frame rate, so ESP-DL runs **quantized** models, typically 8-bit (and 16-bit where accuracy demands it) integer arithmetic. Quantization maps the float range of each tensor onto integers with a scale factor, shrinking the model and letting the hardware multiply-accumulate integers far faster. The accuracy cost is usually small, but it is the reason a model must be quantized during conversion rather than loaded directly from its training checkpoint.
+Models are usually exported or converted offline from a training framework before they are copied to board storage. On microcontrollers, quantized models are preferred because they reduce model size, activation memory, and arithmetic cost. Quantization maps floating-point tensor ranges onto integer values with scale and zero-point metadata; the exact metadata and file layout depend on the runtime and conversion toolchain.
 
 Inference flow
 --------------
 
-A single ``detect()`` (or ``classify()``) call hides several stages. The wrapper prepares the input, ESP-DL runs the quantized network, and the wrapper decodes the raw output into Python tuples:
+A single inference call usually combines several stages: prepare input data, run the quantized network, and decode raw outputs into values the application can use:
 
 .. seqdiag::
 
    seqdiag {
-     "script"; "wrapper"; "ESP-DL";
+     "script"; "API"; "runtime";
 
-     "script" -> "wrapper" [label = "detect(img)"];
-     "wrapper" -> "wrapper" [label = "resize + normalize"];
-     "wrapper" -> "ESP-DL" [label = "quantized input"];
-     "ESP-DL" -> "ESP-DL" [label = "int8 inference"];
-     "ESP-DL" --> "wrapper" [label = "raw tensors"];
-     "wrapper" -> "wrapper" [label = "decode + NMS + topk"];
-     "wrapper" --> "script" [label = "list of tuples"];
+     "script" -> "API" [label = "image or tensor input"];
+     "API" -> "API" [label = "prepare input"];
+     "API" -> "runtime" [label = "model input"];
+     "runtime" -> "runtime" [label = "inference"];
+     "runtime" --> "API" [label = "raw tensors"];
+     "API" -> "API" [label = "optional decode"];
+     "API" --> "script" [label = "result object"];
    }
 
 Pre-processing
 --------------
 
-Before inference the input image must match what the model was trained on:
+Before inference the input data must match what the model was trained on:
 
-- **Resize** to the model's input resolution. The wrappers handle this, scaling the captured frame to the network input size.
-- **Color** order and channel count must match (most detectors expect RGB).
-- **Normalization** subtracts a per-channel ``mean`` and divides by a per-channel ``std``. These are constructor keywords (``mean=``/``std=``) so you can match the exact preprocessing the model expects; the defaults suit the bundled models.
+- **Shape** must match the model input tensor, including resolution and channel count for image models.
+- **Color** order and pixel format must match the training pipeline.
+- **Normalization or quantization** must use the scale, zero point, mean, standard deviation, or other transform expected by the model. Some APIs expose these as parameters, while examples may show them directly in Python.
 
 Post-processing
 ---------------
 
-The raw network outputs are decoded into friendly Python tuples:
+Raw network outputs often need task-specific decoding before they are useful to an application:
 
 - **Object detection** (:py:class:`espdl.ESPDet`, :py:class:`espdl.YOLO11`) produces candidate boxes with class scores. A confidence ``score`` threshold drops weak boxes and **non-maximum suppression** (``nms``) removes overlapping duplicates, leaving ``(x, y, w, h, score, category)`` tuples. ``YOLO11`` also caps results with ``topk``.
 - **Pose estimation** (:py:class:`espdl.YOLO11nPose`) adds 17 COCO keypoints per detection.
 - **Classification** (:py:class:`espdl.ImageNetCls`) applies an optional ``softmax`` and returns the ``topk`` ``(label, score)`` pairs.
 
-Thresholds can be tuned at runtime with ``set_thresholds`` without reloading the model, which is handy when adapting to lighting or distance.
+Thresholds and result limits can often be tuned at runtime without reloading the model, which is useful when adapting to lighting, distance, or scene density.
 
 Memory and performance
 ----------------------
 
-Models and their activation buffers are large and are allocated in PSRAM. Load a model once and reuse the wrapper across frames rather than recreating it per frame. Call ``deinit()`` (or drop the last reference) to free a model when you are done. Detection cost scales with input resolution, so smaller models such as ``espdet_pico`` run at higher frame rates than full-size networks.
+Models and their activation buffers are large and are allocated in PSRAM. Load a model once and reuse it across frames rather than recreating it per frame. Call ``deinit()`` (or drop the last reference) to free a model when you are done. Inference cost usually scales with input resolution and model size, so smaller models generally run at higher frame rates than full-size networks.

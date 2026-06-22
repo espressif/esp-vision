@@ -31,7 +31,7 @@ MicroPython-related documentation must describe the configuration actually built
 
 ## Auto-generated API reference
 
-The `image`, `sensor`, `display`, `espdl`, `image.ImageIO`, `h264`, and `rtsp` signatures and descriptions are generated from the type stubs in `stubs/*.pyi`, which are the single source of truth. `docs/gen_api.py` parses the stubs and writes reStructuredText into `docs/<lang>/api-reference/_generated/<module>.rst`; the curated module pages pull these in with `.. include::`. The generator runs automatically on every Sphinx build (wired through `conf_common.py`), so to update the reference, **edit the stub, not the generated file**. You can also run it by hand:
+The `image`, `sensor`, `display`, `espdl`, `tflite`, `image.ImageIO`, `h264`, and `rtsp` signatures and descriptions are generated from the type stubs in `stubs/*.pyi`, which are the single source of truth. `docs/gen_api.py` parses the stubs and writes reStructuredText into `docs/<lang>/api-reference/_generated/<module>.rst`; the curated module pages pull these in with `.. include::`. The generator runs automatically on every Sphinx build (wired through `conf_common.py`), so to update the reference, **edit the stub, not the generated file**. You can also run it by hand:
 
 ```bash
 python docs/gen_api.py

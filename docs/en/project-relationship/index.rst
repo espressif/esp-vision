@@ -12,7 +12,7 @@ The relationship can be summarized as follows:
 
 - **MicroPython provides the language runtime and firmware base.** ESP-VISION starts from a pinned MicroPython ESP32 port and adds ``overlay/micropython/``, MicroPython user C modules, and ESP-IDF components. It does not implement a separate Python interpreter.
 - **OpenMV is an upstream source for part of the vision implementation and API design.** ESP-VISION reuses a subset of OpenMV ``imlib`` algorithms and some ``image`` binding and helper code, preserving their original license and copyright notices.
-- **ESP-VISION is an independent integration for Espressif chips.** Camera, display, storage, USB, codec, ESP-DL inference, and board support are integrated using ESP-VISION and ESP-IDF components. ESP-VISION is not a fork of the OpenMV firmware and does not include the complete OpenMV hardware abstraction, IDE, or feature set.
+- **ESP-VISION is an independent integration for Espressif chips.** Camera, display, storage, USB, codec, ESP-DL inference, TFLite Micro inference, and board support are integrated using ESP-VISION and ESP-IDF components. ESP-VISION is not a fork of the OpenMV firmware and does not include the complete OpenMV hardware abstraction, IDE, or feature set.
 
 The ``sensor`` and ``image`` modules therefore follow the OpenMV API style to make script migration easier, but **matching API names do not imply complete behavioral or feature compatibility**. Support also depends on the chip, board, memory, peripherals, and build options. Use this guide's :doc:`../api-reference/index` as the authoritative support reference.
 
@@ -29,11 +29,11 @@ The main code layers in an ESP-VISION firmware image are:
       |
       +-- ESP-VISION Python modules
       |      +-- OpenMV-style sensor / image APIs
-      |      +-- display / imageio / espdl / h264 / rtsp
+      |      +-- display / imageio / espdl / tflite / h264 / rtsp
       |
       +-- Algorithms and middleware
       |      +-- OpenMV imlib subset
-      |      +-- ulab / ZXing-C++ / ESP-DL
+      |      +-- ulab / ZXing-C++ / ESP-DL / TFLite Micro
       |
       +-- ESP-IDF, managed components, and board backends
 

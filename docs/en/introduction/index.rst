@@ -13,7 +13,7 @@ Key Features
 
 - Unified camera, image, display, video encoding, preview, and streaming APIs across supported chips and boards.
 - Image processing capabilities covering drawing, filtering, color tracking, feature detection, QR codes, barcodes, and AprilTags.
-- ESP-DL-powered object detection, pose estimation, and image classification, with a streamlined path for deploying models to edge devices.
+- ESP-DL-powered object detection, pose estimation, and image classification, plus TensorFlow Lite Micro support for ``.tflite`` model execution.
 - Efficient C/C++ foundation components work closely with on-chip multimedia peripherals and hardware acceleration modules to deliver high-performance, real-time application execution.
 - Development through a VSCode-based host tool or Web IDE, with firmware builds managed through ``idf.py``.
 

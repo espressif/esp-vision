@@ -114,6 +114,12 @@ check_readme_links:
     - git submodule update --init --depth 1 lib/micropython lib/ulab lib/zxing-cpp
     - git -C lib/micropython submodule sync -- lib/micropython-lib
     - git -C lib/micropython submodule update --init --depth 1 lib/micropython-lib
+    - |
+      if [ -n "${IDF_COMMIT:-}" ]; then
+        git -C /opt/esp/idf cat-file -e "$IDF_COMMIT^{commit}" 2>/dev/null || git -C /opt/esp/idf fetch --depth 1 origin "$IDF_COMMIT"
+        git -C /opt/esp/idf checkout --detach "$IDF_COMMIT"
+        /opt/esp/python_env/idf6.2_py3.12_env/bin/python /opt/esp/idf/tools/idf_tools.py install
+      fi
     - . /opt/esp/idf/export.sh
     # idf.py (esp. v6.0) invokes `ninja` with no job limit, so ESP-DL + zxing
     # compile at full core count and OOM the runner. Shadow ninja with a wrapper
@@ -174,10 +180,12 @@ firmware_idf_py:
         BOARD:
           - ESP32_P4X_EYE
 
-# IDF master (currently 6.1-dev) is a moving target: track it but don't block the pipeline.
+# IDF master is pinned to a known-good commit while keeping it non-blocking.
 firmware_master:
   extends: .firmware_base
   allow_failure: true
+  variables:
+    IDF_COMMIT: "a602e67b0bf"
   parallel:
     matrix:
       - IDF_IMAGE: ["latest"]
@@ -192,6 +200,8 @@ firmware_master:
 firmware_idf_py_master:
   extends: .firmware_base
   allow_failure: true
+  variables:
+    IDF_COMMIT: "a602e67b0bf"
   script:
     - idf.py --board "$BOARD" build
   parallel:
