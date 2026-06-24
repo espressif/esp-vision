@@ -13,6 +13,13 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 ### Fixed
 
 - ESP32_S31_KORVO camera startup now drives XCLK and SCCB I2C from board code before `esp_video` initialization, applies an OV3660 soft reset, and retries the DVP stream/init path internally before Python sees an error.
+- MCP API knowledge pack generation for the documentation sidecar, published at release time under `mcp/latest.json` and `mcp/mcp-pack-<tag>.json`, with CI schema validation.
+
+### Fixed
+
+- MCP pack MicroPython extraction now excludes ESP8266-only `esp` APIs from the ESP32 target set.
+- MCP pack RST parsing now ignores Sphinx directive options and joins wrapped signatures, avoiding invalid entries such as `:noindex:` or orphaned continuation lines.
+- Release publishing now copies `mcp/latest.json` only after pack generation and validation both succeed.
 
 ## [2026.06.22]
 

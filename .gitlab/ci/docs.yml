@@ -59,3 +59,29 @@ build_docs_pdf:
     paths:
       - docs/_build/*/*/*.txt
       - docs/_build/*/*/latex/
+
+# Build the full MCP API knowledge pack, including the MicroPython surface, which
+# requires the pinned lib/micropython submodule (docs/library/*.rst). This is the
+# authoritative artifact the website MCP sidecar consumes (via dl at release).
+# Same docs-change rules as the doc build; runs on master and on doc-affecting MRs.
+build_mcp_pack:
+  stage: build_docs
+  extends: .rules:docs:build
+  image: $ESP_DOCS_BUILD_IMAGE
+  tags:
+    - build_docs
+  dependencies: []
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+  before_script:
+    # Only the micropython repo's docs/library/*.rst are needed (no recursion).
+    - git submodule update --init --depth 1 lib/micropython
+    - python -m pip install --upgrade jsonschema
+  script:
+    - python docs/gen_mcp.py "${CI_COMMIT_TAG:-$CI_COMMIT_REF_SLUG}" --out mcp-pack.json
+    - python tools/ci/mcp/validate_schema.py mcp-pack.json
+  artifacts:
+    when: on_success
+    expire_in: 4 days
+    paths:
+      - mcp-pack.json

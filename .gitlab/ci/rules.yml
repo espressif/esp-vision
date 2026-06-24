@@ -18,6 +18,7 @@
   - "overlay/micropython/**/*.c"
   - "overlay/micropython/**/*.h"
   - "overlay/micropython/**/*.cmake"
+  - "tools/ci/mcp/**/*"
 
 # Paths that affect the compiled firmware. Editing only docs (docs/**, *.md,
 # stubs/**, example/**, LICENSE, ...) must NOT trigger a firmware rebuild.

@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dl.espressif.com/AE/esp-vision/mcp/schema.json",
+  "title": "ESP-VISION MCP API knowledge pack",
+  "type": "object",
+  "required": ["schemaVersion", "meta", "capabilities", "modules"],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "description": "semver; consumers pin the major.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "meta": {
+      "type": "object",
+      "required": ["version", "targets", "counts"],
+      "properties": {
+        "version": {"type": "string"},
+        "sourceCommit": {"type": "string"},
+        "langs": {"type": "array", "items": {"type": "string"}},
+        "targets": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "micropythonVersion": {"type": "string"},
+        "canonicalUrlTemplate": {"type": "string"},
+        "counts": {"type": "object"}
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["target", "modules", "boards"],
+        "properties": {
+          "target": {"type": "string"},
+          "modules": {"type": "array", "items": {"type": "string"}},
+          "boards": {"type": "array", "items": {"type": "string"}},
+          "features": {"type": "object"}
+        }
+      }
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "source", "targets", "symbols"],
+        "properties": {
+          "name": {"type": "string"},
+          "source": {"type": "string", "enum": ["esp-vision", "micropython"]},
+          "mpVersion": {"type": "string"},
+          "targets": {"type": "array", "items": {"type": "string"}},
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "name", "signatures"],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["function", "method", "class", "constant",
+                           "attribute", "exception"]
+                },
+                "name": {"type": "string"},
+                "signatures": {"type": "array", "items": {"type": "string"}},
+                "params": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": {
+                      "name": {"type": "string"},
+                      "doc": {"type": "string"}
+                    }
+                  }
+                },
+                "doc": {"type": "string"},
+                "targets": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          }
+        }
+      }
+    },
+    "docs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "title"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"type": "string"},
+          "title": {"type": "string"},
+          "bodyMd": {"type": "string"},
+          "codeBlocks": {"type": "array", "items": {"type": "string"}},
+          "targets": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "code"],
+        "properties": {
+          "path": {"type": "string"},
+          "title": {"type": "string"},
+          "code": {"type": "string"},
+          "modules": {"type": "array", "items": {"type": "string"}},
+          "targets": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

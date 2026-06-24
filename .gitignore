@@ -59,3 +59,6 @@ Thumbs.db
 # Logs
 *.log
 logs/
+ae_upload_dl
+esp-dl
+esp-iot-solution
