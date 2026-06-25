@@ -1,4 +1,4 @@
-# ESP-VISION ESP32-S31-Korvo 16MiB flash partition table.
+# ESP-VISION ESP32-S31-Korvo-1 16MiB flash partition table.
 #
 # Name,   Type, SubType, Offset,  Size, Flags
 nvs,      data, nvs,     0x9000,  0x6000,

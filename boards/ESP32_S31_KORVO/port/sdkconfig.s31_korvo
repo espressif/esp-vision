@@ -1,4 +1,4 @@
-# ESP-VISION ESP32-S31-Korvo shared defaults.
+# ESP-VISION ESP32-S31-Korvo-1 shared defaults.
 
 # Memory
 CONFIG_SPIRAM=y

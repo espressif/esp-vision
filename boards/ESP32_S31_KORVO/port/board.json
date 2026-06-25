@@ -10,8 +10,8 @@
         "SC101IOT"
     ],
     "mcu": "esp32s31",
-    "product": "ESP32-S31-Korvo",
+    "product": "ESP32-S31-Korvo-1",
     "thumbnail": "",
-    "url": "https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s31/index.html",
+    "url": "https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s31/esp32-s31-korvo-1/index.html",
     "vendor": "Espressif"
 }
