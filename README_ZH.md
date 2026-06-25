@@ -16,7 +16,7 @@ ESP-VISION 是面向乐鑫 SoC 的低代码端侧 AI 与计算机视觉框架，
 - 提供绘图、滤波、颜色追踪、特征检测、二维码、条码和 AprilTag 等图像处理能力。
 - 基于 ESP-DL 提供目标检测、姿态估计和图像分类等 AI 推理能力，并简化端侧模型部署流程。
 - 底层高效的 C/C++ 基础组件深度协同芯片的多媒体外设与硬件加速模块，切实保障应用的高效与实时运行性能。
-- 可通过 VSCode 上位机工具或 [Web IDE](https://esp-vision-ide.espressif.tools/) 开发，并使用 `idf.py` 管理固件构建。
+- 可通过 VSCode 上位机工具或 [Web IDE](https://ide.vision.espressif.com/) 开发，并使用 `idf.py` 管理固件构建。
 
 **文档中心**：
 
@@ -68,7 +68,7 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 ## 资源
 
 - [芯片与开发板支持](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/target-support/index.html)
-- [Web IDE](https://esp-vision-ide.espressif.tools/)
+- [Web IDE](https://ide.vision.espressif.com/)
 - [示例](example/)
 - [客制化固件功能](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/how-to/customize-firmware.html)
 - [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)

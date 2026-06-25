@@ -3,7 +3,28 @@ espdl -- 模型推理
 
 :link_to_translation:`en:[English]`
 
-``espdl`` 模块在采集到的图像上运行 ESP-DL 的 ``.espdl`` 模型，并为常见任务提供了 封装：目标检测（:py:class:`ESPDet`\ 、:py:class:`YOLO11`\ ）、姿态估计 （:py:class:`YOLO11nPose`\ ）和图像分类（:py:class:`ImageNetCls`\ ）。
+``espdl`` 模块在采集到的图像上运行 ESP-DL 的 ``.espdl`` 模型，并提供常见任务封装：目标检测（:py:class:`ESPDet`\ 、:py:class:`YOLO11`\ ）、姿态估计（:py:class:`YOLO11nPose`\ ）和图像分类（:py:class:`ImageNetCls`\ ），同时可通过 :py:class:`Model` 将 ESP-DL 原始输出 tensor 暴露给 Python。
+
+原始输出 tensor
+---------------
+
+.. code-block:: python
+
+   import sensor, espdl
+
+   model = espdl.Model("/sdcard/custom.espdl", mean=(0, 0, 0), std=(255, 255, 255), letterbox=True)
+   try:
+       print("inputs:", model.inputs())
+       print("outputs:", model.outputs())
+       img = sensor.snapshot()
+       outputs = model.predict(img)
+       for name, tensor in outputs.items():
+           _, shape, dtype, exponent, raw = tensor
+           print(name, shape, dtype, exponent, len(raw))
+   finally:
+       model.deinit()
+
+当内置任务封装不匹配模型输出布局时，可使用 :py:class:`Model`\ 。ESP-DL 仍负责图像预处理和推理；``predict()`` 返回原始输出 tensor，Python 代码再执行模型相关解码。``inputs()`` 和 ``outputs()`` 返回 ``TensorInfo`` 元组 ``(name, shape, dtype, exponent)``。``predict()`` 返回按输出 tensor 名称索引的 ``RawTensor`` 元组 ``(name, shape, dtype, exponent, bytes)``。应根据 ``dtype`` 解包原始字节，应用 ESP-DL 的二次幂 ``exponent`` 量化比例，再执行 sigmoid、框解码、NMS、softmax 或 top-k 选择等逻辑。若启用 ``letterbox=True``，将坐标映射回源图像前需要先去除模型输入中的 padding。
 
 目标检测
 --------
@@ -74,6 +95,8 @@ espdl -- 模型推理
 结果元组
 --------
 
+- TensorInfo：``(name, shape, dtype, exponent)``
+- RawTensor：``(name, shape, dtype, exponent, bytes)``
 - 检测：``(x, y, w, h, score, category)``
 - 姿态：``(x, y, w, h, score, category, keypoints)``\ ，含 17 个 COCO 关键点
 - 分类：``(label, score)``
@@ -82,6 +105,6 @@ espdl -- 模型推理
 
    :doc:`../concepts/ai-inference` 介绍 ESP-DL 推理流程、``.espdl`` 格式、量化以及 前后处理。部署新模型请参见 :doc:`../how-to/add-model`\ 。
 
-   可运行示例：``example/03-Machine-Learning/00-ESP-DL``\ （ESPDet、YOLO11、姿态、ImageNet 分类）。
+   可运行示例：``example/03-Machine-Learning/00-ESP-DL``\ （ESP-DL 原始输出解码、ESPDet、YOLO11、姿态、ImageNet 分类）。
 
 .. include:: _generated/espdl.rst

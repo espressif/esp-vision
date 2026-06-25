@@ -40,11 +40,19 @@ extern const mp_obj_type_t espdl_espdet_type;
 extern const mp_obj_type_t espdl_yolo11_type;
 extern const mp_obj_type_t espdl_yolo11n_pose_type;
 extern const mp_obj_type_t espdl_imagenet_cls_type;
+extern const mp_obj_type_t espdl_model_type;
 
 typedef struct {
     uint8_t *data;
     size_t size;
 } espdl_model_data_t;
+
+typedef struct {
+    mp_obj_base_t base;
+    espdl_model_data_t model_data;
+    dl::Model *model;
+    dl::image::ImagePreprocessor *image_preprocessor;
+} espdl_model_obj_t;
 
 typedef struct {
     mp_obj_base_t base;
@@ -97,6 +105,24 @@ static void espdl_free_model_data(espdl_model_data_t *model_data)
     heap_caps_free(model_data->data);
     model_data->data = nullptr;
     model_data->size = 0;
+}
+
+static void espdl_model_destroy(espdl_model_obj_t *self)
+{
+    delete self->image_preprocessor;
+    self->image_preprocessor = nullptr;
+
+    delete self->model;
+    self->model = nullptr;
+
+    espdl_free_model_data(&self->model_data);
+}
+
+static void espdl_model_ensure_active(espdl_model_obj_t *self)
+{
+    if ((self->model == nullptr) || (self->image_preprocessor == nullptr)) {
+        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Model object is deinitialized"));
+    }
 }
 
 static void espdl_espdet_destroy(espdl_espdet_obj_t *self)
@@ -388,6 +414,17 @@ static void espdl_validate_preprocess_std(const std::array<float, 3> &std_values
     }
 }
 
+static uint8_t espdl_clamp_u8(float value)
+{
+    if (value <= 0.0f) {
+        return 0;
+    }
+    if (value >= 255.0f) {
+        return 255;
+    }
+    return (uint8_t)value;
+}
+
 static int espdl_validate_topk(mp_int_t topk)
 {
     if (topk < 1) {
@@ -443,6 +480,162 @@ static std::vector<dl::detect::anchor_point_stage_t> espdl_make_anchor_point_sta
         stage_32,
     };
 }
+
+static mp_obj_t espdl_tensor_shape_to_tuple(dl::TensorBase *tensor)
+{
+    std::vector<mp_obj_t> shape;
+    shape.reserve(tensor->shape.size());
+    for (int dim : tensor->shape) {
+        shape.push_back(mp_obj_new_int(dim));
+    }
+    return mp_obj_new_tuple(shape.size(), shape.data());
+}
+
+static mp_obj_t espdl_tensor_info_to_tuple(const std::string &name, dl::TensorBase *tensor, bool with_data)
+{
+    mp_obj_t items[5];
+    items[0] = mp_obj_new_str(name.c_str(), name.size());
+    items[1] = espdl_tensor_shape_to_tuple(tensor);
+    items[2] = mp_obj_new_int((int)tensor->dtype);
+    items[3] = mp_obj_new_int(tensor->get_exponent());
+    if (with_data) {
+        items[4] = mp_obj_new_bytes((const byte *)tensor->get_element_ptr(), tensor->get_bytes());
+    }
+    return mp_obj_new_tuple(with_data ? 5 : 4, items);
+}
+
+static mp_obj_t espdl_tensor_map_info_to_dict(std::map<std::string, dl::TensorBase *> &tensors, bool with_data)
+{
+    mp_obj_t dict = mp_obj_new_dict(tensors.size());
+    for (const std::pair<const std::string, dl::TensorBase *> &entry : tensors) {
+        mp_obj_dict_store(
+            dict,
+            mp_obj_new_str(entry.first.c_str(), entry.first.size()),
+            espdl_tensor_info_to_tuple(entry.first, entry.second, with_data));
+    }
+    return dict;
+}
+
+static mp_obj_t espdl_model_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args)
+{
+    enum {
+        ARG_path,
+        ARG_mean,
+        ARG_std,
+        ARG_letterbox,
+        ARG_pad,
+    };
+    static const mp_arg_t allowed_args[] = {
+        {MP_QSTR_path, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
+        {MP_QSTR_mean, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
+        {MP_QSTR_std, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
+        {MP_QSTR_letterbox, MP_ARG_KW_ONLY | MP_ARG_BOOL, {.u_bool = true}},
+        {MP_QSTR_pad, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
+    };
+
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
+    std::array<float, 3> mean_values = espdl_arg_get_float3_or_default(args[ARG_mean].u_obj, {0.0f, 0.0f, 0.0f});
+    std::array<float, 3> std_values =
+        espdl_arg_get_float3_or_default(args[ARG_std].u_obj, {255.0f, 255.0f, 255.0f});
+    std::array<float, 3> pad_values = espdl_arg_get_float3_or_default(args[ARG_pad].u_obj, {114.0f, 114.0f, 114.0f});
+    espdl_validate_preprocess_std(std_values);
+
+    espdl_model_obj_t *self = mp_obj_malloc_with_finaliser(espdl_model_obj_t, type);
+    self->base.type = type;
+    self->model_data.data = nullptr;
+    self->model_data.size = 0;
+    self->model = nullptr;
+    self->image_preprocessor = nullptr;
+
+    self->model_data = espdl_read_model_from_vfs(args[ARG_path].u_obj);
+    self->model = new (std::nothrow) dl::Model((const char *)self->model_data.data,
+                                               fbs::MODEL_LOCATION_IN_FLASH_RODATA);
+    if (self->model == nullptr) {
+        espdl_model_destroy(self);
+        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate model object"));
+    }
+    if (self->model->get_fbs_model() == nullptr) {
+        espdl_model_destroy(self);
+        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("model load failed"));
+    }
+
+    self->model->minimize();
+    self->image_preprocessor =
+        new (std::nothrow) dl::image::ImagePreprocessor(self->model, mean_values, std_values);
+    if (self->image_preprocessor == nullptr) {
+        espdl_model_destroy(self);
+        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate image preprocessor"));
+    }
+    if (args[ARG_letterbox].u_bool) {
+        self->image_preprocessor->enable_letterbox({
+            espdl_clamp_u8(pad_values[0]),
+            espdl_clamp_u8(pad_values[1]),
+            espdl_clamp_u8(pad_values[2]),
+        });
+    }
+
+    return MP_OBJ_FROM_PTR(self);
+}
+
+static mp_obj_t espdl_model_predict(mp_obj_t self_in, mp_obj_t img_in)
+{
+    espdl_model_obj_t *self = (espdl_model_obj_t *)MP_OBJ_TO_PTR(self_in);
+    espdl_model_ensure_active(self);
+
+    image_t *img = espdl_get_image(img_in);
+    dl::image::img_t dl_img = espdl_make_dl_image(img);
+
+    self->image_preprocessor->preprocess(dl_img);
+    self->model->run();
+
+    return espdl_tensor_map_info_to_dict(self->model->get_outputs(), true);
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(espdl_model_predict_obj, espdl_model_predict);
+
+static mp_obj_t espdl_model_inputs(mp_obj_t self_in)
+{
+    espdl_model_obj_t *self = (espdl_model_obj_t *)MP_OBJ_TO_PTR(self_in);
+    espdl_model_ensure_active(self);
+
+    return espdl_tensor_map_info_to_dict(self->model->get_inputs(), false);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(espdl_model_inputs_obj, espdl_model_inputs);
+
+static mp_obj_t espdl_model_outputs(mp_obj_t self_in)
+{
+    espdl_model_obj_t *self = (espdl_model_obj_t *)MP_OBJ_TO_PTR(self_in);
+    espdl_model_ensure_active(self);
+
+    return espdl_tensor_map_info_to_dict(self->model->get_outputs(), false);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(espdl_model_outputs_obj, espdl_model_outputs);
+
+static mp_obj_t espdl_model_deinit(mp_obj_t self_in)
+{
+    espdl_model_obj_t *self = (espdl_model_obj_t *)MP_OBJ_TO_PTR(self_in);
+    espdl_model_destroy(self);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(espdl_model_deinit_obj, espdl_model_deinit);
+
+static const mp_rom_map_elem_t espdl_model_locals_dict_table[] = {
+    {MP_ROM_QSTR(MP_QSTR___del__), MP_ROM_PTR(&espdl_model_deinit_obj)},
+    {MP_ROM_QSTR(MP_QSTR_deinit), MP_ROM_PTR(&espdl_model_deinit_obj)},
+    {MP_ROM_QSTR(MP_QSTR_inputs), MP_ROM_PTR(&espdl_model_inputs_obj)},
+    {MP_ROM_QSTR(MP_QSTR_outputs), MP_ROM_PTR(&espdl_model_outputs_obj)},
+    {MP_ROM_QSTR(MP_QSTR_predict), MP_ROM_PTR(&espdl_model_predict_obj)},
+};
+static MP_DEFINE_CONST_DICT(espdl_model_locals_dict, espdl_model_locals_dict_table);
+
+MP_DEFINE_CONST_OBJ_TYPE(
+    espdl_model_type,
+    MP_QSTR_Model,
+    MP_TYPE_FLAG_NONE,
+    make_new, reinterpret_cast<const void *>(espdl_model_make_new),
+    locals_dict, &espdl_model_locals_dict
+);
 
 static mp_obj_t espdl_detect_results_to_list(std::list<dl::detect::result_t> &results)
 {
@@ -1134,6 +1327,7 @@ MP_DEFINE_CONST_OBJ_TYPE(
 
 static const mp_rom_map_elem_t espdl_module_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_espdl)},
+    {MP_ROM_QSTR(MP_QSTR_Model), MP_ROM_PTR(&espdl_model_type)},
     {MP_ROM_QSTR(MP_QSTR_ESPDet), MP_ROM_PTR(&espdl_espdet_type)},
     {MP_ROM_QSTR(MP_QSTR_YOLO11), MP_ROM_PTR(&espdl_yolo11_type)},
     {MP_ROM_QSTR(MP_QSTR_YOLO11nPose), MP_ROM_PTR(&espdl_yolo11n_pose_type)},

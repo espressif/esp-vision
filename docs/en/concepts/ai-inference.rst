@@ -8,7 +8,7 @@ ESP-VISION provides on-device neural-network execution through :doc:`../api-refe
 Model Runtimes
 --------------
 
-ESP-DL and TFLite Micro are the current model runtime paths exposed by ESP-VISION. ``espdl`` works with ``.espdl`` files, and ``tflite.Model`` works with ``.tflite`` files. Model files are stored on board storage, such as ``/sdcard`` or ``/flash``, and loaded at runtime. The API shape, quantization metadata, and input/output interpretation are defined by the selected runtime and model.
+ESP-DL and TFLite Micro are the current model runtime paths exposed by ESP-VISION. The ``espdl`` module works with ``.espdl`` files, and ``tflite.Model`` works with ``.tflite`` files. Model files are stored on board storage, such as ``/sdcard`` or ``/flash``, and loaded at runtime. The API shape, quantization metadata, and input/output interpretation are defined by the selected runtime and model.
 
 Model Files and Quantization
 ----------------------------
@@ -51,6 +51,7 @@ Raw network outputs often need task-specific decoding before they are useful to 
 - **Object detection** (:py:class:`espdl.ESPDet`, :py:class:`espdl.YOLO11`) produces candidate boxes with class scores. A confidence ``score`` threshold drops weak boxes and **non-maximum suppression** (``nms``) removes overlapping duplicates, leaving ``(x, y, w, h, score, category)`` tuples. ``YOLO11`` also caps results with ``topk``.
 - **Pose estimation** (:py:class:`espdl.YOLO11nPose`) adds 17 COCO keypoints per detection.
 - **Classification** (:py:class:`espdl.ImageNetCls`) applies an optional ``softmax`` and returns the ``topk`` ``(label, score)`` pairs.
+- **Raw output decoding** (:py:class:`espdl.Model`, :py:class:`tflite.Model`) exposes model outputs before task decoding. Application code must unpack the tensor dtype, use the quantization metadata, and run model-specific steps such as anchor decode, sigmoid or softmax, NMS, top-k selection, and coordinate mapping.
 
 Thresholds and result limits can often be tuned at runtime without reloading the model, which is useful when adapting to lighting, distance, or scene density.
 

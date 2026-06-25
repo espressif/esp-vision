@@ -16,7 +16,7 @@ ESP-VISION is a Low-Code Edge AI & Computer Vision Framework for Espressif SoCs.
 - Image processing capabilities covering drawing, filtering, color tracking, feature detection, QR codes, barcodes, and AprilTags.
 - ESP-DL-powered AI inference for object detection, pose estimation, and image classification, with a streamlined path for deploying models to edge devices.
 - Efficient C/C++ foundation components work closely with on-chip multimedia peripherals and hardware acceleration modules to deliver high-performance, real-time application execution.
-- Development through a VSCode-based host tool or [Web IDE](https://esp-vision-ide.espressif.tools/), with firmware builds managed through `idf.py`.
+- Development through a VSCode-based host tool or [Web IDE](https://ide.vision.espressif.com/), with firmware builds managed through `idf.py`.
 
 **Document Center**:
 
@@ -68,7 +68,7 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 ## Resources
 
 - [Supported Chips and Boards](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/target-support/index.html)
-- [Web IDE](https://esp-vision-ide.espressif.tools/)
+- [Web IDE](https://ide.vision.espressif.com/)
 - [Examples](example/)
 - [Customize firmware features](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/how-to/customize-firmware.html)
 - [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html)
