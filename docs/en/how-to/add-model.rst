@@ -47,11 +47,14 @@ Choose the API that matches the runtime and task:
    * - ESP-DL image classification
      - :py:class:`espdl.ImageNetCls`
      - ``(label, score)``
+   * - ESP-DL with Python decoding
+     - :py:class:`espdl.Model`
+     - raw output bytes with tensor metadata
    * - Generic TFLite Micro execution
      - :py:class:`tflite.Model`
      - raw output tensors, or a callback result
 
-For ESP-DL wrappers, pass ``mean``, ``std``, ``score``, ``nms``, ``topk``, or ``softmax`` to the constructor when the model needs different preprocessing or filtering. For TFLite Micro models, inspect ``input_shape``, ``input_dtype``, ``input_scale``, ``input_zero_point``, ``output_shape``, ``output_dtype``, ``output_scale``, and ``output_zero_point`` and implement the model-specific preprocessing or post-processing in Python or helper code.
+For ESP-DL wrappers, pass ``mean``, ``std``, ``score``, ``nms``, ``topk``, or ``softmax`` to the constructor when the model needs different preprocessing or filtering. When you need to keep ESP-DL inference but decode outputs in Python, inspect ``espdl.Model.inputs()`` and ``espdl.Model.outputs()``, then decode the ``RawTensor`` bytes returned by ``predict()``. For TFLite Micro models, inspect ``input_shape``, ``input_dtype``, ``input_scale``, ``input_zero_point``, ``output_shape``, ``output_dtype``, ``output_scale``, and ``output_zero_point`` and implement the model-specific preprocessing or post-processing in Python or helper code.
 
 4. Run ESP-DL Inference
 -----------------------
@@ -72,7 +75,30 @@ For ESP-DL wrappers, pass ``mean``, ``std``, ``score``, ``nms``, ``topk``, or ``
            img.draw_rectangle(x, y, w, h, color=(255, 0, 0))
        img.flush()
 
-5. Run TFLite Micro Inference
+5. Decode ESP-DL Outputs in Python
+----------------------------------
+
+Use :py:class:`espdl.Model` when the model can use ESP-DL image preprocessing and inference, but its output tensors need Python-side decoding.
+
+.. code-block:: python
+
+   import sensor, espdl
+
+   model = espdl.Model("/sdcard/my_model.espdl", mean=(0, 0, 0), std=(255, 255, 255), letterbox=True)
+   try:
+       print("inputs:", model.inputs())
+       print("outputs:", model.outputs())
+       img = sensor.snapshot()
+       outputs = model.predict(img)
+       for name, tensor in outputs.items():
+           _, shape, dtype, exponent, raw = tensor
+           print(name, shape, dtype, exponent, len(raw))
+   finally:
+       model.deinit()
+
+Each output tensor is returned as raw bytes plus ``shape``, ``dtype``, and ESP-DL ``exponent`` metadata. Decode the bytes according to the tensor type, apply the exponent scale, and then run model-specific post-processing such as sigmoid, box decode, NMS, classification top-k, or coordinate unletterboxing.
+
+6. Run TFLite Micro Inference
 -----------------------------
 
 .. code-block:: python
@@ -92,9 +118,9 @@ For ESP-DL wrappers, pass ``mean``, ``std``, ``score``, ``nms``, ``topk``, or ``
    finally:
        model.deinit()
 
-See ``example/03-Machine-Learning/00-ESP-DL/`` for ESP-DL scripts (``espdet_pico.py``, ``yolo11.py``, ``yolo11n_pose.py``, ``imagenet_cls.py``), and ``example/03-Machine-Learning/01-TFLite/`` for TFLite Micro scripts (``person_detection.py`` and ``sine.py``).
+See ``example/03-Machine-Learning/00-ESP-DL/`` for ESP-DL scripts (``espdet_pico.py``, ``espdet_pico_python.py``, ``yolo11.py``, ``yolo11n_pose.py``, ``imagenet_cls.py``), and ``example/03-Machine-Learning/01-TFLite/`` for TFLite Micro scripts (``person_detection.py`` and ``sine.py``).
 
-6. Optional: Profiling and Validation
+7. Optional: Profiling and Validation
 -------------------------------------
 
 Use :py:func:`espdl.load_model` with ``profile=True`` to emit ESP-DL profiling output when verifying a new ``.espdl`` model's performance. For TFLite Micro models, print ``model.len``, ``model.ram``, input metadata, and output metadata to verify flash size, arena size, tensor layout, and quantization before tuning post-processing.

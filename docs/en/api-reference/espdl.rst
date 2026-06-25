@@ -3,7 +3,28 @@ espdl -- Model Inference
 
 :link_to_translation:`zh_CN:[中文]`
 
-The ``espdl`` module runs ESP-DL ``.espdl`` models on captured images. It provides task-specific wrappers for object detection (:py:class:`ESPDet`, :py:class:`YOLO11`), pose estimation (:py:class:`YOLO11nPose`), and image classification (:py:class:`ImageNetCls`).
+The ``espdl`` module runs ESP-DL ``.espdl`` models on captured images. It provides task-specific wrappers for object detection (:py:class:`ESPDet`, :py:class:`YOLO11`), pose estimation (:py:class:`YOLO11nPose`), and image classification (:py:class:`ImageNetCls`), plus :py:class:`Model` for exposing raw ESP-DL output tensors to Python.
+
+Raw Output Tensors
+------------------
+
+.. code-block:: python
+
+   import sensor, espdl
+
+   model = espdl.Model("/sdcard/custom.espdl", mean=(0, 0, 0), std=(255, 255, 255), letterbox=True)
+   try:
+       print("inputs:", model.inputs())
+       print("outputs:", model.outputs())
+       img = sensor.snapshot()
+       outputs = model.predict(img)
+       for name, tensor in outputs.items():
+           _, shape, dtype, exponent, raw = tensor
+           print(name, shape, dtype, exponent, len(raw))
+   finally:
+       model.deinit()
+
+Use :py:class:`Model` when the built-in task wrappers do not match a model's output layout. ESP-DL still performs image preprocessing and inference; ``predict()`` returns the raw output tensors so Python code can run the model-specific decode. ``inputs()`` and ``outputs()`` return ``TensorInfo`` tuples ``(name, shape, dtype, exponent)``. ``predict()`` returns ``RawTensor`` tuples ``(name, shape, dtype, exponent, bytes)`` keyed by output tensor name. Decode the raw bytes according to ``dtype``, apply the ESP-DL power-of-two ``exponent`` scale, and run logic such as sigmoid, box decode, NMS, softmax, or top-k selection. When ``letterbox=True``, remove the model-input padding before mapping coordinates back to the source image.
 
 Object Detection
 ----------------
@@ -74,6 +95,8 @@ Thresholds can be changed without reloading the model, which is useful when adap
 Result tuples
 -------------
 
+- TensorInfo: ``(name, shape, dtype, exponent)``
+- RawTensor: ``(name, shape, dtype, exponent, bytes)``
 - Detection: ``(x, y, w, h, score, category)``
 - Pose: ``(x, y, w, h, score, category, keypoints)`` with 17 COCO keypoints
 - Classification: ``(label, score)``
@@ -82,6 +105,6 @@ Result tuples
 
    :doc:`../concepts/ai-inference` describes the ESP-DL inference pipeline, the ``.espdl`` format, quantization, and pre-/post-processing. To deploy a new model, see :doc:`../how-to/add-model`.
 
-   Runnable examples: ``example/03-Machine-Learning/00-ESP-DL`` (ESPDet, YOLO11, pose, ImageNet classification).
+   Runnable examples: ``example/03-Machine-Learning/00-ESP-DL`` (ESP-DL raw output decoding, ESPDet, YOLO11, pose, ImageNet classification).
 
 .. include:: _generated/espdl.rst

@@ -18,12 +18,45 @@ PoseKeypoint = tuple[int, int]
 PoseDetection = tuple[int, int, int, int, float, int, list[PoseKeypoint]]
 #: Classification result tuple: (label, score).
 Classification = tuple[str, float]
+#: Raw ESP-DL tensor tuple: (name, shape, dtype, exponent, raw bytes).
+RawTensor = tuple[str, tuple[int, ...], int, int, bytes]
+#: Raw ESP-DL tensor metadata tuple: (name, shape, dtype, exponent).
+TensorInfo = tuple[str, tuple[int, ...], int, int]
 
 
 #: Preload an ESP-DL model file.
 #: path: model path, for example "/sdcard/model.espdl" or "/flash/model.espdl".
 #: profile: True enables ESP-DL profiling output when supported.
 def load_model(path: str, *, profile: bool = False) -> bool: ...
+
+
+#: Generic ESP-DL model runner for examples that implement model-specific decoding in Python.
+class Model:
+    #: Create a raw model runner from an .espdl model.
+    #: path: model path.
+    #: mean: optional RGB mean values for image preprocessing.
+    #: std: optional RGB standard deviation values for image preprocessing.
+    #: letterbox: True keeps aspect ratio and pads the model input.
+    #: pad: optional RGB padding values used when letterbox is enabled.
+    def __init__(
+        self,
+        path: str,
+        *,
+        mean: Float3 | None = None,
+        std: Float3 | None = None,
+        letterbox: bool = True,
+        pad: Float3 | None = None,
+    ) -> None: ...
+    def __del__(self) -> None: ...
+    #: Release model resources.
+    def deinit(self) -> None: ...
+    #: Return model input metadata keyed by tensor name.
+    def inputs(self) -> dict[str, TensorInfo]: ...
+    #: Return model output metadata keyed by tensor name.
+    def outputs(self) -> dict[str, TensorInfo]: ...
+    #: Run model inference on an image and return raw output tensors keyed by tensor name.
+    #: image: RGB565 or grayscale image.
+    def predict(self, image: Image) -> dict[str, RawTensor]: ...
 
 
 #: ESP-DL object detection wrapper for ESPDet models.
