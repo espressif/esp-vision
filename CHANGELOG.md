@@ -6,6 +6,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Added `sensor.VGA` framesize support for camera output on supported P4 and S31 boards.
 - Added an ESPDet Pico hardhat model and English/Chinese documentation for training ESPDet Pico models.
 - Added a generic `espdl.Model` runner that exposes ESP-DL input/output tensor metadata and raw output bytes for Python-side post-processing, plus `example/03-Machine-Learning/00-ESP-DL/espdet_pico_python.py` as an ESPDet Pico reference using Python decode and NMS.
 

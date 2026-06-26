@@ -487,6 +487,10 @@ esp_err_t esp_vision_camera_get_framesize_dimensions(esp_vision_camera_framesize
         *width = ESP_VISION_CAMERA_PPA_OUTPUT_QVGA_WIDTH;
         *height = ESP_VISION_CAMERA_PPA_OUTPUT_QVGA_HEIGHT;
         return ESP_OK;
+    case ESP_VISION_CAMERA_FRAMESIZE_VGA:
+        *width = ESP_VISION_CAMERA_PPA_OUTPUT_VGA_WIDTH;
+        *height = ESP_VISION_CAMERA_PPA_OUTPUT_VGA_HEIGHT;
+        return ESP_OK;
     default:
         return ESP_ERR_NOT_SUPPORTED;
     }

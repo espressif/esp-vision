@@ -154,6 +154,9 @@ static mp_obj_t sensor_get_framesize(void)
     if ((width == 320) && (height == 240)) {
         return MP_OBJ_NEW_SMALL_INT(ESP_VISION_CAMERA_FRAMESIZE_QVGA);
     }
+    if ((width == 640) && (height == 480)) {
+        return MP_OBJ_NEW_SMALL_INT(ESP_VISION_CAMERA_FRAMESIZE_VGA);
+    }
 
     mp_raise_msg(&mp_type_ValueError, MP_ERROR_TEXT("unknown frame size"));
 }
@@ -330,6 +333,7 @@ static const mp_rom_map_elem_t sensor_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_RGB565), MP_ROM_INT(SENSOR_PIXFORMAT_RGB565) },
     { MP_ROM_QSTR(MP_QSTR_QQVGA), MP_ROM_INT(ESP_VISION_CAMERA_FRAMESIZE_QQVGA) },
     { MP_ROM_QSTR(MP_QSTR_QVGA), MP_ROM_INT(ESP_VISION_CAMERA_FRAMESIZE_QVGA) },
+    { MP_ROM_QSTR(MP_QSTR_VGA), MP_ROM_INT(ESP_VISION_CAMERA_FRAMESIZE_VGA) },
 };
 static MP_DEFINE_CONST_DICT(sensor_module_globals, sensor_module_globals_table);
 
