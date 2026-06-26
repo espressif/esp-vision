@@ -166,6 +166,7 @@ firmware:
           - ESP32_P4X_FUNCTION_EV_BOARD
           - ESP32_P4X_VISION
           - ESP32_S3_EYE
+          - AtomS3R-M12
           - TEMPLATE
 
 # Keep the board-aware idf.py extension honest without duplicating the full
@@ -194,6 +195,7 @@ firmware_master:
           - ESP32_P4X_FUNCTION_EV_BOARD
           - ESP32_P4X_VISION
           - ESP32_S3_EYE
+          - AtomS3R-M12
           - ESP32_S31_KORVO
           - TEMPLATE
 

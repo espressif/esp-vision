@@ -1,0 +1,17 @@
+{
+    "deploy": [
+        "../deploy.md"
+    ],
+    "docs": "",
+    "features": [
+        "WiFi",
+        "USB",
+        "DVP",
+        "OV3660"
+    ],
+    "mcu": "esp32s3",
+    "product": "AtomS3R-M12",
+    "thumbnail": "",
+    "url": "https://docs.m5stack.com/en/core/AtomS3R-M12",
+    "vendor": "M5Stack"
+}

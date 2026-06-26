@@ -48,6 +48,7 @@ BOARD_IMAGES = {
         'docs/_static/get-started/ESP32-S3-EYE-isometric.png'
     ),
     'ESP32_P4X_VISION': '../../_static/boards/ESP32_P4X_VISION/ESP32-P4X-VISION.png',
+    'AtomS3R-M12': '../../_static/boards/AtomS3R-M12/AtomS3R-M12.png',
 }
 
 # Canonical (English) getting-started URL override; falls back to board.json's
@@ -61,6 +62,7 @@ BOARD_URLS = {
         'https://docs.espressif.com/projects/esp-dev-kits/en/latest/'
         'esp32s31/esp32-s31-korvo-1/index.html'
     ),
+    'AtomS3R-M12': 'https://docs.m5stack.com/en/core/AtomS3R-M12',
 }
 
 CHIP_NAMES = {
