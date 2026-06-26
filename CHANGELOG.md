@@ -9,6 +9,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Added an ESPDet Pico hardhat model and English/Chinese documentation for training ESPDet Pico models.
 - Added a generic `espdl.Model` runner that exposes ESP-DL input/output tensor metadata and raw output bytes for Python-side post-processing, plus `example/03-Machine-Learning/00-ESP-DL/espdet_pico_python.py` as an ESPDet Pico reference using Python decode and NMS.
 
+### Fixed
+
+- ESP32_S31_KORVO camera startup now drives XCLK and SCCB I2C from board code before `esp_video` initialization, applies an OV3660 soft reset, and retries the DVP stream/init path internally before Python sees an error.
+
 ## [2026.06.22]
 
 ### Added

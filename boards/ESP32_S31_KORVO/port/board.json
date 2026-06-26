@@ -6,7 +6,8 @@
     "features": [
         "WiFi",
         "DVP",
-        "OV3660"
+        "OV3660",
+        "SC101IOT"
     ],
     "mcu": "esp32s31",
     "product": "ESP32-S31-Korvo",
