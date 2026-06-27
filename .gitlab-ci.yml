@@ -138,9 +138,9 @@ check_readme_links:
     - . /opt/esp/idf/export.sh
     # idf.py (esp. v6.0) invokes `ninja` with no job limit, so ESP-DL + zxing
     # compile at full core count and OOM the runner. Shadow ninja with a wrapper
-    # that injects `-j $NINJA_MAX_JOBS`. This is resolved via PATH by idf.py, so
-    # it covers both the `make` and `idf.py --board` build paths on every IDF
-    # version. The real ninja is captured by absolute path to avoid recursion.
+    # that injects `-j $NINJA_MAX_JOBS`. This is resolved via PATH by idf.py on
+    # every IDF version. The real ninja is captured by absolute path to avoid
+    # recursion.
     - REAL_NINJA="$(command -v ninja)"
     - mkdir -p "$CI_PROJECT_DIR/.ci-bin"
     - printf '#!/bin/sh\nexec "%s" -j "%s" "$@"\n' "$REAL_NINJA" "${NINJA_MAX_JOBS:-2}" > "$CI_PROJECT_DIR/.ci-bin/ninja"
@@ -148,7 +148,7 @@ check_readme_links:
     - export PATH="$CI_PROJECT_DIR/.ci-bin:$PATH"
     - echo "ninja wrapper active -> $REAL_NINJA -j ${NINJA_MAX_JOBS:-2}"
   script:
-    - make BOARD="$BOARD" build
+    - idf.py --board "$BOARD" build
   after_script:
     - |
       if [ -d "build/$BOARD" ]; then
@@ -184,18 +184,6 @@ firmware:
           - AtomS3R-M12
           - TEMPLATE
 
-# Keep the board-aware idf.py extension honest without duplicating the full
-# firmware matrix covered by the make entry point above.
-firmware_idf_py:
-  extends: .firmware_base
-  script:
-    - idf.py --board "$BOARD" build
-  parallel:
-    matrix:
-      - IDF_IMAGE: ["release-v5.5", "release-v6.0"]
-        BOARD:
-          - ESP32_P4X_EYE
-
 # IDF master is pinned to a known-good commit while keeping it non-blocking.
 firmware_master:
   extends: .firmware_base
@@ -213,16 +201,3 @@ firmware_master:
           - AtomS3R-M12
           - ESP32_S31_KORVO
           - TEMPLATE
-
-firmware_idf_py_master:
-  extends: .firmware_base
-  allow_failure: true
-  variables:
-    IDF_COMMIT: "a602e67b0bf"
-  script:
-    - idf.py --board "$BOARD" build
-  parallel:
-    matrix:
-      - IDF_IMAGE: ["latest"]
-        BOARD:
-          - ESP32_P4X_EYE
