@@ -31,7 +31,7 @@ See [Solution architecture and licensing](https://docs.espressif.com/projects/es
 
 ## Quickstart
 
-Prerequisites: ESP-IDF release/v5.5, release/v6.0, or master commit `a602e67b0bf` with the export script sourced (`idf.py` on `PATH`), and a [supported board](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/target-support/index.html).
+Prerequisites: ESP-IDF release/v5.5, release/v6.0, or release/v6.1 with the export script sourced (`idf.py` on `PATH`), and a [supported board](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/target-support/index.html).
 
 ```bash
 git clone --recursive https://github.com/espressif/esp-vision.git esp-vision
@@ -51,7 +51,7 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 | --- | --- | --- | --- |
 | `release/v5.5` | Supported | Provides the more complete feature set, including SSL/TLS, `cryptolib`, WebSocket, WebREPL, socket events, and, on supported chips, `machine.I2S`, ESP32 PCNT, and I2C target mode. | Recommended when these optional MicroPython features are required. |
 | `release/v6.0` | Supported | Provides `network`, WLAN, and sockets; the optional features listed for `release/v5.5` remain disabled with the current ESP-VISION overlay. | Does not currently support ESP32-S31 builds. |
-| `master` commit `a602e67b0bf` | Supported | Provides `network`, WLAN, and sockets; the optional features listed for `release/v5.5` remain disabled with the current ESP-VISION overlay. | Required for ESP32-S31. |
+| `release/v6.1` | Supported | Provides `network`, WLAN, and sockets; the optional features listed for `release/v5.5` remain disabled with the current ESP-VISION overlay. | Supports ESP32-S31 builds. |
 
 ## Demos
 

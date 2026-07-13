@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents working with code in this repository.
 
 ESP-VISION is a MicroPython vision runtime for ESP32-P4 / ESP32-S3 boards. It builds a custom firmware: the upstream MicroPython esp32 port plus an overlay, ESP-VISION C modules (`sensor`, `image`, `display`, `espdl`, `tflite`, the P4-only `h264` and `rtsp`, plus the `image.ImageIO` stream type), a self-written platform layer (camera, preview, display, storage, USB, H.264), and OpenMV's MIT `imlib` as a vision component. The VSCode host tool lives in a separate repo.
 
@@ -17,11 +17,11 @@ The top-level `Makefile` is the primary stable entry point, and repository-root 
 - Clean board build output: `make BOARD=ESP32_P4X_EYE clean`
 - Wipe all build output: `make distclean`
 - Equivalent `idf.py` path: `idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor`
-- Requires ESP-IDF release/v5.5, release/v6.0, or master with `idf.py` on `PATH` (source the IDF `export.sh` if it isn't).
+- Requires ESP-IDF release/v5.5, release/v6.0, or release/v6.1 with `idf.py` on `PATH` (source the IDF `export.sh` if it isn't).
 
 Notes:
 - `BOARD` must exist as `boards/<BOARD>/` with a `boards/<BOARD>/port/` subdirectory (the MicroPython-port files projected onto the esp32 port at build time). Boards: `ESP32_P4X_EYE`, `ESP32_P4X_FUNCTION_EV_BOARD`, `ESP32_P4X_VISION`, `ESP32_S3_EYE`, `ESP32_S31_KORVO`, `AtomS3R-M12` (esp32s3); `TEMPLATE` is for new-board bring-up.
-- `ESP32_S31_KORVO` is currently restricted by `boards/ESP32_S31_KORVO/board.cmake` to the ESP-VISION IDF `master` overlay; source an IDF master environment before building it.
+- `ESP32_S31_KORVO` requires ESP-IDF release/v6.1; source a release/v6.1 environment before building it.
 - After changing the build system, board config, platform drivers, or imlib options, verify the `ESP32_P4X_EYE` build first; other boards only when the task touches them.
 - Firmware build/flash/monitor/config targets first run `prepare-micropython`: it asserts `lib/micropython` is at the pinned commit (`v1.28.0`, `e0e9fbb17ed6fd06bb76e266ae554784c9c80804`), recreates a clean MicroPython copy under `build/micropython/`, applies `overlay/micropython/` to that copy, then projects each `boards/<BOARD>/port/` onto the copy's `ports/esp32/boards/<BOARD>/`. The `idf_ext.py` entry follows the same build-copy strategy and does not dirty `lib/micropython`. Use `MICROPY_OVERLAY_TARGET=lib` only when intentionally inspecting the generated MicroPython diff in the submodule.
 
@@ -61,7 +61,7 @@ A board is defined in a single tree, `boards/<BOARD>/`: the ESP-VISION side at t
 
 ## Changelog
 
-- Track notable, user-facing changes in the repository-root `CHANGELOG.md` only ([Keep a Changelog](https://keepachangelog.com/) style); there is no separate per-component changelog.
+- Every change intended for a commit or merge request must update the repository-root `CHANGELOG.md` in the same commit.
 - Each released version maps to a git tag. The first tag is the initial release and stays a one-liner (not detailed); later tags get real entries.
 - Accumulate new changes under `## [Unreleased]`, grouped as `Added` / `Changed` / `Fixed` / `Removed`. At release time, rename the `[Unreleased]` block to the new tag.
 

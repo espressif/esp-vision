@@ -31,7 +31,7 @@ ESP-VISION 是面向乐鑫 SoC 的低代码端侧 AI 与计算机视觉框架，
 
 ## 快速开始
 
-环境要求：ESP-IDF release/v5.5、release/v6.0 或 master commit `a602e67b0bf`（已 source `export.sh`，`idf.py` 可用），以及一块 [受支持的开发板](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/target-support/index.html)。
+环境要求：ESP-IDF release/v5.5、release/v6.0 或 release/v6.1（已 source `export.sh`，`idf.py` 可用），以及一块 [受支持的开发板](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/target-support/index.html)。
 
 ```bash
 git clone --recursive https://github.com/espressif/esp-vision.git esp-vision
@@ -51,7 +51,7 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 | --- | --- | --- | --- |
 | `release/v5.5` | 支持 | 提供更完整的功能集，包括 SSL/TLS、`cryptolib`、WebSocket、WebREPL、socket events，以及受支持芯片上的 `machine.I2S`、ESP32 PCNT 和 I2C target 模式。 | 需要上述可选 MicroPython 功能时推荐使用。 |
 | `release/v6.0` | 支持 | 提供 `network`、WLAN 和 socket；使用当前 ESP-VISION overlay 时，`release/v5.5` 中列出的可选功能仍保持关闭。 | 当前不支持构建 ESP32-S31。 |
-| `master` commit `a602e67b0bf` | 支持 | 提供 `network`、WLAN 和 socket；使用当前 ESP-VISION overlay 时，`release/v5.5` 中列出的可选功能仍保持关闭。 | ESP32-S31 必须使用此提交。 |
+| `release/v6.1` | 支持 | 提供 `network`、WLAN 和 socket；使用当前 ESP-VISION overlay 时，`release/v5.5` 中列出的可选功能仍保持关闭。 | 支持构建 ESP32-S31。 |
 
 ## 效果演示
 

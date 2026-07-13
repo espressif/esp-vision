@@ -8,6 +8,11 @@ What Is ESP-VISION
 
 ESP-VISION is a Low-Code Edge AI & Computer Vision Framework for Espressif SoCs. It deeply integrates essential capabilities including camera capture, image processing, video encoding and decoding, network transmission, model deployment, and AI inference, while providing unified and standardized Python APIs that enable developers to rapidly build edge applications combining visual capture, intelligent recognition, display, and media streaming.
 
+Quick Experience
+----------------
+
+Visit the `ESP-VISION website <https://vision.espressif.com/>`_ for quick access to `Web IDE <https://ide.vision.espressif.com/>`_, MCP setup resources, examples, and related project resources.
+
 Key Features
 ------------
 

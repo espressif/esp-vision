@@ -106,7 +106,7 @@ post_docs_preview:
 # --------------------------------------------------------------------------- #
 # esp-launchpad release (tag only)
 #
-# On a semver tag, reuse the release-v5.5 firmware artifacts, merge each
+# On a semver tag, reuse the stable release firmware artifacts, merge each
 # published board into a single flashable image suffixed with the tag, generate
 # the launchpad config.toml, and hand the binaries/ directory to the AE
 # ae_upload_dl pipeline, which copies them additively to
@@ -124,8 +124,9 @@ pack_launchpad:
     # release tag in config.toml's [website].releases. A shallow clone would
     # truncate that to only the tag being built.
     GIT_DEPTH: "0"
-  # Reuse the already-built v5.5 firmware artifacts; do not rebuild. Keep this
-  # list in sync with tools/ci/launchpad/boards.yml.
+  # Reuse the already-built release firmware artifacts; do not rebuild. P4/S3
+  # use release/v5.5 and S31 uses release/v6.1. Keep this list in sync with
+  # tools/ci/launchpad/boards.yml.
   needs:
     - job: "firmware: [release-v5.5, ESP32_P4X_EYE]"
       artifacts: true
@@ -133,13 +134,8 @@ pack_launchpad:
       artifacts: true
     - job: "firmware: [release-v5.5, ESP32_S3_EYE]"
       artifacts: true
-    # ESP32_S31_KORVO only builds on the IDF-master matrix (allow_failure), so
-    # pull it in best-effort: optional needs means a missing/failed S31 build
-    # does not block the release, and generate_launchpad.py skips it when its
-    # artifacts are absent (boards.yml marks it optional).
-    - job: "firmware_master: [latest, ESP32_S31_KORVO]"
+    - job: "firmware: [release-v6.1, ESP32_S31_KORVO]"
       artifacts: true
-      optional: true
   before_script:
     # Pin esptool >= 5.3: release-v5.5's bundled version predates the esp32s31
     # target (ESP32_S31_KORVO, IDF_TARGET esp32s31). esptool 5.3 adds esp32s31

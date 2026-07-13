@@ -8,6 +8,11 @@
 
 ESP-VISION 是面向乐鑫 SoC 的低代码端侧 AI 与计算机视觉框架，深度整合了摄像头采集、图像处理、视频编解码、网络传输、模型部署和 AI 推理等核心能力，并提供统一标准化的 Python 接口，赋能开发者快速构建集视觉采集、智能识别、画面显示与流媒体传输于一体的边缘应用。
 
+快速体验
+--------
+
+访问 `ESP-VISION 官网 <https://vision.espressif.com/>`_ 可快速获取 `Web IDE <https://ide.vision.espressif.com/>`_、MCP 配置资源、示例和相关项目资源。
+
 主要特性
 --------
 

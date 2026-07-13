@@ -17,7 +17,14 @@
 
 typedef struct {
     mp_obj_base_t base;
+    bool active;
 } esp_vision_display_obj_t;
+
+// The board display is a singleton, but each Display() call creates a Python
+// wrapper.  Keep ownership with the newest live wrapper so a delayed finaliser
+// from an earlier raw-REPL script cannot tear down the display reused by the
+// next script.
+static esp_vision_display_obj_t *s_display_owner;
 
 static void py_display_raise_esp_err(esp_err_t err)
 {
@@ -47,6 +54,13 @@ static mp_obj_t py_display_make_new(const mp_obj_type_t *type,
 
     (void)args[ARG_refresh];
 
+    // Allocate the wrapper before touching the singleton.  If this allocation
+    // triggers GC, the previous owner's finaliser runs first and the hardware
+    // is then initialized from a clean state below.
+    esp_vision_display_obj_t *self = mp_obj_malloc_with_finaliser(esp_vision_display_obj_t, type);
+    memset(self, 0, sizeof(*self));
+    self->base.type = type;
+
     esp_err_t ret = esp_vision_display_init((uint32_t)args[ARG_width].u_int,
                                             (uint32_t)args[ARG_height].u_int,
                                             (uint32_t)args[ARG_backlight].u_int);
@@ -54,9 +68,8 @@ static mp_obj_t py_display_make_new(const mp_obj_type_t *type,
         py_display_raise_esp_err(ret);
     }
 
-    esp_vision_display_obj_t *self = mp_obj_malloc_with_finaliser(esp_vision_display_obj_t, type);
-    memset(self, 0, sizeof(*self));
-    self->base.type = type;
+    self->active = true;
+    s_display_owner = self;
     return MP_OBJ_FROM_PTR(self);
 }
 
@@ -69,8 +82,14 @@ static void py_display_ensure_ready(void)
 
 static mp_obj_t py_display_deinit(mp_obj_t self_in)
 {
-    (void)self_in;
-    esp_vision_display_deinit();
+    esp_vision_display_obj_t *self = MP_OBJ_TO_PTR(self_in);
+    if (self->active) {
+        self->active = false;
+        if (s_display_owner == self) {
+            s_display_owner = NULL;
+            esp_vision_display_deinit();
+        }
+    }
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(py_display_deinit_obj, py_display_deinit);

@@ -21,23 +21,23 @@ dependencies:
     rules:
       - if: "target == esp32p4"
   espressif/esp_video:
-    version: "2.2.0"
+    version: "2.3.0"
     rules:
       - if: "target in [esp32p4, esp32s31]"
   espressif/esp32-camera:
-    version: "2.1.6"
+    version: "2.1.7"
     rules:
       - if: "target in [esp32s3]"
   espressif/esp-dl:
-    version: "3.3.3"
+    version: "3.3.6"
     rules:
       - if: "target in [esp32p4, esp32s3, esp32s31]"
   espressif/esp_media_protocols:
-    version: "0.6.1"
+    version: "0.6.2"
     rules:
       - if: "target in [esp32p4]"
   espressif/media_lib_sal:
-    version: "0.9.3"
+    version: "1.0.2"
     rules:
       - if: "target in [esp32p4]"
   espressif/esp_h264:

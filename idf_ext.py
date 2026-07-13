@@ -149,10 +149,10 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
         return os.path.basename(os.path.dirname(manifest))
 
     def validate_board_idf_overlay(board: str, overlay_name: str) -> None:
-        if board == "ESP32_S31_KORVO" and overlay_name != "master":
+        if board == "ESP32_S31_KORVO" and overlay_name not in {"release6.1", "master"}:
             raise FatalError(
                 "ESP32_S31_KORVO is currently supported only with the ESP-VISION "
-                f"IDF master overlay (current: {overlay_name})"
+                f"IDF release6.1 or master overlay (current: {overlay_name})"
             )
 
     def git_output(repo: str, *args: str) -> str:

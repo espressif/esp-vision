@@ -27,7 +27,6 @@ def _render(lang):
             'chip': 'Chip',
             'support': 'ESP-VISION support',
             'supported': 'Supported',
-            'idf_master': 'ESP-IDF master only',
             'modules': 'Modules',
             'micropython': 'MicroPython',
             'vision': 'Vision',
@@ -43,7 +42,6 @@ def _render(lang):
             'chip': '芯片',
             'support': 'ESP-VISION 支持情况',
             'supported': '支持',
-            'idf_master': '仅支持 ESP-IDF master',
             'modules': '模块',
             'micropython': 'MicroPython',
             'vision': '视觉能力',
@@ -71,8 +69,6 @@ def _render(lang):
         for board in capabilities['boards']:
             info = board_info(board, target)
             status = labels['supported']
-            if info['requires_idf_master']:
-                status = '{} ({})'.format(status, labels['idf_master'])
             board_name = info['name']
             if info['url']:
                 board_name = '`{} <{}>`__'.format(info['name'], info['url'])

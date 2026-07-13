@@ -129,12 +129,6 @@ check_readme_links:
     - git submodule update --init --depth 1 lib/micropython lib/ulab lib/zxing-cpp
     - git -C lib/micropython submodule sync -- lib/micropython-lib
     - git -C lib/micropython submodule update --init --depth 1 lib/micropython-lib
-    - |
-      if [ -n "${IDF_COMMIT:-}" ]; then
-        git -C /opt/esp/idf cat-file -e "$IDF_COMMIT^{commit}" 2>/dev/null || git -C /opt/esp/idf fetch --depth 1 origin "$IDF_COMMIT"
-        git -C /opt/esp/idf checkout --detach "$IDF_COMMIT"
-        /opt/esp/python_env/idf6.2_py3.12_env/bin/python /opt/esp/idf/tools/idf_tools.py install
-      fi
     - . /opt/esp/idf/export.sh
     # idf.py (esp. v6.0) invokes `ninja` with no job limit, so ESP-DL + zxing
     # compile at full core count and OOM the runner. Shadow ninja with a wrapper
@@ -175,7 +169,7 @@ firmware:
   extends: .firmware_base
   parallel:
     matrix:
-      - IDF_IMAGE: ["release-v5.5", "release-v6.0"]
+      - IDF_IMAGE: ["release-v5.5", "release-v6.0", "release-v6.1"]
         BOARD:
           - ESP32_P4X_EYE
           - ESP32_P4X_FUNCTION_EV_BOARD
@@ -183,21 +177,6 @@ firmware:
           - ESP32_S3_EYE
           - AtomS3R-M12
           - TEMPLATE
-
-# IDF master is pinned to a known-good commit while keeping it non-blocking.
-firmware_master:
-  extends: .firmware_base
-  allow_failure: true
-  variables:
-    IDF_COMMIT: "a602e67b0bf"
-  parallel:
-    matrix:
-      - IDF_IMAGE: ["latest"]
+      - IDF_IMAGE: ["release-v6.1"]
         BOARD:
-          - ESP32_P4X_EYE
-          - ESP32_P4X_FUNCTION_EV_BOARD
-          - ESP32_P4X_VISION
-          - ESP32_S3_EYE
-          - AtomS3R-M12
           - ESP32_S31_KORVO
-          - TEMPLATE

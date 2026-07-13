@@ -288,10 +288,7 @@ def build_website(cfg: dict, images: dict, tag: str) -> dict:
             "image": info.get("website_image", info["image"]),
             # canonical (en) doc URL; website swaps /en/ <-> /zh_CN/ per locale
             "docsUrl": info["url"],
-            "status": (
-                "supported-master-only"
-                if info["requires_idf_master"] else "supported"
-            ),
+            "status": "supported",
             "modules": list(info["modules"]),
             "micropython": list(info["port_features"]),
             "vision": [

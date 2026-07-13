@@ -135,12 +135,6 @@ def board_info(board, target):
     modules = TARGET_CAPABILITIES[target]['modules']
     if board in TARGET_CAPABILITIES[target]['barcode_boards']:
         modules = modules + ('barcode',)
-    board_cmake = BOARD_ROOT / board / 'board.cmake'
-    requires_idf_master = (
-        board_cmake.exists()
-        and 'ESP_VISION_IDF_OVERLAY STREQUAL "master"'
-        in board_cmake.read_text(encoding='utf-8')
-    )
     image = BOARD_IMAGES[board]
     return {
         'name': metadata['product'],
@@ -149,7 +143,6 @@ def board_info(board, target):
         'image': image,
         'website_image': _website_image(image),
         'modules': modules,
-        'requires_idf_master': requires_idf_master,
         'port_features': tuple(
             label for macro, label in PORT_FEATURES if macro in port_macros
         ),
