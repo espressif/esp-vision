@@ -9,10 +9,15 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Added ESP-IDF release/v6.1 support for all supported boards, including `ESP32_S31_KORVO`.
 - Replaced the root `CLAUDE.md` with `AGENTS.md` to provide shared project guidance for AI coding agents.
 - Added quick-access links to the ESP-VISION website and Web IDE in the English and Chinese introduction pages, including guidance to the website's MCP setup resources.
+- Added a low-brightness status blink on the `ESP32_P4X_VISION` board's GPIO9 WS2812 in the default first-boot `main.py`, with the NeoPixel driver frozen into that board's firmware.
 
 ### Fixed
 
 - Fixed sequential LCD scripts by transferring teardown ownership of the shared board display to the newest successfully initialized `display.Display` object, so delayed finalization of an older wrapper cannot deinitialize the LCD reused by the current script.
+
+### Removed
+
+- Removed the ESP-IDF master component manifest and build fallback; firmware builds now support only release/v5.5, release/v6.0, and release/v6.1.
 
 ## [2026.06.27]
 

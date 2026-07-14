@@ -11,9 +11,6 @@ MP_OVERLAY := $(ROOT)/overlay/micropython
 MP_COMPONENT_YML := $(ROOT)/overlay/component_yml
 MP_BUILD  := $(ROOT)/build/micropython/idf$(ESP_IDF_VERSION)/micropython
 ESP_VISION_IDF_OVERLAY := release$(ESP_IDF_VERSION)
-ifeq ($(wildcard $(MP_COMPONENT_YML)/$(ESP_VISION_IDF_OVERLAY)/idf_component.yml),)
-ESP_VISION_IDF_OVERLAY := master
-endif
 
 ifeq ($(MICROPY_OVERLAY_TARGET),build)
 MP_WORKTREE := $(MP_BUILD)
@@ -67,7 +64,8 @@ all: build
 prepare-micropython:
 	@if [ "$$(git -C $(MP_REPO) rev-parse HEAD)" != "$(MP_BASE_COMMIT)" ]; then echo "lib/micropython must be checked out at $(MP_BASE_REF) ($(MP_BASE_COMMIT))"; exit 1; fi
 	@if [ -z "$$ESP_IDF_VERSION" ]; then echo "ESP_IDF_VERSION is not set; source the ESP-IDF export script before building"; exit 1; fi
-	@if [ "$(BOARD)" = "ESP32_S31_KORVO" ] && [ "$(ESP_VISION_IDF_OVERLAY)" != "release6.1" ] && [ "$(ESP_VISION_IDF_OVERLAY)" != "master" ]; then echo "ESP32_S31_KORVO is currently supported only with the ESP-VISION IDF release6.1 or master overlay (current: $(ESP_VISION_IDF_OVERLAY))"; exit 1; fi
+	@if [ ! -f "$(MP_COMPONENT_YML)/$(ESP_VISION_IDF_OVERLAY)/idf_component.yml" ]; then echo "Unsupported ESP-IDF version $$ESP_IDF_VERSION; supported releases are v5.5, v6.0, and v6.1"; exit 1; fi
+	@if [ "$(BOARD)" = "ESP32_S31_KORVO" ] && [ "$(ESP_VISION_IDF_OVERLAY)" != "release6.1" ]; then echo "ESP32_S31_KORVO is supported only with ESP-IDF release/v6.1 (current: $(ESP_VISION_IDF_OVERLAY))"; exit 1; fi
 	@if [ ! -f "$(BOARDS_DIR)/$(BOARD)/port/mpconfigboard.cmake" ]; then echo "Board $(BOARD) is missing boards/$(BOARD)/port/mpconfigboard.cmake"; exit 1; fi
 	@$(MAKE) --no-print-directory prepare-micropython-copy
 
@@ -94,8 +92,7 @@ prepare-micropython-copy:
 	@if [ -d "$(MP_OVERLAY)" ]; then cp -a $(MP_OVERLAY)/. $(MP_BUILD)/; fi
 	$(project_boards)
 	@yml="$(MP_COMPONENT_YML)/release$$ESP_IDF_VERSION/idf_component.yml"; \
-	 [ -f "$$yml" ] || yml="$(MP_COMPONENT_YML)/master/idf_component.yml"; \
-	 [ -f "$$yml" ] || { echo "No component manifest for ESP-IDF $$ESP_IDF_VERSION and no overlay/component_yml/master fallback"; exit 1; }; \
+	 [ -f "$$yml" ] || { echo "No component manifest for supported ESP-IDF release/v$$ESP_IDF_VERSION"; exit 1; }; \
 	 cmp -s "$$yml" $(MP_PORT)/main/idf_component.yml || cp "$$yml" $(MP_PORT)/main/idf_component.yml; \
 	 echo "[prepare-micropython] selected component manifest: $${yml#$(ROOT)/} (ESP-IDF $$ESP_IDF_VERSION)"
 	@echo "[prepare-micropython] prepared build copy: build/micropython/idf$(ESP_IDF_VERSION)/micropython"
@@ -104,8 +101,7 @@ prepare-micropython-copy:
 	@if [ -d "$(MP_OVERLAY)" ]; then cp -a $(MP_OVERLAY)/. $(MP_REPO)/; fi
 	$(project_boards)
 	@yml="$(MP_COMPONENT_YML)/release$$ESP_IDF_VERSION/idf_component.yml"; \
-	 [ -f "$$yml" ] || yml="$(MP_COMPONENT_YML)/master/idf_component.yml"; \
-	 [ -f "$$yml" ] || { echo "No component manifest for ESP-IDF $$ESP_IDF_VERSION and no overlay/component_yml/master fallback"; exit 1; }; \
+	 [ -f "$$yml" ] || { echo "No component manifest for supported ESP-IDF release/v$$ESP_IDF_VERSION"; exit 1; }; \
 	 cmp -s "$$yml" $(MP_PORT)/main/idf_component.yml || cp "$$yml" $(MP_PORT)/main/idf_component.yml; \
 	 echo "[prepare-micropython] selected component manifest: $${yml#$(ROOT)/} (ESP-IDF $$ESP_IDF_VERSION)"
 	@echo "[prepare-micropython] applied overlay to lib/micropython"

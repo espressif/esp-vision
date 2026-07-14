@@ -136,12 +136,8 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
             if os.path.exists(path):
                 return path
 
-        fallback = os.path.join(mp_component_yml, "master", "idf_component.yml")
-        if os.path.exists(fallback):
-            return fallback
-
         raise FatalError(
-            f"No component manifest for ESP-IDF {version} and no overlay/component_yml/master fallback"
+            f"Unsupported ESP-IDF version {version}; supported releases are v5.5, v6.0, and v6.1"
         )
 
     def selected_idf_overlay_name() -> str:
@@ -149,10 +145,10 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
         return os.path.basename(os.path.dirname(manifest))
 
     def validate_board_idf_overlay(board: str, overlay_name: str) -> None:
-        if board == "ESP32_S31_KORVO" and overlay_name not in {"release6.1", "master"}:
+        if board == "ESP32_S31_KORVO" and overlay_name != "release6.1":
             raise FatalError(
-                "ESP32_S31_KORVO is currently supported only with the ESP-VISION "
-                f"IDF release6.1 or master overlay (current: {overlay_name})"
+                "ESP32_S31_KORVO is supported only with ESP-IDF "
+                f"release/v6.1 (current overlay: {overlay_name})"
             )
 
     def git_output(repo: str, *args: str) -> str:
