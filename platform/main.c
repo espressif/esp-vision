@@ -69,6 +69,7 @@
 
 #include "camera.h"
 #include "display.h"
+#include "ev_stdio.h"
 #include "fb_alloc.h"
 #include "preview.h"
 #include "sdcard.h"
@@ -147,6 +148,7 @@ soft_reset:
     esp_vision_camera_init0();
     esp_vision_display_init0();
     esp_vision_preview_init0();
+    ev_stdio_init0();
     esp_vision_sdcard_init0();
     fb_alloc_init0();
     mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR__slash_lib));

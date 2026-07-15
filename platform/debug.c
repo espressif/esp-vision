@@ -9,7 +9,8 @@
 #include <stdio.h>
 
 #include "py/mpconfig.h"
-#include "usb_serial_jtag.h"
+#include "ev_channel.h"
+#include "ev_stdio.h"
 
 void esp_vision_debug_write(const char *str, size_t len)
 {
@@ -17,11 +18,9 @@ void esp_vision_debug_write(const char *str, size_t len)
         return;
     }
 
-#if MICROPY_HW_ESP_USB_SERIAL_JTAG
-    usb_serial_jtag_tx_strn(str, len);
-#else
-    fwrite(str, 1, len, stdout);
-#endif
+    if (!ev_stdio_write_idf_log(str, len)) {
+        ev_channel_write(EV_STREAM_DEBUG, str, len);
+    }
 }
 
 void esp_vision_debug_vprintf(const char *fmt, va_list ap)

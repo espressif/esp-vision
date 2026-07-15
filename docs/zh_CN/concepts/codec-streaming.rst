@@ -52,4 +52,4 @@
 主机预览：USB CDC
 -----------------
 
-在开发期间，*看到* 摄像头画面最快的方式是 :py:meth:`image.Image.flush`\ ，它通过 USB CDC 把当前帧作为 EVFRAME JPEG 预览推送到主机，由配套的主机工具解码并显示。该通路 无需 Wi-Fi、无需 SD 卡，是脚本迭代时默认的反馈回路。
+在开发期间，*看到* 摄像头画面最快的方式是 :py:meth:`image.Image.flush`\ ，它通过 EV-MUX ``preview.frame`` 通道把当前帧作为二进制 JPEG 推送到主机，由配套的主机工具解码并显示。该通路无需 Wi-Fi、无需 SD 卡，是脚本迭代时默认的反馈回路。
