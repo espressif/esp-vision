@@ -26,6 +26,8 @@ boards:
     target: esp32p4
   ESP32_P4X_FUNCTION_EV_BOARD:
     target: esp32p4
+  ESP32_P4X_VISION:
+    target: esp32p4
   ESP32_S3_EYE:
     target: esp32s3
   ESP32_S31_KORVO:

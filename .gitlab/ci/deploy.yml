@@ -132,6 +132,8 @@ pack_launchpad:
       artifacts: true
     - job: "firmware: [release-v5.5, ESP32_P4X_FUNCTION_EV_BOARD]"
       artifacts: true
+    - job: "firmware: [release-v5.5, ESP32_P4X_VISION]"
+      artifacts: true
     - job: "firmware: [release-v5.5, ESP32_S3_EYE]"
       artifacts: true
     - job: "firmware: [release-v6.1, ESP32_S31_KORVO]"
