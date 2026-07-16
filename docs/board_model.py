@@ -62,6 +62,9 @@ BOARD_URLS = {
         'https://docs.espressif.com/projects/esp-dev-kits/en/latest/'
         'esp32s31/esp32-s31-korvo-1/index.html'
     ),
+    'ESP32_P4X_VISION': (
+        'https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/index.html'
+    ),
     'AtomS3R-M12': 'https://docs.m5stack.com/en/core/AtomS3R-M12',
 }
 

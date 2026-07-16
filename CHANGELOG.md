@@ -2,7 +2,7 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
-## [Unreleased]
+## [2026.07.16]
 
 ### Added
 
@@ -10,6 +10,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Replaced the root `CLAUDE.md` with `AGENTS.md` to provide shared project guidance for AI coding agents.
 - Added quick-access links to the ESP-VISION website and Web IDE in the English and Chinese introduction pages, including guidance to the website's MCP setup resources.
 - Added a low-brightness status blink on the `ESP32_P4X_VISION` board's GPIO9 WS2812 in the default first-boot `main.py`, with the NeoPixel driver frozen into that board's firmware.
+- Added `ESP32_P4X_VISION` to the esp-launchpad release manifest and packaging job so release tags publish flashable firmware for the board.
 
 ### Fixed
 
