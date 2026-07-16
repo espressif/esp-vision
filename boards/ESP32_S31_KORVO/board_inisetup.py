@@ -11,15 +11,19 @@ print("ESP-VISION ESP32_S31_KORVO ready")
 
 lcd = display.Display()
 
-sensor.reset()
-sensor.set_pixformat(sensor.RGB565)
-sensor.set_framesize(sensor.QVGA)
-sensor.skip_frames(time=1000)
+try:
+    sensor.reset()
+    sensor.set_pixformat(sensor.RGB565)
+    sensor.set_framesize(sensor.QVGA)
+    sensor.skip_frames(time=1000)
 
-while True:
-    img = sensor.snapshot()
-    lcd.write(img)
-    time.sleep_ms(20)
+    while True:
+        img = sensor.snapshot()
+        lcd.write(img)
+        time.sleep_ms(20)
+finally:
+    sensor.shutdown()
+    lcd.deinit()
 """
 
 README_TXT = """\
