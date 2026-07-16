@@ -15,6 +15,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 ### Fixed
 
 - Fixed sequential LCD scripts by transferring teardown ownership of the shared board display to the newest successfully initialized `display.Display` object, so delayed finalization of an older wrapper cannot deinitialize the LCD reused by the current script.
+- Fixed the board default LCD preview scripts and the `lcd_preview.py` example to release `sensor` and `display` resources on `Ctrl-C`, preventing retained LCD buffers from reducing the fast framebuffer memory available to later AprilTag runs.
 
 ### Removed
 
