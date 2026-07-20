@@ -45,6 +45,8 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 - `flash`：将生成的固件镜像烧录到所连接的设备。
 - `monitor`：烧录后打开串口终端；按 `Ctrl-]` 退出。
 
+> 注意：在 Windows 平台编译时，需要安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)，用于生成 MicroPython 主机侧工具 `mpy-cross.exe`。在 Visual Studio Build Tools 安装器中，请勾选 “Desktop development with C++”（使用 C++ 的桌面开发）工作负载，并确认已勾选 “MSVC v143 - VS 2022 C++ x64/x86 build tools” 组件。
+
 ## ESP-IDF 兼容性
 
 | ESP-IDF 分支 | 支持状态 | 标准 MicroPython 功能 | 说明 |

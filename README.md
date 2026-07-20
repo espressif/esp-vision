@@ -45,6 +45,8 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 - `flash`: Writes the generated firmware image to the connected device.
 - `monitor`: Opens the serial console after flashing; press `Ctrl-]` to exit.
 
+> Note: When building on Windows, install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) so the build can create MicroPython's host-side `mpy-cross.exe`. In the Visual Studio Build Tools installer, select the "Desktop development with C++" workload and make sure the "MSVC v143 - VS 2022 C++ x64/x86 build tools" component is selected.
+
 ## ESP-IDF Compatibility
 
 | ESP-IDF branch | Support | Standard MicroPython features | Notes |
