@@ -9,6 +9,10 @@
 - 受支持的 ESP-IDF 环境，并已 source 导出脚本，使 ``idf.py`` 位于 ``PATH`` 中；当前分支兼容性请查看项目 README。
 - 一块列在 :doc:`../target-support/index` 中且与所选芯片对应的开发板。
 
+.. note::
+
+   在 Windows 平台编译时，请先安装 `Visual Studio Build Tools <https://visualstudio.microsoft.com/visual-cpp-build-tools/>`_，再运行 ``idf.py``。在 Visual Studio Build Tools 安装器中，请勾选 “Desktop development with C++”（使用 C++ 的桌面开发）工作负载，并确认已勾选 “MSVC v143 - VS 2022 C++ x64/x86 build tools” 组件。
+
 构建、烧录与监视
 ----------------
 

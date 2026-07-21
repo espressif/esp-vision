@@ -39,6 +39,8 @@ ESP_VISION_ACTIONS = {
     "size",
 }
 PASSTHROUGH_ACTIONS = {"docs", "help", "python-clean"}
+# IDF Component Manager inserts this task after a requested fullclean.
+INTERNAL_ACTIONS = {"remove_managed_components"}
 SUPPORTED_ACTIONS_HELP = (
     "build, flash, monitor, menuconfig, clean, fullclean, reconfigure, size, "
     "erase-flash"
@@ -187,8 +189,8 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
                 os.remove(archive_path)
 
     def submodule_paths() -> list[str]:
-        # Match the Makefile path: foreach only visits initialized submodules,
-        # while status --recursive also lists missing ones in shallow CI checkouts.
+        # foreach only visits initialized submodules, while status --recursive
+        # also lists missing ones in shallow CI checkouts.
         output = git_output(
             mp_repo,
             "submodule",
@@ -303,11 +305,12 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
             return False
 
         no_prepare_actions = {"clean", "fullclean"}
-        return any(task.name not in no_prepare_actions for task in tasks)
+        prepare_actions = ESP_VISION_ACTIONS - no_prepare_actions
+        return any(task.name in prepare_actions for task in tasks)
 
     def esp_vision_global_callback(ctx: Any, args: Any, tasks: list[Any]) -> None:
         task_names = {task.name for task in tasks}
-        unsupported = task_names - ESP_VISION_ACTIONS - PASSTHROUGH_ACTIONS
+        unsupported = task_names - ESP_VISION_ACTIONS - PASSTHROUGH_ACTIONS - INTERNAL_ACTIONS
         if unsupported:
             raise FatalError(
                 "ESP-VISION idf.py supports only: {}. Unsupported action(s): {}".format(
@@ -333,6 +336,10 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
             print(
                 "[prepare-micropython] selected component manifest: "
                 f"{selected} (ESP-IDF {idf_version()})"
+            )
+            print(
+                "[prepare-micropython] prepared build copy: "
+                f"{os.path.relpath(mp_build_dir(), root)}"
             )
 
     return {

@@ -2,6 +2,16 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
+## [Unreleased]
+
+### Added
+
+- Added Windows host support for repository-root `idf.py --board <BOARD> ...` firmware builds.
+
+### Fixed
+
+- Fixed ESP-IDF 6.1 firmware builds by synchronizing MicroPython's Wi-Fi authentication constants with the new unknown scan-result mode.
+
 ## [2026.07.16]
 
 ### Added

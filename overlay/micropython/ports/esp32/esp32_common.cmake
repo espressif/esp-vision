@@ -345,8 +345,11 @@ foreach(comp ${__COMPONENT_NAMES_RESOLVED})
     micropy_gather_target_properties(${comp})
 endforeach()
 
-# Include the main MicroPython cmake rules.
-include(${MICROPY_DIR}/py/mkrules.cmake)
+if(CMAKE_HOST_WIN32)
+    include(${MICROPY_PORT_DIR}/esp32_windows.cmake)
+else()
+    include(${MICROPY_DIR}/py/mkrules.cmake)
+endif()
 
 # Generate source files for named pins (requires mkrules.cmake for MICROPY_GENHDR_DIR).
 
