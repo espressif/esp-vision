@@ -76,7 +76,12 @@ static const char *TAG = "esp_vision_camera";
 static esp_vision_camera_context_t s_camera = {
     .width = ESP_VISION_CAMERA_OUTPUT_QVGA_WIDTH,
     .height = ESP_VISION_CAMERA_OUTPUT_QVGA_HEIGHT,
+#if ESP_VISION_CAMERA_SENSOR_ID == 0x2145
+    // GC2145 outputs RGB565 directly
     .output_pixfmt = PIXFORMAT_RGB565,
+#else
+    .output_pixfmt = PIXFORMAT_RGB565,
+#endif
 };
 
 static void esp_vision_camera_set_dimensions(uint32_t width, uint32_t height)
@@ -281,7 +286,12 @@ esp_err_t esp_vision_camera_init(void)
         .xclk_freq_hz = ESP_VISION_CAMERA_XCLK_FREQ,
         .ledc_timer = (ledc_timer_t)ESP_VISION_CAMERA_XCLK_LEDC_TIMER,
         .ledc_channel = (ledc_channel_t)ESP_VISION_CAMERA_XCLK_LEDC_CHANNEL,
+#if ESP_VISION_CAMERA_SENSOR_ID == 0x2145
+        // GC2145 doesn't have built-in JPEG encoder, use RGB565
+        .pixel_format = ESP32_CAMERA_PIXFORMAT_RGB565,
+#else
         .pixel_format = ESP32_CAMERA_PIXFORMAT_JPEG,
+#endif
         .frame_size = frame_size,
         .jpeg_quality = ESP_VISION_CAMERA_JPEG_QUALITY,
         .fb_count = ESP_VISION_CAMERA_BUFFER_COUNT,
@@ -297,8 +307,8 @@ esp_err_t esp_vision_camera_init(void)
         return ret;
     }
 
-    s_camera.vflip = true;
-    s_camera.hmirror = true;
+    s_camera.vflip = false;
+    s_camera.hmirror = false;
     s_camera.initialized = true;
 
     sensor_t *sensor = esp_camera_sensor_get();
@@ -342,9 +352,16 @@ bool esp_vision_camera_is_ready(void)
 
 esp_err_t esp_vision_camera_set_pixformat(uint32_t pixfmt)
 {
+#if ESP_VISION_CAMERA_SENSOR_ID == 0x2145
+    // GC2145 only supports RGB565
+    if (pixfmt != PIXFORMAT_RGB565) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+#else
     if ((pixfmt != PIXFORMAT_RGB565) && (pixfmt != PIXFORMAT_GRAYSCALE)) {
         return ESP_ERR_NOT_SUPPORTED;
     }
+#endif
 
     s_camera.output_pixfmt = (pixformat_t)pixfmt;
     return ESP_OK;
@@ -454,6 +471,26 @@ esp_err_t esp_vision_camera_capture(uint8_t *pixels, size_t pixels_size)
         }
 
         esp_err_t ret = ESP_OK;
+
+#if ESP_VISION_CAMERA_SENSOR_ID == 0x2145
+        // GC2145 outputs RGB565 big-endian, swap bytes for ESP32 little-endian
+        if (fb->format == ESP32_CAMERA_PIXFORMAT_RGB565) {
+            size_t fb_size = fb->width * fb->height * 2;  // RGB565 = 2 bytes per pixel
+            if (fb_size <= pixels_size) {
+                const uint16_t *src = (const uint16_t *)fb->buf;
+                uint16_t *dst = (uint16_t *)pixels;
+                size_t pixel_count = fb->width * fb->height;
+                for (size_t i = 0; i < pixel_count; i++) {
+                    dst[i] = __builtin_bswap16(src[i]);
+                }
+                ret = ESP_OK;
+            } else {
+                ret = ESP_ERR_INVALID_SIZE;
+            }
+        } else {
+            ret = ESP_ERR_INVALID_RESPONSE;
+        }
+#else
         image_t src;
         image_t dst = {
             .w = (int32_t)s_camera.width,
@@ -476,6 +513,7 @@ esp_err_t esp_vision_camera_capture(uint8_t *pixels, size_t pixels_size)
                 esp_vision_camera_log_jpeg_frame("decode failed", fb);
             }
         }
+#endif
 
         esp_camera_fb_return(fb);
         if (ret != ESP_ERR_INVALID_RESPONSE) {

@@ -24,7 +24,7 @@
 #define ESP_VISION_JPEG_QUALITY_THRESHOLD           (320 * 240 * 2)
 
 /* Camera configuration. */
-#define ESP_VISION_CAMERA_SENSOR_ID                 (0x2640)
+#define ESP_VISION_CAMERA_SENSOR_ID                 (0x2145)
 #define ESP_VISION_CAMERA_RAW_INPUT_WIDTH           (320)
 #define ESP_VISION_CAMERA_RAW_INPUT_HEIGHT          (240)
 #define ESP_VISION_CAMERA_ACTIVE_INPUT_WIDTH        (320)
