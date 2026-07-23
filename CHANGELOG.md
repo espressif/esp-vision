@@ -11,6 +11,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 ### Fixed
 
 - Fixed ESP-IDF 6.1 firmware builds by synchronizing MicroPython's Wi-Fi authentication constants with the new unknown scan-result mode.
+- Fixed ESP32-S3-EYE camera initialization by assigning explicit SCCB I2C pins (GPIO 4, 5) instead of relying on an uninitialized shared I2C bus, enabling the GC2145 sensor to probe successfully.
 
 ## [2026.07.16]
 
