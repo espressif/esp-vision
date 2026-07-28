@@ -484,7 +484,7 @@ class Image:
     #: x, y: pixel coordinates.
     #: pixel: grayscale value or (r, g, b) color.
     def set_pixel(self, x: int, y: int, pixel: Color) -> Image: ...
-    #: Push this image to the host preview over USB CDC (EVFRAME JPEG stream).
+    #: Push this image to the host as a binary EV-MUX ``preview.frame`` JPEG.
     def flush(self) -> None: ...
     #: Save the image to a file; the format is inferred from the extension.
     #: path: destination path.

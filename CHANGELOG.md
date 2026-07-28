@@ -2,15 +2,35 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
-## [Unreleased]
+## [2026.07.28]
 
 ### Added
 
 - Added Windows host support for repository-root `idf.py --board <BOARD> ...` firmware builds.
+- Added an agent-oriented MCP knowledge guide that requires ESP-VISION code to target the supported MicroPython runtime, defaults generated applications to an all-in-one script, rejects unprovisioned `requirements.txt` dependencies, and provides a copyable USB-OTG CDC/USJ EV-MUX closed-loop test.
 
 ### Fixed
 
+- Silenced known deprecation and shadow warnings from the current `esp_video` and `esp-tflite-micro` managed component releases without disabling those warnings for ESP-VISION sources.
+- Fixed clean firmware builds by providing the Git-derived firmware version to MicroPython's qstr preprocessing pass.
 - Fixed ESP-IDF 6.1 firmware builds by synchronizing MicroPython's Wi-Fi authentication constants with the new unknown scan-result mode.
+- EV-MUX protocol v3 with two routed streams: `user` (`user.rpc`, framed REPL, and `preview.frame`) and `debug` (`debug.rpc` and `log.idf`). The transport task parses independent USJ, CDC, and UART ingress streams while the VM is busy.
+- EV-ATP host operations for discovery, stream routing, script upload/run, device control, transport statistics, filesystem/sensor inspection, and binary JPEG capture through `debug.rpc`.
+- DTR-driven routing: both streams follow USB-OTG CDC while its port is open and fall back to the board's default sink when it closes; `route.bind` and `route.auto` support per-stream overrides.
+- Preview flow control drops whole `preview.frame` frames from congested sinks and caps the USJ preview rate to one frame per 100 ms. `debug.info` scope `transport.stats` reports RX, parser, queue, timeout, and drop counters.
+- `capabilities` reports the board USB product string and distinguishes CDC `present` (enumerated) from `ready` (DTR asserted).
+- `hello`, `capabilities`, and device diagnostics expose a stable `firmware.id` plus the Git-derived ESP-IDF `PROJECT_VER`, allowing IDEs to distinguish release and development firmware builds without coupling protocol compatibility to a release string.
+- VM-context RPCs queued for more than 5 seconds now fail with `VM_TIMEOUT` instead of occupying the queue indefinitely.
+- EV-MUX replies return on the request ingress, including discovery requests received on a non-active USB sink.
+- Single-CDC boards now follow CDC DTR instead of remaining on an unavailable USJ route.
+
+### Changed
+
+- `img.flush()` now sends binary JPEG data in `preview.frame` instead of the previous base64 `EVFRAME` text envelope.
+- Python stdout/stderr, C stdio, ESP-IDF logs, and debug output are framed on their assigned EV-MUX channels while mux mode is enabled.
+- The REPL banner and help text, runtime metadata, ESP-IDF application name, USB descriptors, and recovery/crash messages now use ESP-VISION branding.
+- Architecture documentation now describes the two-stream routing, framing, RPC, and execution model.
+- The top-level Make build interface; firmware builds now use the repository-root `idf.py --board <BOARD> ...` CMake interface exclusively.
 
 ## [2026.07.16]
 

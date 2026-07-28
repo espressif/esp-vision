@@ -1,6 +1,7 @@
 # Build output
 /build/
 /dist/
+/artifacts/
 
 # esp-launchpad packing output (merged bins + config.toml from
 # tools/ci/launchpad/generate_launchpad.py; produced in CI / dry-run)
@@ -36,6 +37,7 @@ __pycache__/
 
 # VSCode extension
 vscode-extension/
+/esp-vision-ide
 
 # Patches / staging
 *.rej

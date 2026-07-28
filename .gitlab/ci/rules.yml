@@ -23,7 +23,6 @@
 # Paths that affect the compiled firmware. Editing only docs (docs/**, *.md,
 # stubs/**, example/**, LICENSE, ...) must NOT trigger a firmware rebuild.
 .firmware_changes: &firmware_changes
-  - "Makefile"
   - "idf_ext.py"
   - "micropython.cmake"
   - ".gitmodules"

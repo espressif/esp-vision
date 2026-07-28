@@ -22,6 +22,7 @@
 #endif
 
 #include "camera.h"
+#include "ev_stdio.h"
 #include "py_image.h"
 
 #ifdef NO_QSTR
@@ -285,6 +286,16 @@ static mp_obj_t sensor_snapshot(size_t n_args, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(sensor_snapshot_obj, 0, 1, sensor_snapshot);
 
+static mp_obj_t sensor_evmux(size_t n_args, const mp_obj_t *args)
+{
+    if (n_args == 0) {
+        return mp_obj_new_bool(ev_stdio_mux_enabled());
+    }
+    ev_stdio_set_mux_enabled(mp_obj_is_true(args[0]));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(sensor_evmux_obj, 0, 1, sensor_evmux);
+
 static mp_obj_t sensor_status(void)
 {
     esp_vision_camera_status_t status;
@@ -327,6 +338,7 @@ static const mp_rom_map_elem_t sensor_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_get_vflip), MP_ROM_PTR(&sensor_get_vflip_obj) },
     { MP_ROM_QSTR(MP_QSTR_skip_frames), MP_ROM_PTR(&sensor_skip_frames_obj) },
     { MP_ROM_QSTR(MP_QSTR_snapshot), MP_ROM_PTR(&sensor_snapshot_obj) },
+    { MP_ROM_QSTR(MP_QSTR_evmux), MP_ROM_PTR(&sensor_evmux_obj) },
     { MP_ROM_QSTR(MP_QSTR_status), MP_ROM_PTR(&sensor_status_obj) },
 
     { MP_ROM_QSTR(MP_QSTR_GRAYSCALE), MP_ROM_INT(SENSOR_PIXFORMAT_GRAYSCALE) },

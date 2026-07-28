@@ -31,7 +31,15 @@
 #include "py/mphal.h"
 #include "uart.h"
 
+#include "ev_stdio.h"
+
+// EV-MUX congestion counters (debug.info "transport.stats"), indexed by
+// ev_control_ingress_t: 0=USJ, 1=CDC, 2=UART.
+extern volatile uint32_t ev_transport_rx_ring_full[3];
+
 #if MICROPY_HW_ENABLE_UART_REPL
+
+extern ringbuf_t uart_stdin_ringbuf;
 
 #include <stdio.h>
 #include "driver/uart.h" // For uart_get_sclk_freq()
@@ -117,11 +125,13 @@ static void IRAM_ATTR uart_irq_handler(void *arg) {
     uart_hal_read_rxfifo(&repl_hal, rbuf, &len);
 
     for (int i = 0; i < len; i++) {
-        if (rbuf[i] == mp_interrupt_char) {
+        if ((rbuf[i] == mp_interrupt_char) && !ev_stdio_mux_enabled_flag) {
             mp_sched_keyboard_interrupt();
         } else {
             // this is an inline function so will be in IRAM
-            ringbuf_put(&stdin_ringbuf, rbuf[i]);
+            if (ringbuf_put(&uart_stdin_ringbuf, rbuf[i]) != 0) {
+                ++ev_transport_rx_ring_full[2];
+            }
         }
     }
 }

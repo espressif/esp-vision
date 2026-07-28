@@ -67,6 +67,10 @@ target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_CAMERA_SOURCE}
     ${ESP_VISION_ROOT}/platform/debug.c
     ${ESP_VISION_ROOT}/platform/display.c
+    ${ESP_VISION_ROOT}/platform/ev_channel.c
+    ${ESP_VISION_ROOT}/platform/ev_control_transport.c
+    ${ESP_VISION_ROOT}/platform/ev_mux.c
+    ${ESP_VISION_ROOT}/platform/ev_stdio.c
     ${ESP_VISION_ROOT}/platform/jpeg.c
     ${ESP_VISION_ROOT}/platform/preview.c
     ${ESP_VISION_ROOT}/platform/sdcard.c
@@ -84,9 +88,20 @@ target_include_directories(usermod_esp_vision_platform INTERFACE
     ${CMAKE_BINARY_DIR}
 )
 
+if(NOT DEFINED PROJECT_VER OR PROJECT_VER STREQUAL "")
+    message(FATAL_ERROR "ESP-IDF PROJECT_VER is required for ESP-VISION firmware identity")
+endif()
+
 target_compile_definitions(usermod_esp_vision_platform INTERFACE
     CMSIS_MCU_H="cmsis_compiler.h"
+    ESP_VISION_FIRMWARE_VERSION="${PROJECT_VER}"
     OMV_NO_GPL=1
+)
+
+# MicroPython's qstr preprocessor reads only the main target's direct compile
+# definitions, so explicitly provide the version for its user-module pass too.
+list(APPEND MICROPY_CPP_DEF_EXTRA
+    ESP_VISION_FIRMWARE_VERSION="${PROJECT_VER}"
 )
 
 # Barcode support is opt-in per board (board sets ESP_VISION_ENABLE_BARCODE in

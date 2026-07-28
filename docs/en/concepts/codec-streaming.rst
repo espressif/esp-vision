@@ -52,4 +52,4 @@ Recording sequences: ImageIO
 Host preview: USB CDC
 ---------------------
 
-During development the quickest way to *see* what the camera sees is :py:meth:`image.Image.flush`, which pushes the current frame to the host as an EVFRAME JPEG preview over USB CDC. The companion host tool decodes and displays it. This path needs no Wi-Fi and no SD card, making it the default feedback loop while iterating on a script.
+During development the quickest way to *see* what the camera sees is :py:meth:`image.Image.flush`, which pushes the current frame to the host as a binary JPEG on the EV-MUX ``preview.frame`` channel. The companion host tool decodes and displays it. This path needs no Wi-Fi and no SD card, making it the default feedback loop while iterating on a script.

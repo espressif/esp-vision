@@ -4,6 +4,11 @@
 // Board-specific definitions
 #include "mpconfigboard.h"
 
+// Public firmware identity shown by the friendly REPL and sys.version.
+#ifndef MICROPY_BANNER_NAME_AND_VERSION
+#define MICROPY_BANNER_NAME_AND_VERSION "ESP-VISION " MICROPY_GIT_TAG " on " MICROPY_BUILD_DATE
+#endif
+
 #include <stdint.h>
 #include <alloca.h>
 #include "esp_random.h"
@@ -281,13 +286,13 @@
 #endif
 
 // These Manufacturer & Product strings are the defaults when using the
-// esp_tinyusb component (which MicroPython used in the past).
+// esp_tinyusb component.
 #ifndef MICROPY_HW_USB_MANUFACTURER_STRING
-#define MICROPY_HW_USB_MANUFACTURER_STRING "Espressif Systems"
+#define MICROPY_HW_USB_MANUFACTURER_STRING "ESP-VISION"
 #endif
 
 #ifndef MICROPY_HW_USB_PRODUCT_FS_STRING
-#define MICROPY_HW_USB_PRODUCT_FS_STRING "Espressif Device"
+#define MICROPY_HW_USB_PRODUCT_FS_STRING "ESP-VISION Device"
 #endif
 
 #if CONFIG_IDF_TARGET_ESP32P4 || CONFIG_IDF_TARGET_ESP32S31

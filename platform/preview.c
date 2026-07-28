@@ -8,20 +8,11 @@
 
 #include <inttypes.h>
 #include <stdbool.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "esp_check.h"
-#include "mbedtls/base64.h"
-#include "py/mpconfig.h"
-#include "py/mphal.h"
-
-#if MICROPY_HW_USB_CDC
-#include "shared/tinyusb/mp_usbd_cdc.h"
-#include "tusb.h"
-#endif
-
+#include "esp_timer.h"
 #ifndef CMSIS_MCU_H
 #define CMSIS_MCU_H "cmsis_compiler.h"
 #endif
@@ -31,56 +22,22 @@
 #endif
 
 #include "boardconfig.h"
+#include "ev_channel.h"
+#include "ev_mux.h"
 #include "jpeg.h"
 
-#define ESP_VISION_PREVIEW_BASE64_INPUT_CHUNK (768)
-#define ESP_VISION_PREVIEW_BASE64_OUTPUT_CHUNK ((ESP_VISION_PREVIEW_BASE64_INPUT_CHUNK / 3) * 4)
-
 static const char *TAG = "esp_vision_preview";
+static uint32_t s_preview_seq;
+// On the USJ route the preview frame rate is capped: USB Serial JTAG
+// throughput is far below OTG CDC, and an app flushing in a tight loop would
+// otherwise keep the sink permanently congested (frames dropped anyway) and
+// burn CPU on JPEG encodes that never make it onto the wire.
+#define ESP_VISION_PREVIEW_USJ_MIN_INTERVAL_MS (100)
+static uint32_t s_last_usj_flush_ms;
 
 static bool esp_vision_preview_is_ready(void)
 {
-#if MICROPY_HW_USB_CDC
-    return tusb_inited() && tud_cdc_connected();
-#else
-    return true;
-#endif
-}
-
-static esp_err_t esp_vision_preview_write(const char *str, size_t len)
-{
-    if ((str == NULL) || (len == 0)) {
-        return ESP_OK;
-    }
-
-#if MICROPY_HW_USB_CDC
-    if (!esp_vision_preview_is_ready()) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    mp_uint_t written = mp_usbd_cdc_tx_strn(str, len);
-#else
-    mp_uint_t written = mp_hal_stdout_tx_strn(str, len);
-#endif
-    return (written == len) ? ESP_OK : ESP_ERR_TIMEOUT;
-}
-
-static esp_err_t esp_vision_preview_printf(const char *fmt, ...)
-{
-    char buf[160];
-    va_list ap;
-
-    va_start(ap, fmt);
-    int len = vsnprintf(buf, sizeof(buf), fmt, ap);
-    va_end(ap);
-
-    if (len <= 0) {
-        return ESP_FAIL;
-    }
-    if ((size_t)len >= sizeof(buf)) {
-        return ESP_ERR_INVALID_SIZE;
-    }
-
-    return esp_vision_preview_write(buf, (size_t)len);
+    return ev_channel_ready(EV_STREAM_USER);
 }
 
 void esp_vision_preview_deinit(void)
@@ -91,46 +48,33 @@ void esp_vision_preview_deinit(void)
 void esp_vision_preview_init0(void)
 {
     esp_vision_preview_deinit();
-}
-
-static esp_err_t esp_vision_preview_write_base64(const uint8_t *data, size_t len)
-{
-    unsigned char out[ESP_VISION_PREVIEW_BASE64_OUTPUT_CHUNK + 1];
-    size_t offset = 0;
-
-    while (offset < len) {
-        size_t chunk = len - offset;
-        if (chunk > ESP_VISION_PREVIEW_BASE64_INPUT_CHUNK) {
-            chunk = ESP_VISION_PREVIEW_BASE64_INPUT_CHUNK;
-        }
-
-        size_t out_len = 0;
-        int ret = mbedtls_base64_encode(out, sizeof(out), &out_len, data + offset, chunk);
-        if (ret != 0) {
-            return ESP_FAIL;
-        }
-
-        ESP_RETURN_ON_ERROR(esp_vision_preview_write((const char *)out, out_len),
-                            TAG,
-                            "failed to write preview frame");
-        offset += chunk;
-    }
-
-    return ESP_OK;
+    s_preview_seq = 0;
+    s_last_usj_flush_ms = 0;
+    ev_channel_init0();
 }
 
 static esp_err_t esp_vision_preview_write_frame(const image_t *img, const uint8_t *jpeg_buf, size_t jpeg_size)
 {
-    ESP_RETURN_ON_ERROR(esp_vision_preview_printf("<EVFRAME width=%" PRIi32 " height=%" PRIi32
-                                                  " format=jpg size=%u encoding=base64>\r\n",
-                                                  img->w,
-                                                  img->h,
-                                                  (unsigned int)jpeg_size),
-                        TAG,
-                        "failed to write preview header");
+    const char *route = ev_channel_get(EV_STREAM_USER);
+    uint32_t seq = s_preview_seq++;
+    uint32_t ts_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    char metadata[224];
+    int metadata_len = snprintf(metadata,
+                                sizeof(metadata),
+                                "{\"sid\":\"preview\",\"seq\":%" PRIu32 ",\"channel\":\"preview.frame\","
+                                "\"type\":\"data\",\"encoding\":\"binary\",\"route\":\"%s\","
+                                "\"contentType\":\"image/jpeg\",\"ts_ms\":%" PRIu32 ","
+                                "\"width\":%" PRIi32 ",\"height\":%" PRIi32 "}",
+                                seq,
+                                route,
+                                ts_ms,
+                                img->w,
+                                img->h);
+    if ((metadata_len <= 0) || ((size_t)metadata_len >= sizeof(metadata))) {
+        return ESP_ERR_INVALID_SIZE;
+    }
 
-    ESP_RETURN_ON_ERROR(esp_vision_preview_write_base64(jpeg_buf, jpeg_size), TAG, "failed to encode preview frame");
-    return esp_vision_preview_write("\r\n</EVFRAME>\r\n", strlen("\r\n</EVFRAME>\r\n"));
+    return ev_mux_write_lossy(EV_STREAM_USER, metadata, jpeg_buf, jpeg_size);
 }
 
 esp_err_t esp_vision_preview_flush(const image_t *img)
@@ -140,6 +84,20 @@ esp_err_t esp_vision_preview_flush(const image_t *img)
     esp_err_t ret;
 
     if (!esp_vision_preview_is_ready()) {
+        return ESP_OK;
+    }
+    const char *route = ev_channel_get(EV_STREAM_USER);
+    if (strcmp(route, "usj") == 0) {
+        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+        if ((now_ms - s_last_usj_flush_ms) < ESP_VISION_PREVIEW_USJ_MIN_INTERVAL_MS) {
+            return ESP_OK;
+        }
+        s_last_usj_flush_ms = now_ms;
+    }
+    // Skip the encode when the sink is congested: the frame would be dropped
+    // whole at write time anyway.
+    if (ev_mux_stream_congested(EV_STREAM_USER)) {
+        ev_mux_record_tx_drop();
         return ESP_OK;
     }
 
