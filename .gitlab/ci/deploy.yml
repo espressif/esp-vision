@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 push_to_github:
-  stage: deploy
+  stage: post_deploy
   rules:
     # Manual force push from a web-triggered pipeline (CI/CD -> Run pipeline,
     # set force_push_to_github to true), regardless of branch.
