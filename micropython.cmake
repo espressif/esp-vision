@@ -98,6 +98,12 @@ target_compile_definitions(usermod_esp_vision_platform INTERFACE
     OMV_NO_GPL=1
 )
 
+# MicroPython's qstr preprocessor reads only the main target's direct compile
+# definitions, so explicitly provide the version for its user-module pass too.
+list(APPEND MICROPY_CPP_DEF_EXTRA
+    ESP_VISION_FIRMWARE_VERSION="${PROJECT_VER}"
+)
+
 # Barcode support is opt-in per board (board sets ESP_VISION_ENABLE_BARCODE in
 # its boards/<board>/board.cmake) and requires the zxing-cpp submodule. Keep
 # this condition in sync with components/zxing/CMakeLists.txt.

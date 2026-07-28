@@ -69,6 +69,18 @@ idf_build_set_property(DEPENDENCIES_LOCK ${LOCKFILE_PATH})
 # Define the project and the public name embedded in the ESP-IDF app descriptor.
 project(esp-vision)
 
+# Keep warnings enabled for ESP-VISION while silencing known warnings emitted
+# by the current managed component releases.
+if(TARGET idf::espressif__esp_video)
+    idf_component_get_property(esp_video_lib espressif__esp_video COMPONENT_LIB)
+    target_compile_options(${esp_video_lib} PRIVATE -Wno-deprecated-declarations)
+endif()
+
+if(TARGET idf::espressif__esp-tflite-micro)
+    idf_component_get_property(esp_tflite_micro_lib espressif__esp-tflite-micro COMPONENT_LIB)
+    target_compile_options(${esp_tflite_micro_lib} PRIVATE -Wno-shadow)
+endif()
+
 # Check for lockfile changes and either warn or error depending on build type
 message("Checking lockfile contents...")
 execute_process(COMMAND git diff --exit-code ${LOCKFILE_PATH} WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}

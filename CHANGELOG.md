@@ -10,6 +10,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Silenced known deprecation and shadow warnings from the current `esp_video` and `esp-tflite-micro` managed component releases without disabling those warnings for ESP-VISION sources.
+- Fixed clean firmware builds by providing the Git-derived firmware version to MicroPython's qstr preprocessing pass.
 - Fixed ESP-IDF 6.1 firmware builds by synchronizing MicroPython's Wi-Fi authentication constants with the new unknown scan-result mode.
 - EV-MUX protocol v3 with two routed streams: `user` (`user.rpc`, framed REPL, and `preview.frame`) and `debug` (`debug.rpc` and `log.idf`). The transport task parses independent USJ, CDC, and UART ingress streams while the VM is busy.
 - EV-ATP host operations for discovery, stream routing, script upload/run, device control, transport statistics, filesystem/sensor inspection, and binary JPEG capture through `debug.rpc`.
