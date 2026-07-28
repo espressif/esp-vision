@@ -37,7 +37,7 @@ Usage:
     generate_launchpad.py <tag>              # real release: merge bins + config
     generate_launchpad.py --dry-run <tag>    # config only (no IDF / no bins)
 
-``--dry-run`` skips merge_bin entirely and predicts bin names from the
+``--dry-run`` skips ``merge-bin`` entirely and predicts bin names from the
 deterministic ``esp-vision-<BOARD>-<tag>.bin`` pattern. It needs neither build
 artifacts nor esptool, so it runs locally and in non-release CI. Its output is
 used to (a) seed the website's committed config.toml snapshot for build-time
@@ -50,6 +50,7 @@ import glob
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -149,6 +150,44 @@ def bin_name_template() -> str:
     return bin_name_for("{board}", "{tag}")
 
 
+def load_merge_args(build_dir: str) -> list:
+    """Load, normalize, and validate IDF's response-file merge arguments."""
+    flash_args_path = os.path.join(build_dir, "flash_args")
+    with open(flash_args_path, encoding="utf-8") as f:
+        args = shlex.split(f.read())
+
+    # esptool 5.3 keeps these aliases for compatibility but warns that they
+    # will be removed. Normalize the IDF-generated response file at the release
+    # boundary so the packer uses the current command-line spelling.
+    replacements = {
+        "--flash_mode": "--flash-mode",
+        "--flash_freq": "--flash-freq",
+        "--flash_size": "--flash-size",
+    }
+    args = [replacements.get(arg, arg) for arg in args]
+
+    # merge-bin inputs are address/file pairs after the flash options. Checking
+    # them here turns a generic esptool exit code 2 into an actionable artifact
+    # error and catches a stale .gitlab-ci.yml artifact filename immediately.
+    image_paths = [
+        args[index + 1]
+        for index, arg in enumerate(args[:-1])
+        if re.fullmatch(r"0x[0-9a-fA-F]+", arg)
+    ]
+    if not image_paths:
+        raise RuntimeError(f"{flash_args_path}: no address/image pairs found")
+    missing = [
+        image for image in image_paths
+        if not os.path.isfile(os.path.join(build_dir, image))
+    ]
+    if missing:
+        raise RuntimeError(
+            f"{flash_args_path} references missing release artifact(s): "
+            f"{', '.join(missing)}"
+        )
+    return args
+
+
 def collect_release_tags(current_tag: str) -> list:
     """Every published release tag, newest first.
 
@@ -178,8 +217,9 @@ def merge_board(board: str, target: str, tag: str, build_dir: str) -> str:
     """Merge a single board's firmware into binaries/ and return the bin name."""
     bin_name = bin_name_for(board, tag)
     print(f"[{board}] merging {build_dir} -> {bin_name}")
+    merge_args = load_merge_args(build_dir)
     subprocess.run(
-        ["esptool.py", "--chip", target, "merge_bin", "-o", bin_name, "@flash_args"],
+        ["esptool", "--chip", target, "merge-bin", "-o", bin_name, *merge_args],
         cwd=build_dir,
         check=True,
     )
@@ -351,7 +391,7 @@ def main() -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="config only: skip merge_bin, predict bin names (no IDF/esptool)",
+        help="config only: skip merge-bin, predict bin names (no IDF/esptool)",
     )
     args = parser.parse_args()
     if not args.tag:

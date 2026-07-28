@@ -2,6 +2,8 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
+## [Unreleased]
+
 ## [2026.07.28]
 
 ### Added
@@ -11,6 +13,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Fixed tag release packaging after the application binary was renamed from `micropython.bin` to `esp-vision.bin`, updated the launchpad merge step to validate its input artifacts and use the current esptool command syntax, and deferred GitHub synchronization until the deploy stage succeeds.
 - Silenced known deprecation and shadow warnings from the current `esp_video` and `esp-tflite-micro` managed component releases without disabling those warnings for ESP-VISION sources.
 - Fixed clean firmware builds by providing the Git-derived firmware version to MicroPython's qstr preprocessing pass.
 - Fixed ESP-IDF 6.1 firmware builds by synchronizing MicroPython's Wi-Fi authentication constants with the new unknown scan-result mode.

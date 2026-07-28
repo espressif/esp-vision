@@ -157,8 +157,12 @@ check_readme_links:
       - build/$BOARD/idf*/log/
       - build/$BOARD/idf*/bootloader/bootloader.bin
       - build/$BOARD/idf*/partition_table/partition-table.bin
-      - build/$BOARD/idf*/micropython.bin
-      # flash_args lists the {offset, file} pairs consumed by `esptool merge_bin`
+      # Collect the top-level application image without hard-coding ESP-IDF's
+      # project-derived filename (esp-vision.bin today, micropython.bin before
+      # the rename). flash_args below remains the authority for which image is
+      # consumed by the release packer.
+      - build/$BOARD/idf*/*.bin
+      # flash_args lists the {offset, file} pairs consumed by `esptool merge-bin`
       # in the tag-release pack_launchpad job (see .gitlab/ci/deploy.yml). These
       # boards use a single factory app with no OTA, so flash_args references
       # only the three .bin files already collected above.
