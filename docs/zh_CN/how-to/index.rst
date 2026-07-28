@@ -13,3 +13,4 @@
    add-model
    train-espdet-pico
    add-board
+   agent-code-generation

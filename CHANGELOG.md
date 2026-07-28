@@ -2,11 +2,12 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
-## [Unreleased]
+## [2026.07.28]
 
 ### Added
 
 - Added Windows host support for repository-root `idf.py --board <BOARD> ...` firmware builds.
+- Added an agent-oriented MCP knowledge guide that requires ESP-VISION code to target the supported MicroPython runtime, defaults generated applications to an all-in-one script, rejects unprovisioned `requirements.txt` dependencies, and provides a copyable USB-OTG CDC/USJ EV-MUX closed-loop test.
 
 ### Fixed
 

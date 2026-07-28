@@ -3,7 +3,7 @@
   "$id": "https://dl.espressif.com/AE/esp-vision/mcp/schema.json",
   "title": "ESP-VISION MCP API knowledge pack",
   "type": "object",
-  "required": ["schemaVersion", "meta", "capabilities", "modules"],
+  "required": ["schemaVersion", "meta", "capabilities", "modules", "docs", "examples"],
   "additionalProperties": true,
   "properties": {
     "schemaVersion": {
@@ -82,9 +82,10 @@
     },
     "docs": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "kind", "title"],
+        "required": ["id", "kind", "title", "bodyMd", "codeBlocks", "targets"],
         "properties": {
           "id": {"type": "string"},
           "kind": {"type": "string"},
@@ -97,6 +98,7 @@
     },
     "examples": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "required": ["path", "code"],

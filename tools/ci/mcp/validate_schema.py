@@ -20,6 +20,17 @@ ESP8266_ONLY_SYMBOLS = {
     'esp.flash_id',
     'esp.set_native_code_location',
 }
+AGENT_GUIDE_ID = 'how-to/agent-code-generation'
+AGENT_GUIDE_REQUIRED_TEXT = (
+    'MicroPython v1.28.0',
+    'requirements.txt',
+    'all-in-one',
+    'USB-Serial-JTAG',
+    'script.write',
+    'script.run',
+    'repl.stdout',
+    'EVTEST:OK',
+)
 
 
 def _semantic_checks(pack: dict) -> list:
@@ -80,6 +91,20 @@ def _semantic_checks(pack: dict) -> list:
 
     if not any(m['source'] == 'esp-vision' for m in pack.get('modules', [])):
         errors.append('no esp-vision modules found (stub extraction broken?)')
+
+    docs = {doc.get('id'): doc for doc in pack.get('docs', [])}
+    guide = docs.get(AGENT_GUIDE_ID)
+    if guide is None:
+        errors.append('missing required agent guidance doc: {}'.format(AGENT_GUIDE_ID))
+    else:
+        body = guide.get('bodyMd', '')
+        for required in AGENT_GUIDE_REQUIRED_TEXT:
+            if required not in body:
+                errors.append('{} missing required guidance text: {!r}'.format(
+                    AGENT_GUIDE_ID, required))
+        if len(guide.get('codeBlocks', [])) < 2:
+            errors.append('{} must include target and host code blocks'.format(
+                AGENT_GUIDE_ID))
     return errors
 
 
