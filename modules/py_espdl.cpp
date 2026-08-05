@@ -522,6 +522,7 @@ static mp_obj_t espdl_model_make_new(const mp_obj_type_t *type, size_t n_args, s
         ARG_path,
         ARG_mean,
         ARG_std,
+        ARG_rgb_swap,
         ARG_letterbox,
         ARG_pad,
     };
@@ -529,6 +530,7 @@ static mp_obj_t espdl_model_make_new(const mp_obj_type_t *type, size_t n_args, s
         {MP_QSTR_path, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
         {MP_QSTR_mean, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
         {MP_QSTR_std, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
+        {MP_QSTR_rgb_swap, MP_ARG_KW_ONLY | MP_ARG_BOOL, {.u_bool = false}},
         {MP_QSTR_letterbox, MP_ARG_KW_ONLY | MP_ARG_BOOL, {.u_bool = true}},
         {MP_QSTR_pad, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL}},
     };
@@ -562,8 +564,11 @@ static mp_obj_t espdl_model_make_new(const mp_obj_type_t *type, size_t n_args, s
     }
 
     self->model->minimize();
-    self->image_preprocessor =
-        new (std::nothrow) dl::image::ImagePreprocessor(self->model, mean_values, std_values);
+    self->image_preprocessor = new (std::nothrow) dl::image::ImagePreprocessor(
+        self->model,
+        mean_values,
+        std_values,
+        args[ARG_rgb_swap].u_bool);
     if (self->image_preprocessor == nullptr) {
         espdl_model_destroy(self);
         mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate image preprocessor"));
