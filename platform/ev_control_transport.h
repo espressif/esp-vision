@@ -24,6 +24,7 @@ typedef enum {
 } ev_control_ingress_t;
 
 void ev_control_transport_init0(void);
+void ev_control_transport_start(void);
 esp_err_t ev_control_transport_send_hello(void);
 
 // VM-task entry points (mp_hal_stdin_rx_chr / mp_hal_stdio_poll only).

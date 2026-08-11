@@ -70,8 +70,6 @@ list(APPEND MICROPY_SOURCE_LIB
     ${MICROPY_DIR}/lib/littlefs/lfs1_util.c
     ${MICROPY_DIR}/lib/littlefs/lfs2.c
     ${MICROPY_DIR}/lib/littlefs/lfs2_util.c
-    ${MICROPY_DIR}/lib/oofatfs/ff.c
-    ${MICROPY_DIR}/lib/oofatfs/ffunicode.c
 )
 
 if($ENV{IDF_VERSION} VERSION_LESS "6.0")
@@ -123,7 +121,6 @@ list(APPEND MICROPY_SOURCE_PORT
     usb_serial_jtag.c
     gccollect.c
     mphalport.c
-    fatfs_port.c
     help.c
     machine_bitstream.c
     machine_timer.c
@@ -189,6 +186,7 @@ list(APPEND IDF_COMPONENTS
     esp_common
     esp_eth
     esp_event
+    fatfs
     esp_hw_support
     esp_netif
     esp_partition
@@ -292,7 +290,7 @@ target_compile_definitions(${MICROPY_TARGET} PUBLIC
     ${MICROPY_DEF_CORE}
     ${MICROPY_DEF_BOARD}
     ${MICROPY_DEF_TINYUSB}
-    MICROPY_VFS_FAT=1
+    MICROPY_VFS_FAT=0
     MICROPY_VFS_LFS2=1
     FFCONF_H=\"${MICROPY_OOFATFS_DIR}/ffconf.h\"
     LFS1_NO_MALLOC LFS1_NO_DEBUG LFS1_NO_WARN LFS1_NO_ERROR LFS1_NO_ASSERT

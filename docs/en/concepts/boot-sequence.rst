@@ -25,18 +25,19 @@ After a hard or soft reset, ESP-VISION executes the following startup flow:
      orientation = portrait;
 
      reset    [label = "Hard or soft reset"];
+     storage  [label = "Mount Flash and available SD\nthrough ESP-IDF storage"];
      runtime  [label = "Initialize MicroPython runtime\nand machine peripherals"];
-     services [label = "Initialize camera, display,\npreview, storage, and framebuffer"];
-     boot     [label = "Run frozen _boot.py\nmount internal Flash at /"];
-     setup    [label = "Run frozen py_inisetup.py\ninitialize or repair filesystem"];
-     sdcard   [label = "Mount SD card at /sdcard\nwhen available"];
+     bridge   [label = "Publish native VFS bridges\nat / and /sdcard"];
+     services [label = "Initialize camera, display,\npreview, and framebuffer"];
+     boot     [label = "Run frozen _boot.py\nhousekeeping"];
+     setup    [label = "Run frozen py_inisetup.py\ncreate missing default files"];
      bootpy   [label = "Run /boot.py\nwhen present"];
      usb      [label = "Initialize USB device"];
      replmode [label = "REPL mode", shape = diamond];
      mainpy   [label = "Run /main.py\nwhen present"];
      repl     [label = "Enter friendly or raw REPL"];
 
-     reset -> runtime -> services -> boot -> setup -> sdcard -> bootpy -> usb -> replmode;
+     reset -> storage -> runtime -> bridge -> services -> boot -> setup -> bootpy -> usb -> replmode;
      replmode -> mainpy [label = "friendly"];
      replmode -> repl [label = "raw"];
      mainpy -> repl [label = "exit, interrupt, or skip"];
@@ -47,9 +48,9 @@ The raw REPL used by host automation can skip ``main.py`` during a soft reset. T
 First Boot and Flash Filesystem
 -------------------------------
 
-The frozen ``_boot.py`` only attempts to mount the internal Flash filesystem. ESP-VISION-specific setup is handled by ``py_inisetup.py``. If the Flash boot sector is empty, it formats the configured ``vfs`` or ``ffat`` partition and mounts it at ``/``. It then creates ``/boot.py``, ``/main.py``, ``/README.txt``, and the ``/.esp_vision_disk`` marker when they do not already exist.
+The ESP-IDF storage manager owns the board filesystems independently of the MicroPython VM. It mounts the ``ffat`` partition internally at ``/flash`` and mounts an available SD card at ``/sdcard``. On each VM start, native MicroPython VFS bridges publish the Flash volume at ``/`` and the SD volume at ``/sdcard``. A soft reset recreates only these bridge objects and does not remount an already mounted physical filesystem; if the SD card was not mounted during cold boot, the mount is retried on each subsequent VM start so that a card inserted later becomes available after a soft reset.
 
-If mounting or writing the default files fails, ``py_inisetup.py`` attempts to repair the filesystem by formatting it and recreating the defaults. Formatting erases files stored in that filesystem, so product data that must survive filesystem recovery should be stored in a separate partition, on an SD card, or outside the device.
+An unformatted ``ffat`` partition is formatted as FAT during storage initialization. A legacy partition named ``vfs`` is only mounted when it already contains FAT and is never automatically formatted, so a possible LittleFS2 volume is not silently erased. Other mount or write failures are reported without destructive repair. The frozen ``py_inisetup.py`` then creates ``/boot.py``, ``/main.py``, ``/README.txt``, and the ``/.esp_vision_disk`` marker when they do not already exist.
 
 Existing startup files are not overwritten during a normal firmware update or soft reset. Board packages can provide board-specific default ``main.py`` and ``README.txt`` content through ``boards/<BOARD>/board_inisetup.py``.
 

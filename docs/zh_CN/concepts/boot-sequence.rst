@@ -25,18 +25,19 @@ ESP-VISION 启动顺序
      orientation = portrait;
 
      reset    [label = "硬复位或软复位"];
+     storage  [label = "通过 ESP-IDF storage 挂载\nFlash 和可用的 SD 卡"];
      runtime  [label = "初始化 MicroPython 运行时\n和 machine 外设"];
-     services [label = "初始化摄像头、显示、预览、\n存储和帧缓冲服务"];
-     boot     [label = "执行冻结的 _boot.py\n将内部 Flash 挂载到 /"];
-     setup    [label = "执行冻结的 py_inisetup.py\n初始化或修复文件系统"];
-     sdcard   [label = "可用时将 SD 卡\n挂载到 /sdcard"];
+     bridge   [label = "在 / 和 /sdcard 发布\n原生 VFS bridge"];
+     services [label = "初始化摄像头、显示、\n预览和帧缓冲服务"];
+     boot     [label = "执行冻结的 _boot.py\n运行清理工作"];
+     setup    [label = "执行冻结的 py_inisetup.py\n创建缺失的默认文件"];
      bootpy   [label = "存在时执行 /boot.py"];
      usb      [label = "初始化 USB 设备"];
      replmode [label = "REPL 模式", shape = diamond];
      mainpy   [label = "存在时执行 /main.py"];
      repl     [label = "进入友好或原始 REPL"];
 
-     reset -> runtime -> services -> boot -> setup -> sdcard -> bootpy -> usb -> replmode;
+     reset -> storage -> runtime -> bridge -> services -> boot -> setup -> bootpy -> usb -> replmode;
      replmode -> mainpy [label = "友好模式"];
      replmode -> repl [label = "原始模式"];
      mainpy -> repl [label = "退出、中断或跳过"];
@@ -47,9 +48,9 @@ ESP-VISION 启动顺序
 首次启动与 Flash 文件系统
 -------------------------
 
-冻结的 ``_boot.py`` 仅尝试挂载内部 Flash 文件系统，ESP-VISION 专用初始化由 ``py_inisetup.py`` 完成。如果 Flash 引导扇区为空，该脚本会格式化配置的 ``vfs`` 或 ``ffat`` 分区，并将其挂载到 ``/``。随后在对应文件不存在时创建 ``/boot.py``、``/main.py``、``/README.txt`` 和 ``/.esp_vision_disk`` 标记文件。
+ESP-IDF storage manager 独立于 MicroPython VM 持有开发板文件系统。它在内部将 ``ffat`` 分区挂载到 ``/flash``，并将可用的 SD 卡挂载到 ``/sdcard``。每次 VM 启动时，原生 MicroPython VFS bridge 会把 Flash 卷发布到 ``/``，把 SD 卷发布到 ``/sdcard``。软复位只会重新创建 bridge 对象，不会重新挂载已挂载的物理文件系统；如果 SD 卡在冷启动时未挂载，后续每次 VM 启动都会重试，因此开机后插入的 SD 卡可在软复位后变为可用。
 
-如果挂载文件系统或写入默认文件失败，``py_inisetup.py`` 会尝试通过格式化文件系统并重新创建默认文件进行修复。格式化会清除该文件系统中的文件，因此必须在文件系统恢复后保留的产品数据应存放在独立分区、SD 卡或设备外部。
+storage manager 会在初始化时将未格式化的 ``ffat`` 分区格式化为 FAT。兼容旧固件的 ``vfs`` 分区只有在已经包含 FAT 时才会挂载，绝不会自动格式化，因此不会静默擦除可能存在的 LittleFS2 卷。其他挂载或写入失败只会上报，不会执行破坏性修复。随后，冻结的 ``py_inisetup.py`` 会在对应文件不存在时创建 ``/boot.py``、``/main.py``、``/README.txt`` 和 ``/.esp_vision_disk`` 标记文件。
 
 正常固件升级或软复位不会覆盖已有启动文件。开发板包可以通过 ``boards/<BOARD>/board_inisetup.py`` 提供板级默认 ``main.py`` 和 ``README.txt`` 内容。
 

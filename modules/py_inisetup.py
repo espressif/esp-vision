@@ -3,9 +3,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-import vfs
-
-from flashbdev import bdev
 
 
 _MARKER = "/.esp_vision_disk"
@@ -55,41 +52,6 @@ def _write_if_missing(path, data):
         f.write(data)
 
 
-def _boot_sector_empty():
-    if bdev is None:
-        return False
-
-    buf = bytearray(bdev.ioctl(5, 0))  # 5 is SEC_SIZE.
-    bdev.readblocks(0, buf)
-    for b in buf:
-        if b != 0xFF:
-            return False
-    return True
-
-
-def _format_flash():
-    if bdev is None:
-        return False
-
-    try:
-        vfs.umount("/")
-    except OSError:
-        pass
-
-    label = bdev.info()[4]
-    if label == "vfs":
-        vfs.VfsLfs2.mkfs(bdev)
-        fs = vfs.VfsLfs2(bdev)
-    elif label == "ffat":
-        vfs.VfsFat.mkfs(bdev)
-        fs = vfs.VfsFat(bdev)
-    else:
-        return False
-
-    vfs.mount(fs, "/")
-    return True
-
-
 def _write_default_files():
     if _exists(_MARKER):
         return
@@ -101,16 +63,9 @@ def _write_default_files():
 
 
 def setup():
-    if _boot_sector_empty():
+    if not _exists(_MARKER):
         print("Performing ESP-VISION initial setup")
-        _format_flash()
-
-    try:
-        _write_default_files()
-    except (OSError, UnicodeError):
-        print("Repairing ESP-VISION flash filesystem")
-        if _format_flash():
-            _write_default_files()
+    _write_default_files()
 
 
 try:

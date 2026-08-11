@@ -68,11 +68,12 @@
 #include "usb_serial_jtag.h"
 
 #include "camera.h"
+#include "debug.h"
 #include "display.h"
 #include "ev_stdio.h"
 #include "fb_alloc.h"
 #include "preview.h"
-#include "sdcard.h"
+#include "storage.h"
 
 #if MICROPY_BLUETOOTH_NIMBLE
 #include "extmod/modbluetooth.h"
@@ -135,6 +136,11 @@ void mp_task(void *pvParameter)
         ESP_LOGE("esp_init", "can't create event loop: 0x%x\n", err);
     }
 
+    err = esp_vision_storage_init();
+    if (err != ESP_OK) {
+        ESP_LOGE("esp_init", "can't initialize storage: %s", esp_err_to_name(err));
+    }
+
     void *mp_task_heap = MP_PLAT_ALLOC_HEAP(MICROPY_GC_INITIAL_HEAP_SIZE);
     if (mp_task_heap == NULL) {
         printf("mp_task_heap allocation failed!\n");
@@ -145,11 +151,14 @@ soft_reset:
     mp_cstack_init_with_top((void *)sp, MICROPY_TASK_STACK_SIZE);
     gc_init(mp_task_heap, mp_task_heap + MICROPY_GC_INITIAL_HEAP_SIZE);
     mp_init();
+    esp_vision_storage_mount_micropython();
     esp_vision_camera_init0();
     esp_vision_display_init0();
     esp_vision_preview_init0();
     ev_stdio_init0();
-    esp_vision_sdcard_init0();
+    esp_vision_debug_printf("[esp-vision] storage status: flash=/ %s; sdcard=/sdcard %s\n",
+                            esp_vision_storage_flash_is_mounted() ? "mounted" : "unavailable",
+                            esp_vision_storage_sdcard_is_mounted() ? "mounted" : "unavailable");
     fb_alloc_init0();
     mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR__slash_lib));
     readline_init0();
@@ -161,12 +170,12 @@ soft_reset:
 
     pyexec_frozen_module("_boot.py", false);
     pyexec_frozen_module("py_inisetup.py", false);
-    esp_vision_sdcard_mount_if_present();
     int ret = pyexec_file_if_exists("boot.py");
 
     #if MICROPY_HW_ENABLE_USBDEV
     mp_usbd_init();
     #endif
+    ev_stdio_start_transport();
 
     if (ret & PYEXEC_FORCED_EXIT) {
         goto soft_reset_exit;
@@ -275,7 +284,7 @@ void boardctrl_startup(void)
             esp_partition_register_external(esp_flash_default_chip,
                                             offset,
                                             size,
-                                            "vfs",
+                                            "ffat",
                                             ESP_PARTITION_TYPE_DATA,
                                             ESP_PARTITION_SUBTYPE_DATA_FAT,
                                             NULL);

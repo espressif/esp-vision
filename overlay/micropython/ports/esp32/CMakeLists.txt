@@ -42,6 +42,10 @@ else()
     include(${MICROPY_BOARD_DIR}/mpconfigvariant_${MICROPY_BOARD_VARIANT}.cmake)
 endif()
 
+# ESP-VISION mounts FAT volumes through ESP-IDF and exposes them to
+# MicroPython through a native VFS bridge.
+list(APPEND SDKCONFIG_DEFAULTS boards/sdkconfig.esp_vision_storage)
+
 # Set the frozen manifest file. Note if MICROPY_FROZEN_MANIFEST is set from the cmake
 # command line, then it will override the default and any manifest set by the board.
 if (MICROPY_USER_FROZEN_MANIFEST)

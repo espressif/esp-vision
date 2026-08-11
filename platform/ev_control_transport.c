@@ -983,7 +983,7 @@ static esp_err_t ev_control_send_script_write(uint32_t seq, const char *request)
     bool run_after_write = ev_control_json_get_bool(request, "runAfterWrite", false);
     if (run_after_write && complete) {
         char repl_cmd[192];
-        int repl_len = snprintf(repl_cmd, sizeof(repl_cmd), "exec(open(%c%s%c).read())\r\n", '"', path, '"');
+        int repl_len = snprintf(repl_cmd, sizeof(repl_cmd), "execfile(%c%s%c)\r\n", '"', path, '"');
         if ((repl_len > 0) && ((size_t)repl_len < sizeof(repl_cmd))) {
             (void)ev_control_repl_rx_push((const uint8_t *)repl_cmd, (size_t)repl_len);
         }
@@ -1021,7 +1021,7 @@ static esp_err_t ev_control_send_script_run(uint32_t seq, const char *request)
     }
 
     char repl_cmd[192];
-    int repl_len = snprintf(repl_cmd, sizeof(repl_cmd), "exec(open(%c%s%c).read())\r\n", '"', path, '"');
+    int repl_len = snprintf(repl_cmd, sizeof(repl_cmd), "execfile(%c%s%c)\r\n", '"', path, '"');
     if ((repl_len <= 0) || ((size_t)repl_len >= sizeof(repl_cmd))) {
         return ev_control_send_error("script.run", seq, "PATH_TOO_LONG", "script path too long");
     }
@@ -1563,9 +1563,17 @@ void ev_control_transport_init0(void)
     ev_control_vm_queue_unlock();
     xSemaphoreGive(s_transport_state_lock);
     ev_channel_set_route_changed_cb(ev_control_route_changed_cb);
+}
+
+void ev_control_transport_start(void)
+{
+    if ((s_vm_queue_lock == NULL) || (s_transport_state_lock == NULL)) {
+        return;
+    }
     if (s_transport_task == NULL) {
         // Survives soft resets: frame reception must keep working while the
-        // VM restarts, so the task is created once and never deleted.
+        // VM restarts, so the task is created once and never deleted. The
+        // caller starts it only after TinyUSB has completed initialization.
         BaseType_t ok = xTaskCreate(ev_control_transport_task,
                                     "ev_transport",
                                     EV_CONTROL_TRANSPORT_TASK_STACK_SIZE,
@@ -1753,6 +1761,10 @@ static void ev_control_transport_watch_hello(void)
 static void ev_control_transport_task(void *arg)
 {
     (void)arg;
+    TickType_t pump_delay_ticks = pdMS_TO_TICKS(EV_CONTROL_TRANSPORT_PUMP_MS);
+    if (pump_delay_ticks == 0) {
+        pump_delay_ticks = 1;
+    }
     for (;;) {
         ev_control_transport_watch_hello();
         if (ev_stdio_mux_enabled()) {
@@ -1770,6 +1782,6 @@ static void ev_control_transport_task(void *arg)
             mp_usbd_cdc_transport_pump();
 #endif
         }
-        vTaskDelay(pdMS_TO_TICKS(EV_CONTROL_TRANSPORT_PUMP_MS));
+        vTaskDelay(pump_delay_ticks);
     }
 }

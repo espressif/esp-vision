@@ -7,6 +7,18 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 ### Changed
 
 - Synchronized the MicroPython Wi-Fi authentication constants with the native and remote Wi-Fi backends in ESP-IDF 6.0 and 6.1.
+- Moved Flash and SD FAT filesystem ownership to an ESP-IDF storage manager, with native MicroPython VFS bridges at `/` and `/sdcard` and a shared raw Flash backend for the existing MSC LUN.
+- Exposed SD cards as MSC LUN 1 on SD-capable boards while retaining Flash as LUN 0.
+
+### Fixed
+
+- Delayed the EV-MUX transport task until TinyUSB initialization completes, guaranteed at least one RTOS tick between pumps, and configured the ESP32-S3 boards for a 1000 Hz FreeRTOS tick, preventing USB startup races and MicroPython task starvation.
+- Fixed EV-MUX script execution to close the source file before running it, allowing a script to be overwritten immediately after it finishes.
+- Fixed ESP32-P4X-EYE LCD updates under camera and inference memory pressure by sending the PSRAM framebuffer through SPI DMA directly.
+
+### Removed
+
+- Removed generic `vfs.VfsFat` support from ESP32 firmware now that board Flash and SD FAT volumes are owned by ESP-IDF; `vfs.VfsLfs2` remains available for independent block devices.
 
 ## [2026.07.28]
 
