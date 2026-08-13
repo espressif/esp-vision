@@ -54,7 +54,7 @@ Choose the API that matches the runtime and task:
      - :py:class:`tflite.Model`
      - raw output tensors, or a callback result
 
-For ESP-DL wrappers, pass ``mean``, ``std``, ``score``, ``nms``, ``topk``, or ``softmax`` to the constructor when the model needs different preprocessing or filtering. When you need to keep ESP-DL inference but decode outputs in Python, inspect ``espdl.Model.inputs()`` and ``espdl.Model.outputs()``, then decode the ``RawTensor`` bytes returned by ``predict()``. For TFLite Micro models, inspect ``input_shape``, ``input_dtype``, ``input_scale``, ``input_zero_point``, ``output_shape``, ``output_dtype``, ``output_scale``, and ``output_zero_point`` and implement the model-specific preprocessing or post-processing in Python or helper code.
+For ESP-DL wrappers, pass ``mean``, ``std``, ``rgb_swap``, ``score``, ``nms``, ``topk``, or ``softmax`` to the constructor when the model needs different preprocessing or filtering. When you need to keep ESP-DL inference but decode outputs in Python, inspect ``espdl.Model.inputs()`` and ``espdl.Model.outputs()``, then decode the ``RawTensor`` bytes returned by ``predict()``. For TFLite Micro models, inspect ``input_shape``, ``input_dtype``, ``input_scale``, ``input_zero_point``, ``output_shape``, ``output_dtype``, ``output_scale``, and ``output_zero_point`` and implement the model-specific preprocessing or post-processing in Python or helper code.
 
 4. Run ESP-DL Inference
 -----------------------

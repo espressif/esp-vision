@@ -54,7 +54,7 @@ ESP-VISION 支持两类模型运行路径：ESP-DL ``.espdl`` 模型使用 :doc:
      - :py:class:`tflite.Model`
      - 原始输出 tensor，或回调返回值
 
-对于 ESP-DL 封装，若模型需要不同的预处理或过滤参数，可向构造函数传入 ``mean``、``std``、``score``、``nms``、``topk`` 或 ``softmax``。当需要保留 ESP-DL 推理、但在 Python 中解码输出时，应检查 ``espdl.Model.inputs()`` 和 ``espdl.Model.outputs()``，再解码 ``predict()`` 返回的 ``RawTensor`` 字节。对于 TFLite Micro 模型，应检查 ``input_shape``、``input_dtype``、``input_scale``、``input_zero_point``、``output_shape``、``output_dtype``、``output_scale`` 和 ``output_zero_point``，并在 Python 或辅助代码中实现模型相关的预处理或后处理。
+对于 ESP-DL 封装，若模型需要不同的预处理或过滤参数，可向构造函数传入 ``mean``、``std``、``rgb_swap``、``score``、``nms``、``topk`` 或 ``softmax``。当需要保留 ESP-DL 推理、但在 Python 中解码输出时，应检查 ``espdl.Model.inputs()`` 和 ``espdl.Model.outputs()``，再解码 ``predict()`` 返回的 ``RawTensor`` 字节。对于 TFLite Micro 模型，应检查 ``input_shape``、``input_dtype``、``input_scale``、``input_zero_point``、``output_shape``、``output_dtype``、``output_scale`` 和 ``output_zero_point``，并在 Python 或辅助代码中实现模型相关的预处理或后处理。
 
 4. 运行 ESP-DL 推理
 -------------------

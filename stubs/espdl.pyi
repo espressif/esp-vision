@@ -36,6 +36,7 @@ class Model:
     #: path: model path.
     #: mean: optional RGB mean values for image preprocessing.
     #: std: optional RGB standard deviation values for image preprocessing.
+    #: rgb_swap: True converts RGB input to BGR before model inference.
     #: letterbox: True keeps aspect ratio and pads the model input.
     #: pad: optional RGB padding values used when letterbox is enabled.
     def __init__(
@@ -44,6 +45,7 @@ class Model:
         *,
         mean: Float3 | None = None,
         std: Float3 | None = None,
+        rgb_swap: bool = False,
         letterbox: bool = True,
         pad: Float3 | None = None,
     ) -> None: ...
