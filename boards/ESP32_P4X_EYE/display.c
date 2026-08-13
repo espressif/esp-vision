@@ -109,6 +109,7 @@ esp_err_t esp_vision_board_display_init_panel(uint32_t width,
         .lcd_param_bits = ESP_VISION_LCD_PARAM_BITS,
         .spi_mode = 3,
         .trans_queue_depth = 2,
+        .flags.psram_dma_direct = true,
     };
 
     ret = esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)spi_host, &io_config, io_handle);

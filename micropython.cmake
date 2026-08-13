@@ -74,6 +74,8 @@ target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_ROOT}/platform/jpeg.c
     ${ESP_VISION_ROOT}/platform/preview.c
     ${ESP_VISION_ROOT}/platform/sdcard.c
+    ${ESP_VISION_ROOT}/platform/storage.c
+    ${ESP_VISION_ROOT}/platform/storage_vfs.c
     ${ESP_VISION_ROOT}/platform/usb_msc.c
     ${ESP_VISION_BOARD_SOURCES}
 )

@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 void ev_stdio_init0(void);
+void ev_stdio_start_transport(void);
 void ev_stdio_set_mux_enabled(bool enabled);
 bool ev_stdio_mux_enabled(void);
 

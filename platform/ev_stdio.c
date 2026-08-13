@@ -179,6 +179,11 @@ void ev_stdio_init0(void)
 #endif
 }
 
+void ev_stdio_start_transport(void)
+{
+    ev_control_transport_start();
+}
+
 void ev_stdio_set_mux_enabled(bool enabled)
 {
     bool was_enabled = ev_stdio_mux_enabled_flag;
