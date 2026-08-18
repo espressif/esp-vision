@@ -3,7 +3,7 @@ espdl -- Model Inference
 
 :link_to_translation:`zh_CN:[中文]`
 
-The ``espdl`` module runs ESP-DL ``.espdl`` models on captured images. It provides task-specific wrappers for object detection (:py:class:`ESPDet`, :py:class:`YOLO11`), pose estimation (:py:class:`YOLO11nPose`), and image classification (:py:class:`ImageNetCls`), plus :py:class:`Model` for exposing raw ESP-DL output tensors to Python.
+The ``espdl`` module runs ESP-DL ``.espdl`` models on captured images. It provides task-specific wrappers for object detection (:py:class:`PedestrianDetect`, :py:class:`ESPDet`, :py:class:`YOLO11`), pose estimation (:py:class:`YOLO11nPose`), and image classification (:py:class:`ImageNetCls`), plus :py:class:`Model` for exposing raw ESP-DL output tensors to Python.
 
 Raw Output Tensors
 ------------------
@@ -43,6 +43,24 @@ Object Detection
        det.deinit()
 
 ``score`` removes low-confidence candidates, while ``nms`` controls suppression of overlapping boxes. Detection coordinates are mapped back to the input image and can be used directly for drawing. Load a model once and reuse it across frames; ``deinit()`` releases model weights and intermediate buffers.
+
+PicoDet
+-------
+
+PicoDet is the detector family used by the bundled pedestrian model. Its anchor-point output tensors are decoded by ESP-DL's Pico postprocessor; this output layout is distinct from ESPDet and YOLO11.
+
+PedestrianDetect
+----------------
+
+:py:class:`PedestrianDetect` is the Python API for the bundled 224x224 PicoDet pedestrian model. It uses the model's preprocessing defaults and returns the standard detection tuples:
+
+.. code-block:: python
+
+   det = espdl.PedestrianDetect(
+       "/sdcard/pedestrian_detect/pedestrian_detect_pico.espdl",
+       score=0.7,
+       nms=0.5,
+   )
 
 Image Classification
 --------------------
@@ -105,6 +123,6 @@ Result tuples
 
    :doc:`../concepts/ai-inference` describes the ESP-DL inference pipeline, the ``.espdl`` format, quantization, and pre-/post-processing. To deploy a new model, see :doc:`../how-to/add-model`.
 
-   Runnable examples: ``example/03-Machine-Learning/00-ESP-DL`` (ESP-DL raw output decoding, ESPDet, YOLO11, pose, ImageNet classification).
+   Runnable examples: ``example/03-Machine-Learning/00-ESP-DL`` (pedestrian detection, ESP-DL raw output decoding, ESPDet, YOLO11, pose, ImageNet classification).
 
 .. include:: _generated/espdl.rst

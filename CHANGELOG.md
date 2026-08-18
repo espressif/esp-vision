@@ -6,6 +6,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Added the shared ESP-DL PicoDet pedestrian model, an `espdl.PedestrianDetect` wrapper with model-specific preprocessing and post-processing, Python stubs, and a camera example for ESP32-P4/S31/S3 boards.
 - Added a button-triggered PP-OCRv6 pipeline with separate INT8 text detection and recognition stages, Python detection/CTC post-processing, and generic BGR preprocessing through `espdl.Model`.
 
 ### Changed

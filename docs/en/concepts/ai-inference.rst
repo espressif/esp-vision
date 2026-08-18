@@ -48,7 +48,7 @@ Post-processing
 
 Raw network outputs often need task-specific decoding before they are useful to an application:
 
-- **Object detection** (:py:class:`espdl.ESPDet`, :py:class:`espdl.YOLO11`) produces candidate boxes with class scores. A confidence ``score`` threshold drops weak boxes and **non-maximum suppression** (``nms``) removes overlapping duplicates, leaving ``(x, y, w, h, score, category)`` tuples. ``YOLO11`` also caps results with ``topk``.
+- **Object detection** (:py:class:`espdl.PedestrianDetect`, :py:class:`espdl.ESPDet`, :py:class:`espdl.YOLO11`) produces candidate boxes with class scores. A confidence ``score`` threshold drops weak boxes and **non-maximum suppression** (``nms``) removes overlapping duplicates, leaving ``(x, y, w, h, score, category)`` tuples. ``PedestrianDetect`` and ``YOLO11`` also cap results with ``topk``.
 - **Pose estimation** (:py:class:`espdl.YOLO11nPose`) adds 17 COCO keypoints per detection.
 - **Classification** (:py:class:`espdl.ImageNetCls`) applies an optional ``softmax`` and returns the ``topk`` ``(label, score)`` pairs.
 - **Raw output decoding** (:py:class:`espdl.Model`, :py:class:`tflite.Model`) exposes model outputs before task decoding. Application code must unpack the tensor dtype, use the quantization metadata, and run model-specific steps such as anchor decode, sigmoid or softmax, NMS, top-k selection, and coordinate mapping.

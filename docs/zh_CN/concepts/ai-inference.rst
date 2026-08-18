@@ -48,7 +48,7 @@ ESP-DL 和 TFLite Micro 是 ESP-VISION 当前暴露的两条模型运行路径�
 
 网络原始输出通常需要按任务解码后，才能被应用直接使用：
 
-- **目标检测**\ （:py:class:`espdl.ESPDet`\ 、:py:class:`espdl.YOLO11`\ ）产生带类别 分数的候选框。置信度 ``score`` 阈值剔除弱框，**非极大值抑制**\ （``nms``\ ）去除 重叠重复，最终得到 ``(x, y, w, h, score, category)`` 元组。``YOLO11`` 还用 ``topk`` 限制数量。
+- **目标检测**\ （:py:class:`espdl.PedestrianDetect`\ 、:py:class:`espdl.ESPDet`\ 、:py:class:`espdl.YOLO11`\ ）产生带类别分数的候选框。置信度 ``score`` 阈值剔除弱框，**非极大值抑制**\ （``nms``\ ）去除重叠重复，最终得到 ``(x, y, w, h, score, category)`` 元组。``PedestrianDetect`` 和 ``YOLO11`` 还用 ``topk`` 限制数量。
 - **姿态估计**\ （:py:class:`espdl.YOLO11nPose`\ ）为每个检测附加 17 个 COCO 关键点。
 - **分类**\ （:py:class:`espdl.ImageNetCls`\ ）应用可选的 ``softmax``\ ，返回 ``topk`` 个 ``(label, score)`` 对。
 - **原始输出解码**\ （:py:class:`espdl.Model`\ 、:py:class:`tflite.Model`\ ）暴露任务解码前的模型输出。应用代码需要解包 tensor dtype，使用量化元数据，并执行 anchor 解码、sigmoid 或 softmax、NMS、top-k 选择以及坐标映射等模型相关步骤。

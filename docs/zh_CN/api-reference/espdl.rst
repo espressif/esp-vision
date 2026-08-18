@@ -3,7 +3,7 @@ espdl -- 模型推理
 
 :link_to_translation:`en:[English]`
 
-``espdl`` 模块在采集到的图像上运行 ESP-DL 的 ``.espdl`` 模型，并提供常见任务封装：目标检测（:py:class:`ESPDet`\ 、:py:class:`YOLO11`\ ）、姿态估计（:py:class:`YOLO11nPose`\ ）和图像分类（:py:class:`ImageNetCls`\ ），同时可通过 :py:class:`Model` 将 ESP-DL 原始输出 tensor 暴露给 Python。
+``espdl`` 模块在采集到的图像上运行 ESP-DL 的 ``.espdl`` 模型，并提供常见任务封装：目标检测（:py:class:`PedestrianDetect`\ 、:py:class:`ESPDet`\ 、:py:class:`YOLO11`\ ）、姿态估计（:py:class:`YOLO11nPose`\ ）和图像分类（:py:class:`ImageNetCls`\ ），同时可通过 :py:class:`Model` 将 ESP-DL 原始输出 tensor 暴露给 Python。
 
 原始输出 tensor
 ---------------
@@ -43,6 +43,24 @@ espdl -- 模型推理
        det.deinit()
 
 ``score`` 用于过滤低置信度候选框，``nms`` 用于控制重叠检测框的抑制。检测坐标会映射回输入图像，可直接用于绘图。模型应加载一次并在多帧之间复用；``deinit()`` 会释放模型权重和中间缓冲区。
+
+PicoDet
+-------
+
+PicoDet 是仓库自带行人模型采用的检测器家族。它的 anchor-point 输出 tensor 由 ESP-DL 的 Pico 后处理器解码，输出布局与 ESPDet、YOLO11 不同。
+
+PedestrianDetect
+----------------
+
+:py:class:`PedestrianDetect` 是仓库自带 224x224 PicoDet 行人模型的 Python API。它使用该模型的预处理默认值，并返回标准检测元组：
+
+.. code-block:: python
+
+   det = espdl.PedestrianDetect(
+       "/sdcard/pedestrian_detect/pedestrian_detect_pico.espdl",
+       score=0.7,
+       nms=0.5,
+   )
 
 图像分类
 --------
@@ -105,6 +123,6 @@ espdl -- 模型推理
 
    :doc:`../concepts/ai-inference` 介绍 ESP-DL 推理流程、``.espdl`` 格式、量化以及 前后处理。部署新模型请参见 :doc:`../how-to/add-model`\ 。
 
-   可运行示例：``example/03-Machine-Learning/00-ESP-DL``\ （ESP-DL 原始输出解码、ESPDet、YOLO11、姿态、ImageNet 分类）。
+   可运行示例：``example/03-Machine-Learning/00-ESP-DL``\ （行人检测、ESP-DL 原始输出解码、ESPDet、YOLO11、姿态、ImageNet 分类）。
 
 .. include:: _generated/espdl.rst

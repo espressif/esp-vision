@@ -1,0 +1,12 @@
+{
+    "name": "PicoDet Pedestrian Detection",
+    "architecture": "PicoDet",
+    "api": "espdl.PedestrianDetect",
+    "task": "detection",
+    "input": "224x224",
+    "inputFormat": "RGB565",
+    "dataset": "Not specified by upstream",
+    "labels": ["person"],
+    "sizeBytes": 435280,
+    "description": "Detects pedestrians in camera images with the shared ESP32-P4 model export."
+}
