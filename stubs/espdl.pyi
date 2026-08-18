@@ -90,6 +90,32 @@ class ESPDet:
     def set_thresholds(self, *, score: float | None = None, nms: float | None = None) -> ESPDet: ...
 
 
+#: ESP-DL PicoDet pedestrian detection wrapper.
+class PedestrianDetect:
+    #: Create a pedestrian detector from the bundled ESP-DL model.
+    #: path: model path.
+    #: score: optional confidence threshold; defaults to the upstream model's 0.7.
+    #: nms: optional non-maximum suppression threshold; defaults to the upstream model's 0.5.
+    #: topk: maximum number of detections returned per frame.
+    def __init__(
+        self,
+        path: str,
+        *,
+        score: float | None = None,
+        nms: float | None = None,
+        topk: int = 10,
+    ) -> None: ...
+    def __del__(self) -> None: ...
+    #: Release model resources.
+    def deinit(self) -> None: ...
+    #: Run pedestrian detection on an RGB565 or grayscale image.
+    def detect(self, image: Image) -> list[Detection]: ...
+    #: Update detector thresholds.
+    #: score: new confidence threshold, or None to keep current value.
+    #: nms: new NMS threshold, or None to keep current value.
+    def set_thresholds(self, *, score: float | None = None, nms: float | None = None) -> PedestrianDetect: ...
+
+
 #: ESP-DL YOLO11 object detection wrapper.
 class YOLO11:
     #: Create a YOLO11 detector from an .espdl model.
