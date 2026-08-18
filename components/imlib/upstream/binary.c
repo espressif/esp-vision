@@ -933,6 +933,7 @@ static void imlib_erode_dilate(image_t *img, int ksize, int threshold, int e_or_
             buf.data = fb_alloc(IMAGE_BINARY_LINE_LEN_BYTES(img) * brows, FB_ALLOC_NO_HINT);
 
             for (int y = 0; y < img->h; y++) {
+                imlib_poll_events();
                 uint32_t *row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(img, y);
                 uint32_t *buf_row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(&buf, (y % brows));
                 int acc = 0;
@@ -1007,6 +1008,7 @@ static void imlib_erode_dilate(image_t *img, int ksize, int threshold, int e_or_
             #endif
 
             for (int y = 0; y < img->h; y++) {
+                imlib_poll_events();
                 uint8_t *row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(img, y);
                 uint8_t *buf_row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(&buf, (y % brows));
                 int acc = 0;
@@ -1115,6 +1117,7 @@ static void imlib_erode_dilate(image_t *img, int ksize, int threshold, int e_or_
             #endif
 
             for (int y = 0; y < img->h; y++) {
+                imlib_poll_events();
                 uint16_t *row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(img, y);
                 uint16_t *buf_row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(&buf, (y % brows));
                 int acc = 0;

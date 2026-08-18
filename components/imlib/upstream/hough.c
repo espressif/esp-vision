@@ -50,6 +50,7 @@ void imlib_find_lines(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int 
     switch (ptr->pixfmt) {
         case PIXFORMAT_BINARY: {
             for (int y = roi->y + 1, yy = roi->y + roi->h - 1; y < yy; y += y_stride) {
+                imlib_poll_events();
                 uint32_t *row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(ptr, y);
                 for (int x = roi->x + (y % x_stride) + 1, xx = roi->x + roi->w - 1; x < xx; x += x_stride) {
                     int pixel; // Sobel Algorithm Below
@@ -119,6 +120,7 @@ void imlib_find_lines(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int 
         }
         case PIXFORMAT_GRAYSCALE: {
             for (int y = roi->y + 1, yy = roi->y + roi->h - 1; y < yy; y += y_stride) {
+                imlib_poll_events();
                 uint8_t *row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(ptr, y);
                 for (int x = roi->x + (y % x_stride) + 1, xx = roi->x + roi->w - 1; x < xx; x += x_stride) {
                     int pixel; // Sobel Algorithm Below
@@ -188,6 +190,7 @@ void imlib_find_lines(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int 
         }
         case PIXFORMAT_RGB565: {
             for (int y = roi->y + 1, yy = roi->y + roi->h - 1; y < yy; y += y_stride) {
+                imlib_poll_events();
                 uint16_t *row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(ptr, y);
                 for (int x = roi->x + (y % x_stride) + 1, xx = roi->x + roi->w - 1; x < xx; x += x_stride) {
                     int pixel; // Sobel Algorithm Below
@@ -398,105 +401,6 @@ void imlib_find_lines(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int 
 }
 #endif //IMLIB_ENABLE_FIND_LINES
 
-#ifdef IMLIB_ENABLE_FIND_LINE_SEGMENTS
-// Note this function is not used anymore, see lsd.c
-void imlib_find_line_segments(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int x_stride, unsigned int y_stride,
-                              uint32_t threshold, unsigned int theta_margin, unsigned int rho_margin,
-                              uint32_t segment_threshold) {
-    const unsigned int max_theta_diff = 15;
-    const unsigned int max_gap_pixels = 5;
-
-    list_t temp_out;
-    imlib_find_lines(&temp_out, ptr, roi, x_stride, y_stride, threshold, theta_margin, rho_margin);
-    list_init(out, sizeof(find_lines_list_lnk_data_t));
-
-    const int r_diag_len = fast_roundf(fast_sqrtf((roi->w * roi->w) + (roi->h * roi->h))) * 2;
-    int *theta_buffer = fb_alloc(sizeof(int) * r_diag_len, FB_ALLOC_NO_HINT);
-    uint32_t *mag_buffer = fb_alloc(sizeof(uint32_t) * r_diag_len, FB_ALLOC_NO_HINT);
-    point_t *point_buffer = fb_alloc(sizeof(point_t) * r_diag_len, FB_ALLOC_NO_HINT);
-
-    for (size_t i = 0; list_size(&temp_out); i++) {
-        find_lines_list_lnk_data_t lnk_data;
-        list_pop_front(&temp_out, &lnk_data);
-
-        list_t line_out;
-        list_init(&line_out, sizeof(find_lines_list_lnk_data_t));
-
-        for (int k = -2; k <= 2; k += 2) {
-            line_t l;
-
-            if (abs(lnk_data.line.x2 - lnk_data.line.x1) >= abs(lnk_data.line.y2 - lnk_data.line.y1)) {
-                // the line is more horizontal than vertical
-                l.x1 = lnk_data.line.x1;
-                l.y1 = lnk_data.line.y1 + k;
-                l.x2 = lnk_data.line.x2;
-                l.y2 = lnk_data.line.y2 + k;
-            } else {
-                // the line is more vertical than horizontal
-                l.x1 = lnk_data.line.x1 + k;
-                l.y1 = lnk_data.line.y1;
-                l.x2 = lnk_data.line.x2 + k;
-                l.y2 = lnk_data.line.y2;
-            }
-
-            if (!lb_clip_line(&l, 0, 0, ptr->w, ptr->h)) {
-                continue;
-            }
-
-            find_lines_list_lnk_data_t tmp_line;
-            tmp_line.magnitude = lnk_data.magnitude;
-            tmp_line.theta = lnk_data.theta;
-            tmp_line.rho = lnk_data.rho;
-
-            size_t index = trace_line(ptr, &l, theta_buffer, mag_buffer, point_buffer);
-            unsigned int max_gap = 0;
-
-            for (size_t j = 0; j < index; j++) {
-                int theta_diff = abs(tmp_line.theta - theta_buffer[j]);
-                int theta_diff_2 = (theta_diff >= 90) ? (180 - theta_diff) : theta_diff;
-                bool ok = (mag_buffer[j] >= segment_threshold) && (theta_diff_2 <= max_theta_diff);
-
-                if (!max_gap) {
-                    if (ok) {
-                        max_gap = max_gap_pixels + 1; // (start) auto connect segments max_gap_pixels px apart...
-                        tmp_line.line.x1 = point_buffer[j].x;
-                        tmp_line.line.y1 = point_buffer[j].y;
-                        tmp_line.line.x2 = point_buffer[j].x;
-                        tmp_line.line.y2 = point_buffer[j].y;
-                    }
-                } else {
-                    if (ok) {
-                        max_gap = max_gap_pixels + 1; // (reset) auto connect segments max_gap_pixels px apart...
-                        tmp_line.line.x2 = point_buffer[j].x;
-                        tmp_line.line.y2 = point_buffer[j].y;
-                    } else if (!--max_gap) {
-                        list_push_back(&line_out, &tmp_line);
-                    }
-                }
-            }
-
-            if (max_gap) {
-                list_push_back(&line_out, &tmp_line);
-            }
-        }
-
-        merge_alot(&line_out, max_gap_pixels + 1, max_theta_diff);
-
-        while (list_size(&line_out)) {
-            find_lines_list_lnk_data_t lnk_line;
-            list_pop_front(&line_out, &lnk_line);
-            list_push_back(out, &lnk_line);
-        }
-    }
-
-    merge_alot(out, max_gap_pixels + 1, max_theta_diff);
-
-    fb_free(); // point_buffer
-    fb_free(); // mag_buffer
-    fb_free(); // theta_buffer
-}
-#endif //IMLIB_ENABLE_FIND_LINE_SEGMENTS
-
 #ifdef IMLIB_ENABLE_FIND_CIRCLES
 void imlib_find_circles(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int x_stride, unsigned int y_stride,
                         uint32_t threshold, unsigned int x_margin, unsigned int y_margin, unsigned int r_margin,
@@ -507,6 +411,7 @@ void imlib_find_circles(list_t *out, image_t *ptr, rectangle_t *roi, unsigned in
     switch (ptr->pixfmt) {
         case PIXFORMAT_BINARY: {
             for (int y = roi->y + 1, yy = roi->y + roi->h - 1; y < yy; y += y_stride) {
+                imlib_poll_events();
                 uint32_t *row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(ptr, y);
                 for (int x = roi->x + (y % x_stride) + 1, xx = roi->x + roi->w - 1; x < xx; x += x_stride) {
                     int pixel; // Sobel Algorithm Below
@@ -572,6 +477,7 @@ void imlib_find_circles(list_t *out, image_t *ptr, rectangle_t *roi, unsigned in
         }
         case PIXFORMAT_GRAYSCALE: {
             for (int y = roi->y + 1, yy = roi->y + roi->h - 1; y < yy; y += y_stride) {
+                imlib_poll_events();
                 uint8_t *row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(ptr, y);
                 for (int x = roi->x + (y % x_stride) + 1, xx = roi->x + roi->w - 1; x < xx; x += x_stride) {
                     int pixel; // Sobel Algorithm Below
@@ -637,6 +543,7 @@ void imlib_find_circles(list_t *out, image_t *ptr, rectangle_t *roi, unsigned in
         }
         case PIXFORMAT_RGB565: {
             for (int y = roi->y + 1, yy = roi->y + roi->h - 1; y < yy; y += y_stride) {
+                imlib_poll_events();
                 uint16_t *row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(ptr, y);
                 for (int x = roi->x + (y % x_stride) + 1, xx = roi->x + roi->w - 1; x < xx; x += x_stride) {
                     int pixel; // Sobel Algorithm Below

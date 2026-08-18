@@ -1928,15 +1928,18 @@ static mp_obj_t py_image_line_op(size_t n_args, const mp_obj_t *pos_args, mp_map
         mask = py_helper_arg_to_image(args[ARG_mask].u_obj, ARG_IMAGE_MUTABLE | ARG_IMAGE_ALLOC);
     }
 
-    if ((!callback) && mask) {
+    bool callback_is_mask = (!callback) && mask;
+    if (callback_is_mask) {
         callback = imlib_mask_line_op;
     }
 
     void *dst_row_override = NULL;
     if (callback) {
         dst_row_override = fb_alloc0(image_line_size(image), FB_ALLOC_CACHE_ALIGN);
-        // Necessary for alpha blending to work correctly.
-        args[ARG_hint].u_int |= IMAGE_HINT_BLACK_BACKGROUND;
+        if (!callback_is_mask) {
+            // Necessary for alpha blending to work correctly.
+            args[ARG_hint].u_int |= IMAGE_HINT_BLACK_BACKGROUND;
+        }
     }
 
     imlib_draw_image(image, other, args[ARG_x].u_int, args[ARG_y].u_int, x_scale, y_scale, &roi,
@@ -4677,7 +4680,7 @@ static mp_obj_t py_image_find_lines(size_t n_args, const mp_obj_t *args, mp_map_
 static MP_DEFINE_CONST_FUN_OBJ_KW(py_image_find_lines_obj, 1, py_image_find_lines);
 #endif // IMLIB_ENABLE_FIND_LINES
 
-#if defined(IMLIB_ENABLE_FIND_LINE_SEGMENTS) && (!defined(OMV_NO_GPL))
+#ifdef IMLIB_ENABLE_FIND_LINE_SEGMENTS
 static mp_obj_t py_image_find_line_segments(size_t n_args, const mp_obj_t *args, mp_map_t *kw_args) {
     image_t *arg_img = py_image_cobj(args[0]);
 
@@ -4686,10 +4689,11 @@ static mp_obj_t py_image_find_line_segments(size_t n_args, const mp_obj_t *args,
 
     unsigned int merge_distance = py_helper_keyword_int(n_args, args, 2, kw_args, MP_OBJ_NEW_QSTR(MP_QSTR_merge_distance), 0);
     unsigned int max_theta_diff = py_helper_keyword_int(n_args, args, 3, kw_args, MP_OBJ_NEW_QSTR(MP_QSTR_max_theta_diff), 15);
+    unsigned int threshold = py_helper_keyword_int(n_args, args, 4, kw_args, MP_OBJ_NEW_QSTR(MP_QSTR_threshold), 50);
 
     list_t out;
     fb_alloc_mark();
-    imlib_lsd_find_line_segments(&out, arg_img, &roi, merge_distance, max_theta_diff);
+    imlib_edl_find_line_segments(&out, arg_img, &roi, merge_distance, max_theta_diff, threshold);
     fb_alloc_free_till_mark();
 
     mp_obj_list_t *objects_list = mp_obj_new_list(list_size(&out), NULL);
@@ -6603,7 +6607,7 @@ static const mp_rom_map_elem_t locals_dict_table[] = {
     #else
     {MP_ROM_QSTR(MP_QSTR_find_lines),          MP_ROM_PTR(&py_func_unavailable_obj)},
     #endif
-    #if defined(IMLIB_ENABLE_FIND_LINE_SEGMENTS) && (!defined(OMV_NO_GPL))
+    #ifdef IMLIB_ENABLE_FIND_LINE_SEGMENTS
     {MP_ROM_QSTR(MP_QSTR_find_line_segments),  MP_ROM_PTR(&py_image_find_line_segments_obj)},
     #else
     {MP_ROM_QSTR(MP_QSTR_find_line_segments),  MP_ROM_PTR(&py_func_unavailable_obj)},

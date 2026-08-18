@@ -34,6 +34,9 @@
 #include "omv_common.h"
 #include "omv_gpu.h"
 #include "omv_boardconfig.h"
+#include "simd.h"
+
+uint32_t imlib_poll_counter;
 
 #ifdef IMLIB_ENABLE_GAMMA_LUT
 uint8_t gamma_table[256];
@@ -655,7 +658,7 @@ static save_image_format_t imblib_parse_extension(image_t *img, const char *path
 }
 
 bool imlib_read_geometry(file_t *fp, image_t *img, const char *path, img_read_settings_t *rs) {
-    char magic[4];
+    uint8_t magic[4];
     file_open(fp, path, false, FA_READ | FA_OPEN_EXISTING);
     file_read(fp, &magic, 4);
     file_close(fp);
@@ -696,7 +699,7 @@ bool imlib_read_geometry(file_t *fp, image_t *img, const char *path, img_read_se
 #if defined(IMLIB_ENABLE_IMAGE_FILE_IO)
 void imlib_load_image(image_t *img, const char *path) {
     file_t fp;
-    char magic[4];
+    uint8_t magic[4];
     file_open(&fp, path, false, FA_READ | FA_OPEN_EXISTING);
     file_read(&fp, &magic, 4);
     file_close(&fp);
@@ -1084,34 +1087,80 @@ int imlib_image_std(image_t *src) {
     return fast_sqrtf(v);
 }
 
-void imlib_sepconv3(image_t *img, const int8_t *krn, const float m, const int b) {
-    int ksize = 3;
-    // TODO: Support RGB
-    int *buffer = fb_alloc(img->w * sizeof(*buffer) * 2, FB_ALLOC_NO_HINT);
+// Vertical pass: convolve 3 rows with kernel, store u16 results.
+// Border: clamps row index to [0, h-1].
+static inline void sepconv3_vpass(uint8_t *data, int w, int h, int y,
+                                  int8_t k0, int8_t k1, int8_t k2,
+                                  uint16_t *vrow) {
+    int y0 = y > 0 ? y - 1 : 0;
+    int y2 = y < h - 1 ? y + 1 : h - 1;
+    uint8_t *r0 = data + y0 * w;
+    uint8_t *r1 = data + y * w;
+    uint8_t *r2 = data + y2 * w;
 
-    // NOTE: This doesn't deal with borders right now. Adding if
-    // statements in the inner loop will slow it down significantly.
-    for (int y = 0; y < img->h - ksize; y++) {
-        for (int x = 0; x < img->w; x++) {
-            int acc = 0;
-            //if (IM_X_INSIDE(img, x+k) && IM_Y_INSIDE(img, y+j))
-            acc = __SMLAD(krn[0], IM_GET_GS_PIXEL(img, x, y + 0), acc);
-            acc = __SMLAD(krn[1], IM_GET_GS_PIXEL(img, x, y + 1), acc);
-            acc = __SMLAD(krn[2], IM_GET_GS_PIXEL(img, x, y + 2), acc);
-            buffer[((y % 2) * img->w) + x] = acc;
-        }
+    int x = 0;
+    for (; x <= w - (int) UINT8_VECTOR_SIZE; x += UINT8_VECTOR_SIZE) {
+        v128_t p0 = vldr_u8(r0 + x);
+        v128_t p1 = vldr_u8(r1 + x);
+        v128_t p2 = vldr_u8(r2 + x);
+
+        // Even bytes -> u16
+        v128_t lo = vmla_n_u16(vuxtb16(p0), k0, vdup_u16(0));
+        lo = vmla_n_u16(vuxtb16(p1), k1, lo);
+        lo = vmla_n_u16(vuxtb16(p2), k2, lo);
+
+        // Odd bytes -> u16
+        v128_t hi = vmla_n_u16(vuxtb16_ror8(p0), k0, vdup_u16(0));
+        hi = vmla_n_u16(vuxtb16_ror8(p1), k1, hi);
+        hi = vmla_n_u16(vuxtb16_ror8(p2), k2, hi);
+
+        // Interleave even/odd back to sequential order
+        vst2_u16(vrow + x, (v2x_rows_t) { .r0 = lo, .r1 = hi });
+    }
+    for (; x < w; x++) {
+        vrow[x] = k0 * r0[x] + k1 * r1[x] + k2 * r2[x];
+    }
+}
+
+// Horizontal pass: convolve u16 row with kernel, scale, clamp, store u8.
+// Border: clamps column index to [0, w-1].
+static inline void sepconv3_hpass(uint16_t *prev, uint8_t *dst, int w,
+                                  int8_t k0, int8_t k1, int8_t k2,
+                                  float m, int b) {
+    for (int x = 0; x < w; x++) {
+        int x0 = x > 0 ? x - 1 : 0;
+        int x2 = x < w - 1 ? x + 1 : w - 1;
+        int acc = k0 * prev[x0] + k1 * prev[x] + k2 * prev[x2];
+        acc = (int) (acc * m) + b;
+        dst[x] = (uint8_t) __USAT(acc, 8);
+    }
+}
+
+void imlib_sepconv3(image_t *img, const int8_t *krn, const float m, const int b) {
+    int w = img->w;
+    int h = img->h;
+    uint8_t *data = img->data;
+    int8_t k0 = krn[0], k1 = krn[1], k2 = krn[2];
+
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    // Ping-pong buffer: 2 rows of u16 (max value 4*255=1020, fits u16).
+    uint16_t *vbuf = fb_alloc(w * sizeof(uint16_t) * 2, FB_ALLOC_PREFER_INTERNAL);
+
+    for (int y = 0; y < h; y++) {
+        uint16_t *vrow = vbuf + (y & 1) * w;
+        sepconv3_vpass(data, w, h, y, k0, k1, k2, vrow);
+
         if (y > 0) {
-            // flush buffer
-            for (int x = 0; x < img->w - ksize; x++) {
-                int acc = 0;
-                acc = __SMLAD(krn[0], buffer[((y - 1) % 2) * img->w + x + 0], acc);
-                acc = __SMLAD(krn[1], buffer[((y - 1) % 2) * img->w + x + 1], acc);
-                acc = __SMLAD(krn[2], buffer[((y - 1) % 2) * img->w + x + 2], acc);
-                acc = (acc * m) + b; // scale, offset, and clamp
-                acc = __USAT(acc, 8);
-                IM_SET_GS_PIXEL(img, (x + 1), (y), acc);
-            }
+            uint16_t *prev = vbuf + ((y - 1) & 1) * w;
+            sepconv3_hpass(prev, data + (y - 1) * w, w, k0, k1, k2, m, b);
         }
     }
+
+    // Final flush for the last row.
+    sepconv3_hpass(vbuf + ((h - 1) & 1) * w, data + (h - 1) * w, w, k0, k1, k2, m, b);
+
     fb_free();
 }

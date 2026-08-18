@@ -932,8 +932,8 @@ static void jpeg_write_headers(jpeg_buf_t *jpeg_buf, int w, int h, int bpp, jpeg
 
 bool jpeg_compress(image_t *src, image_t *dst, int quality, bool realloc, jpeg_subsampling_t subsampling) {
     if (!dst->data) {
-        uint32_t size = 0;
-        dst->data = fb_alloc_all(&size, FB_ALLOC_PREFER_SIZE | FB_ALLOC_CACHE_ALIGN);
+        uint32_t size = IM_MIN(fb_avail(), JPEG_MAX_ALLOC_SIZE);
+        dst->data = fb_alloc(size, FB_ALLOC_PREFER_SIZE | FB_ALLOC_CACHE_ALIGN);
         dst->size = IMLIB_IMAGE_MAX_SIZE(size);
     }
 

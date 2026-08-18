@@ -58,6 +58,7 @@ void imlib_edge_canny(image_t *src, rectangle_t *roi, int low_thresh, int high_t
 
     //2. Finding Image Gradients
     for (int gy = 1, y = roi->y + 1; y < roi->y + roi->h - 1; y++, gy++) {
+        imlib_poll_events();
         for (int gx = 1, x = roi->x + 1; x < roi->x + roi->w - 1; x++, gx++) {
             int vx = 0, vy = 0;
             // sobel kernel in the horizontal direction

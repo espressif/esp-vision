@@ -992,6 +992,7 @@ static void threshold(struct quirc *q)
     fracmul2 = (0x100000 * (100 - THRESHOLD_T)) / (200 * threshold_s); // use as many bits as possible without overflowing
 
     for (y = 0; y < q->h; y++) {
+        imlib_poll_events();
         int row_average[q->w];
 
         memset(row_average, 0, sizeof(row_average));

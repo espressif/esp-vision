@@ -118,6 +118,20 @@
 #define IM_DEG2RAD(x)            (((x) * IMLIB_PI) / 180.0f)
 #define IM_RAD2DEG(x)            (((x) * 180.0f) / IMLIB_PI)
 
+#ifndef IMLIB_POLL_INTERVAL_CALLS
+#define IMLIB_POLL_INTERVAL_CALLS    (32)
+#endif
+
+extern uint32_t imlib_poll_counter;
+
+#define imlib_poll_events()                                \
+    do {                                                   \
+        if (++imlib_poll_counter >= IMLIB_POLL_INTERVAL_CALLS) { \
+            imlib_poll_counter = 0;                        \
+            mp_event_handle_nowait();                      \
+        }                                                  \
+    } while (0)
+
 int imlib_ksize_to_n(int ksize);
 
 /////////////////
@@ -813,6 +827,7 @@ bool image_get_mask_pixel(image_t *ptr, int x, int y);
 #define JPEG_444_YCBCR_MCU_SIZE    ((JPEG_444_GS_MCU_SIZE) * 3)
 #define JPEG_422_YCBCR_MCU_SIZE    ((JPEG_444_GS_MCU_SIZE) * 4)
 #define JPEG_420_YCBCR_MCU_SIZE    ((JPEG_444_GS_MCU_SIZE) * 6)
+#define JPEG_MAX_ALLOC_SIZE        (1024UL * 1024UL) // 1 MB
 
 typedef enum jpeg_subsampling {
     JPEG_SUBSAMPLING_AUTO = 0,
@@ -1528,14 +1543,9 @@ size_t trace_line(image_t *ptr, line_t *l, int *theta_buffer, uint32_t *mag_buff
 void merge_alot(list_t *out, int threshold, int theta_threshold); // helper/internal
 void imlib_find_lines(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int x_stride, unsigned int y_stride,
                       uint32_t threshold, unsigned int theta_margin, unsigned int rho_margin);
-void imlib_lsd_find_line_segments(list_t *out,
-                                  image_t *ptr,
-                                  rectangle_t *roi,
-                                  unsigned int merge_distance,
-                                  unsigned int max_theta_diff);
-void imlib_find_line_segments(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int x_stride, unsigned int y_stride,
-                              uint32_t threshold, unsigned int theta_margin, unsigned int rho_margin,
-                              uint32_t segment_threshold);
+void imlib_edl_find_line_segments(list_t *out, image_t *ptr, rectangle_t *roi,
+                                  unsigned int merge_distance, unsigned int max_theta_diff,
+                                  unsigned int threshold);
 void imlib_find_circles(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int x_stride, unsigned int y_stride,
                         uint32_t threshold, unsigned int x_margin, unsigned int y_margin, unsigned int r_margin,
                         unsigned int r_min, unsigned int r_max, unsigned int r_step);
