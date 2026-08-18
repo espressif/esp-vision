@@ -172,6 +172,7 @@ void imlib_find_blobs(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int 
         switch (ptr->pixfmt) {
             case PIXFORMAT_BINARY: {
                 for (int y = roi->y, yy = roi->y + roi->h, y_max = yy - 1; y < yy; y += y_stride) {
+                    imlib_poll_events();
                     uint32_t *row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(ptr, y);
                     uint32_t *bmp_row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(&bmp, y);
                     for (int x = roi->x + (y % x_stride), xx = roi->x + roi->w, x_max = xx - 1; x < xx; x += x_stride) {
@@ -478,6 +479,7 @@ void imlib_find_blobs(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int 
             }
             case PIXFORMAT_GRAYSCALE: {
                 for (int y = roi->y, yy = roi->y + roi->h, y_max = yy - 1; y < yy; y += y_stride) {
+                    imlib_poll_events();
                     uint8_t *row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(ptr, y);
                     uint32_t *bmp_row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(&bmp, y);
                     for (int x = roi->x + (y % x_stride), xx = roi->x + roi->w, x_max = xx - 1; x < xx; x += x_stride) {
@@ -784,6 +786,7 @@ void imlib_find_blobs(list_t *out, image_t *ptr, rectangle_t *roi, unsigned int 
             }
             case PIXFORMAT_RGB565: {
                 for (int y = roi->y, yy = roi->y + roi->h, y_max = yy - 1; y < yy; y += y_stride) {
+                    imlib_poll_events();
                     uint16_t *row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(ptr, y);
                     uint32_t *bmp_row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(&bmp, y);
                     for (int x = roi->x + (y % x_stride), xx = roi->x + roi->w, x_max = xx - 1; x < xx; x += x_stride) {

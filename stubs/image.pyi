@@ -1005,6 +1005,17 @@ class Image:
         theta_margin: int = 25,
         rho_margin: int = 25,
     ) -> list[line]: ...
+    #: Find line segments with the Edge Drawing Lines detector.
+    #: merge_distance and max_theta_diff merge nearby, similarly angled segments.
+    #: threshold: minimum Sobel gradient magnitude used to seed and trace edges.
+    def find_line_segments(
+        self,
+        *,
+        roi: RectLike | None = None,
+        merge_distance: int = 0,
+        max_theta_diff: int = 15,
+        threshold: int = 50,
+    ) -> list[line]: ...
     #: Find circles with the Hough transform.
     #: threshold: minimum accumulator magnitude.
     #: x_margin, y_margin, r_margin: merge tolerances.

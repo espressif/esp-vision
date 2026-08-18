@@ -255,6 +255,7 @@ float imlib_template_match_ex(image_t *f, image_t *t, rectangle_t *roi, int step
     }
 
     for (int v = roi->y; v <= (roi->y + roi->h - t->h); v += step) {
+        imlib_poll_events();
         for (int u = roi->x; u <= (roi->x + roi->w - t->w); u += step) {
             int num = 0;
             // The mean of the current patch

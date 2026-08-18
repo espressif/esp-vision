@@ -33,6 +33,7 @@ idf_component_register(
         "upstream/bmp.c"
         "upstream/draw.c"
         "upstream/edge.c"
+        "upstream/edl.c"
         "upstream/eye.c"
         "upstream/filter.c"
         "upstream/fmath.c"

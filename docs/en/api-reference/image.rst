@@ -3,7 +3,7 @@ image -- Image Processing
 
 :link_to_translation:`zh_CN:[中文]`
 
-The ``image`` module provides the :py:class:`Image` object and the vision algorithms built on OpenMV ``imlib``: drawing, format conversion, filtering, color/blob analysis, and feature detection (lines, circles, rectangles, QR codes, and AprilTags). The codec stream type :py:class:`imageio.ImageIO` is documented in :doc:`imageio`.
+The ``image`` module provides the :py:class:`Image` object and the vision algorithms built on OpenMV ``imlib``: drawing, format conversion, filtering, color/blob analysis, and feature detection (lines, line segments, circles, rectangles, QR codes, and AprilTags). The codec stream type :py:class:`imageio.ImageIO` is documented in :doc:`imageio`.
 
 .. only:: esp32p4
 
@@ -58,8 +58,8 @@ QR Code Recognition
 
 ``find_qrcodes()`` returns geometry and decoded payload data. Grayscale input generally reduces processing cost, and a smaller ROI can be supplied when the code is expected in a known part of the frame.
 
-Line and Circle Detection
--------------------------
+Line, Segment, and Circle Detection
+-----------------------------------
 
 .. code-block:: python
 
@@ -67,10 +67,13 @@ Line and Circle Detection
    for line in img.find_lines(threshold=1400, theta_margin=25, rho_margin=25):
        img.draw_line(line.line(), color=255, thickness=2)
 
+   for segment in img.find_line_segments(threshold=50, merge_distance=10):
+       img.draw_line(segment.line(), color=255, thickness=2)
+
    for circle in img.find_circles(threshold=2500, r_min=8, r_max=80, r_step=4):
        img.draw_circle(circle.x(), circle.y(), circle.r(), color=255, thickness=2)
 
-Detection thresholds control the required accumulator strength. Increasing them reduces weak detections; constraining the radius range, ROI, or image resolution lowers computation and usually improves stability.
+``find_lines()`` and ``find_circles()`` use Hough accumulator thresholds. ``find_line_segments()`` uses the Edge Drawing Lines detector, where ``threshold`` is the minimum Sobel gradient magnitude and ``merge_distance`` joins nearby segments. Increasing thresholds reduces weak detections; constraining the radius range, ROI, or image resolution lowers computation and usually improves stability.
 
 Encode and Save an Image
 ------------------------
@@ -92,6 +95,6 @@ Most in-place methods return the image itself, so operations can be chained: ``i
 
    For the theory behind these methods, see :doc:`../concepts/image-model` (pixel formats, color spaces, the frame buffer) and :doc:`../concepts/image-processing` (filtering, thresholding, feature detection).
 
-   Runnable examples: ``example/02-Image-Processing`` (drawing, filters, color tracking, frame differencing), ``example/04-Barcodes`` (QR codes), and ``example/05-Feature-Detection`` (AprilTags, lines, circles).
+   Runnable examples: ``example/02-Image-Processing`` (drawing, filters, color tracking, frame differencing), ``example/04-Barcodes`` (QR codes), and ``example/05-Feature-Detection`` (AprilTags, lines, line segments, circles).
 
 .. include:: _generated/image.rst

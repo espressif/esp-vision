@@ -28,7 +28,7 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - ``lib/ulab``
      - 数组与数值计算
      - MIT
-   * - `OpenMV <https://github.com/openmv/openmv>`__ ``imlib`` 子集
+   * - `OpenMV v5.0.0 <https://github.com/openmv/openmv/tree/v5.0.0>`__ ``imlib`` 子集
      - ``components/imlib``
      - 图像处理与绘制算法
      - MIT，部分文件单独授权

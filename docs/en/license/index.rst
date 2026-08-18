@@ -28,7 +28,7 @@ The following table lists the direct dependencies most relevant to redistributio
      - ``lib/ulab``
      - Array and numerical computing
      - MIT
-   * - `OpenMV <https://github.com/openmv/openmv>`__ ``imlib`` subset
+   * - `OpenMV v5.0.0 <https://github.com/openmv/openmv/tree/v5.0.0>`__ ``imlib`` subset
      - ``components/imlib``
      - Image processing and drawing algorithms
      - MIT, with separately licensed files

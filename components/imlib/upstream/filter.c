@@ -165,6 +165,7 @@ void imlib_mean_filter(image_t *img, const int ksize, bool threshold, int offset
             buf.data = fb_alloc(IMAGE_BINARY_LINE_LEN_BYTES(img) * brows, FB_ALLOC_NO_HINT);
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 int pixel, acc = 0;
                 uint32_t *row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(img, y);
                 uint32_t *buf_row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(&buf, (y % brows));
@@ -230,6 +231,7 @@ void imlib_mean_filter(image_t *img, const int ksize, bool threshold, int offset
             buf.data = fb_alloc(IMAGE_GRAYSCALE_LINE_LEN_BYTES(img) * brows, FB_ALLOC_NO_HINT);
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 int pixel, acc = 0;
                 uint8_t *row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(img, y);
                 uint8_t *buf_row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(&buf, (y % brows));
@@ -294,6 +296,7 @@ void imlib_mean_filter(image_t *img, const int ksize, bool threshold, int offset
             buf.data = fb_alloc(IMAGE_RGB565_LINE_LEN_BYTES(img) * brows, FB_ALLOC_NO_HINT);
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint16_t *row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(img, y);
                 uint16_t *buf_row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -420,6 +423,7 @@ void imlib_median_filter(image_t *img, const int ksize, float percentile, bool t
             int sum = 0;
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint32_t *row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(img, y);
                 uint32_t *buf_row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -482,6 +486,7 @@ void imlib_median_filter(image_t *img, const int ksize, float percentile, bool t
             uint8_t *data = fb_alloc(64, FB_ALLOC_NO_HINT);
             uint8_t pixel;
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint8_t *row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(img, y);
                 uint8_t *buf_row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -554,6 +559,7 @@ void imlib_median_filter(image_t *img, const int ksize, float percentile, bool t
             uint8_t *b_data = fb_alloc(32, FB_ALLOC_NO_HINT);
             uint8_t r, g, b;
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint16_t *row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(img, y);
                 uint16_t *buf_row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -670,6 +676,7 @@ void imlib_mode_filter(image_t *img, const int ksize, bool threshold, int offset
             int bins = 0;
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint32_t *row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(img, y);
                 uint32_t *buf_row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -733,6 +740,7 @@ void imlib_mode_filter(image_t *img, const int ksize, bool threshold, int offset
             uint8_t *bins = fb_alloc((COLOR_GRAYSCALE_MAX - COLOR_GRAYSCALE_MIN + 1), FB_ALLOC_NO_HINT);
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint8_t *row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(img, y);
                 uint8_t *buf_row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(&buf, (y % brows));
                 uint8_t pixel = 0, mode = 0;
@@ -826,6 +834,7 @@ void imlib_mode_filter(image_t *img, const int ksize, bool threshold, int offset
             int r_pixel, g_pixel, b_pixel;
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint16_t *row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(img, y);
                 uint16_t *buf_row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(&buf, (y % brows));
                 int r_mcount = 0, g_mcount = 0, b_mcount = 0;
@@ -995,6 +1004,7 @@ void imlib_midpoint_filter(image_t *img, const int ksize, float bias, bool thres
             buf.data = fb_alloc(IMAGE_BINARY_LINE_LEN_BYTES(img) * brows, FB_ALLOC_NO_HINT);
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint32_t *row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(img, y);
                 uint32_t *buf_row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -1064,6 +1074,7 @@ void imlib_midpoint_filter(image_t *img, const int ksize, float bias, bool thres
             buf.data = fb_alloc(IMAGE_GRAYSCALE_LINE_LEN_BYTES(img) * brows, FB_ALLOC_NO_HINT);
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint8_t *row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(img, y);
                 uint8_t *buf_row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -1138,6 +1149,7 @@ void imlib_midpoint_filter(image_t *img, const int ksize, float bias, bool thres
             buf.data = fb_alloc(IMAGE_RGB565_LINE_LEN_BYTES(img) * brows, FB_ALLOC_NO_HINT);
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint16_t *row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(img, y);
                 uint16_t *buf_row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -1273,6 +1285,7 @@ void imlib_morph(image_t *img,
             buf.data = fb_alloc(IMAGE_BINARY_LINE_LEN_BYTES(img) * brows, FB_ALLOC_NO_HINT);
 
             for (int y = 0; y < img->h; y++) {
+                imlib_poll_events();
                 uint32_t *row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(img, y);
                 uint32_t *buf_row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -1352,6 +1365,7 @@ void imlib_morph(image_t *img,
             #endif
 
             for (int y = 0; y < img->h; y++) {
+                imlib_poll_events();
                 uint8_t *row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(img, y);
                 uint8_t *buf_row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -1530,6 +1544,7 @@ void imlib_morph(image_t *img,
             #endif
 
             for (int y = 0; y < img->h; y++) {
+                imlib_poll_events();
                 uint16_t *row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(img, y);
                 uint16_t *buf_row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -1811,6 +1826,7 @@ void imlib_bilateral_filter(image_t *img,
             }
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint32_t *row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(img, y);
                 uint32_t *buf_row_ptr = IMAGE_COMPUTE_BINARY_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -1889,6 +1905,7 @@ void imlib_bilateral_filter(image_t *img,
             }
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint8_t *row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(img, y);
                 uint8_t *buf_row_ptr = IMAGE_COMPUTE_GRAYSCALE_PIXEL_ROW_PTR(&buf, (y % brows));
 
@@ -1987,6 +2004,7 @@ void imlib_bilateral_filter(image_t *img,
             }
 
             for (int y = 0, yy = img->h; y < yy; y++) {
+                imlib_poll_events();
                 uint16_t *row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(img, y);
                 uint16_t *buf_row_ptr = IMAGE_COMPUTE_RGB565_PIXEL_ROW_PTR(&buf, (y % brows));
 

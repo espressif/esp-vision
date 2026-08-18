@@ -69,6 +69,7 @@ Feature detection
 Higher-level detectors find geometric structure:
 
 - :py:meth:`image.Image.find_lines` and :py:meth:`image.Image.find_circles` use the Hough transform; their ``threshold`` is the minimum accumulator score and the ``*_margin`` keywords merge near-duplicate results.
+- :py:meth:`image.Image.find_line_segments` uses Edge Drawing Lines; its ``threshold`` is the minimum Sobel gradient magnitude, while ``merge_distance`` and ``max_theta_diff`` control segment merging.
 - :py:meth:`image.Image.find_rects` locates quadrilaterals (useful for fiducials and screens).
 - :py:meth:`image.Image.find_qrcodes` and :py:meth:`image.Image.find_apriltags` detect and decode the corresponding marker types; AprilTags can additionally return 6-DoF pose when camera intrinsics are supplied.
 

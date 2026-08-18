@@ -3,7 +3,7 @@ image -- 图像处理
 
 :link_to_translation:`en:[English]`
 
-``image`` 模块提供 :py:class:`Image` 对象以及基于 OpenMV ``imlib`` 的视觉算法： 绘图、格式转换、滤波、颜色/色块分析，以及特征检测（直线、圆、矩形、二维码、 AprilTag）。编解码流类型 :py:class:`imageio.ImageIO` 见 :doc:`imageio`\ 。
+``image`` 模块提供 :py:class:`Image` 对象以及基于 OpenMV ``imlib`` 的视觉算法： 绘图、格式转换、滤波、颜色/色块分析，以及特征检测（直线、线段、圆、矩形、二维码、 AprilTag）。编解码流类型 :py:class:`imageio.ImageIO` 见 :doc:`imageio`\ 。
 
 .. only:: esp32p4
 
@@ -58,8 +58,8 @@ RGB565 阈值包含六个 LAB 范围值：``(L_min, L_max, A_min, A_max, B_min, 
 
 ``find_qrcodes()`` 返回二维码的几何信息和解码内容。灰度输入通常可以降低处理开销；如果二维码只会出现在画面的固定区域，还可以指定较小的 ROI。
 
-直线与圆检测
-------------
+直线、线段与圆检测
+------------------
 
 .. code-block:: python
 
@@ -67,10 +67,13 @@ RGB565 阈值包含六个 LAB 范围值：``(L_min, L_max, A_min, A_max, B_min, 
    for line in img.find_lines(threshold=1400, theta_margin=25, rho_margin=25):
        img.draw_line(line.line(), color=255, thickness=2)
 
+   for segment in img.find_line_segments(threshold=50, merge_distance=10):
+       img.draw_line(segment.line(), color=255, thickness=2)
+
    for circle in img.find_circles(threshold=2500, r_min=8, r_max=80, r_step=4):
        img.draw_circle(circle.x(), circle.y(), circle.r(), color=255, thickness=2)
 
-检测阈值用于控制所需的累加器强度，提高阈值可减少较弱的检测结果。限制半径范围、ROI 或图像分辨率可以降低计算量，并通常能够提升稳定性。
+``find_lines()`` 和 ``find_circles()`` 使用霍夫累加器阈值。``find_line_segments()`` 使用 Edge Drawing Lines 检测器，其中 ``threshold`` 是用于产生并追踪边缘的最小 Sobel 梯度幅值，``merge_distance`` 用于合并邻近线段。提高阈值可减少较弱的检测结果；限制半径范围、ROI 或图像分辨率可以降低计算量，并通常能够提升稳定性。
 
 编码并保存图像
 --------------
@@ -92,6 +95,6 @@ JPEG quality 用于权衡编码体积与图像细节，4:2:0 色度抽样通常�
 
    关于这些方法背后的原理，参见 :doc:`../concepts/image-model`\ （像素格式、 色彩空间、帧缓冲）与 :doc:`../concepts/image-processing`\ （滤波、阈值化、 特征检测）。
 
-   可运行示例：``example/02-Image-Processing``\ （绘图、滤波、颜色追踪、帧差分）、``example/04-Barcodes``\ （二维码）与 ``example/05-Feature-Detection``\ （AprilTag、直线、圆）。
+   可运行示例：``example/02-Image-Processing``\ （绘图、滤波、颜色追踪、帧差分）、``example/04-Barcodes``\ （二维码）与 ``example/05-Feature-Detection``\ （AprilTag、直线、线段、圆）。
 
 .. include:: _generated/image.rst
