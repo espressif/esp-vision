@@ -28,6 +28,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Fixed ESP32-P4X-EYE LCD updates under camera and inference memory pressure by sending the PSRAM framebuffer through SPI DMA directly.
 - Fixed EV-MUX CDC startup on boards with a 100 Hz FreeRTOS tick by guaranteeing the higher-priority transport task delays for at least one tick instead of starving the MicroPython main task with `vTaskDelay(0)`; CDC hello discovery now waits for DTR-ready state, and USB serial descriptors encode only the initialized six-byte factory MAC.
 - Fixed the EV-MUX stress test to expect non-active-sink discovery responses on their request ingress, matching the protocol v3 RPC response contract.
+- Fixed EV-MUX path validation so script/filesystem paths are limited to 123 bytes, leaving room for the transactional `.tmp` suffix within MicroPython's 128-byte VFS path capacity; over-limit paths return `PATH_TOO_LONG` without entering VFS or resetting the VM.
 
 ### Removed
 
