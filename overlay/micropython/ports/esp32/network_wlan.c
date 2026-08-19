@@ -767,12 +767,6 @@ static const mp_rom_map_elem_t wlan_if_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_SEC_WAPI), MP_ROM_INT(WIFI_AUTH_WAPI_PSK) },
     { MP_ROM_QSTR(MP_QSTR_SEC_OWE), MP_ROM_INT(WIFI_AUTH_OWE) },
     { MP_ROM_QSTR(MP_QSTR_SEC_WPA3_ENT_192), MP_ROM_INT(WIFI_AUTH_WPA3_ENT_192) },
-    #ifdef WIFI_AUTH_WPA3_EXT_PSK
-    { MP_ROM_QSTR(MP_QSTR_SEC_WPA3_EXT_PSK), MP_ROM_INT(WIFI_AUTH_WPA3_EXT_PSK) },
-    #endif
-    #ifdef WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE
-    { MP_ROM_QSTR(MP_QSTR_SEC_WPA3_EXT_PSK_MIXED_MODE), MP_ROM_INT(WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE) },
-    #endif
     { MP_ROM_QSTR(MP_QSTR_SEC_DPP), MP_ROM_INT(WIFI_AUTH_DPP) },
     #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
     { MP_ROM_QSTR(MP_QSTR_SEC_WPA3_ENT), MP_ROM_INT(WIFI_AUTH_WPA3_ENTERPRISE) },
@@ -781,7 +775,7 @@ static const mp_rom_map_elem_t wlan_if_locals_dict_table[] = {
     #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
     { MP_ROM_QSTR(MP_QSTR_SEC_WPA_ENT), MP_ROM_INT(WIFI_AUTH_WPA_ENTERPRISE) },
     #endif
-    #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 1, 0) || (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0) && CONFIG_SOC_WIFI_SUPPORTED)
+    #if ESP_VISION_WIFI_AUTH_UNKNOWN_SUPPORTED
     { MP_ROM_QSTR(MP_QSTR_SEC_UNKNOWN), MP_ROM_INT(WIFI_AUTH_UNKNOWN) },
     #endif
 
@@ -796,10 +790,15 @@ static const mp_rom_map_elem_t wlan_if_locals_dict_table[] = {
 };
 static MP_DEFINE_CONST_DICT(wlan_if_locals_dict, wlan_if_locals_dict_table);
 
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 1, 0) || (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0) && CONFIG_SOC_WIFI_SUPPORTED)
-_Static_assert(WIFI_AUTH_MAX == 18, "Synchronize WIFI_AUTH_XXX constants with the ESP-IDF. Look at esp-idf/components/esp_wifi/include/esp_wifi_types_generic.h");
+#if ESP_VISION_WIFI_AUTH_UNKNOWN_SUPPORTED
+_Static_assert(WIFI_AUTH_MAX == 18, "Synchronize WIFI_AUTH_XXX constants with the ESP-IDF Wi-Fi API");
+#elif ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+_Static_assert(WIFI_AUTH_MAX == 17, "Synchronize WIFI_AUTH_XXX constants with the ESP-IDF Wi-Fi API");
 #elif ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-_Static_assert(WIFI_AUTH_MAX == 17, "Synchronize WIFI_AUTH_XXX constants with the ESP-IDF. Look at esp-idf/components/esp_wifi/include/esp_wifi_types_generic.h");
+// ESP-IDF release/v5.5 and the stable v5.5.x tags carry different snapshots
+// of the generic Wi-Fi enum: the former includes WIFI_AUTH_UNKNOWN while the
+// latter does not. Accept both layouts without changing the managed component.
+_Static_assert((WIFI_AUTH_MAX == 17) || (WIFI_AUTH_MAX == 18), "Synchronize WIFI_AUTH_XXX constants with the ESP-IDF Wi-Fi API");
 #elif ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
 _Static_assert(WIFI_AUTH_MAX == 16, "Synchronize WIFI_AUTH_XXX constants with the ESP-IDF. Look at esp-idf/components/esp_wifi/include/esp_wifi_types_generic.h");
 #elif ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0)

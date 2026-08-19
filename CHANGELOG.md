@@ -15,6 +15,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Added periodic MicroPython event polling to long-running imlib drawing, filtering, feature-detection, QR, statistics, and template-matching loops.
 - Synchronized the MicroPython Wi-Fi authentication constants with the native and remote Wi-Fi backends in ESP-IDF 6.0 and 6.1.
+- Updated `esp_wifi_remote` to 1.6.4 for every supported ESP-IDF release overlay.
 - Moved Flash and SD FAT filesystem ownership to an ESP-IDF storage manager, with native MicroPython VFS bridges at `/` and `/sdcard` and a shared raw Flash backend for the existing MSC LUN.
 - Exposed SD cards as MSC LUN 1 on SD-capable boards while retaining Flash as LUN 0.
 - Moved the ESP-VISION USB-Serial-JTAG interface selection to each board's `mpconfigboard.h`, explicitly enabled the USJ clock and internal PHY from the MicroPython driver, returned the ESP-IDF system console to its target defaults, removed redundant board sdkconfig overrides, and clarified transport reliability and observability documentation.
@@ -29,6 +30,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Fixed EV-MUX CDC startup on boards with a 100 Hz FreeRTOS tick by guaranteeing the higher-priority transport task delays for at least one tick instead of starving the MicroPython main task with `vTaskDelay(0)`; CDC hello discovery now waits for DTR-ready state, and USB serial descriptors encode only the initialized six-byte factory MAC.
 - Fixed the EV-MUX stress test to expect non-active-sink discovery responses on their request ingress, matching the protocol v3 RPC response contract.
 - Fixed EV-MUX path validation so script/filesystem paths are limited to 123 bytes, leaving room for the transactional `.tmp` suffix within MicroPython's 128-byte VFS path capacity; over-limit paths return `PATH_TOO_LONG` without entering VFS or resetting the VM.
+- Fixed Wi-Fi authentication constant exposure after the remote Wi-Fi header update by removing the deprecated WPA3 extension bindings that no longer exist in the active API; the IDF 6 unknown-scan mode remains exposed where that enum is provided.
+- Fixed IDF 5.5 builds on AtomS3R-M12 by accepting both Wi-Fi authentication enum layouts used by the release and stable 5.5 headers without changing managed components.
 
 ### Removed
 
