@@ -10,6 +10,10 @@
 #define MICROPY_HW_USB_PRODUCT_FS_STRING "ESP-VISION " MICROPY_HW_BOARD_NAME
 #define MICROPY_HW_ENABLE_USBDEV (1)
 #define MICROPY_HW_USB_CDC (1)
+#define MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER (1)
+// Present the software reset protocol as USB-Serial/JTAG so esptool selects
+// its USBJTAGSerialReset sequence. This OTG device does not expose JTAG.
+#define MICROPY_HW_USB_PID (0x1001)
 #define MICROPY_HW_ESP_USB_SERIAL_JTAG (0)
 #define MICROPY_HW_ENABLE_USB_RUNTIME_DEVICE (0)
 #define MICROPY_HW_ENABLE_UART_REPL (1)

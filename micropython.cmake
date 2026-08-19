@@ -39,6 +39,12 @@ if((IDF_TARGET STREQUAL "esp32p4") OR (IDF_TARGET STREQUAL "esp32s3") OR (IDF_TA
     )
 endif()
 
+if(IDF_TARGET STREQUAL "esp32s3")
+    list(APPEND ESP_VISION_MODULE_SOURCES
+        ${ESP_VISION_ROOT}/platform/usb_auto_download.c
+    )
+endif()
+
 # The hardware H.264 encoder (esp_h264) and RTSP server (esp_media_protocols) are P4-only.
 if(IDF_TARGET STREQUAL "esp32p4")
     list(APPEND ESP_VISION_MODULE_SOURCES

@@ -8,6 +8,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Added the shared ESP-DL PicoDet pedestrian model, an `espdl.PedestrianDetect` wrapper with model-specific preprocessing and post-processing, Python stubs, and a camera example for ESP32-P4/S31/S3 boards.
 - Added a button-triggered PP-OCRv6 pipeline with separate INT8 text detection and recognition stages, Python detection/CTC post-processing, and generic BGR preprocessing through `espdl.Model`.
+- Added ESP32-S3 USB-OTG CDC automatic download-mode entry using the esptool USB-Serial/JTAG DTR/RTS sequence, controlled per board from `mpconfigboard.h` and handled outside the MicroPython VM. The existing EV-MUX CDC stack now starts before camera initialization, filesystem recovery, and `boot.py`; its transport task keeps the download path responsive while the VM is busy without introducing a second USB driver or descriptor owner.
 - Added OpenMV v5.0.0's MIT-licensed Edge Drawing Lines implementation and enabled `Image.find_line_segments()` on all supported boards.
 
 ### Changed
@@ -16,12 +17,16 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Synchronized the MicroPython Wi-Fi authentication constants with the native and remote Wi-Fi backends in ESP-IDF 6.0 and 6.1.
 - Moved Flash and SD FAT filesystem ownership to an ESP-IDF storage manager, with native MicroPython VFS bridges at `/` and `/sdcard` and a shared raw Flash backend for the existing MSC LUN.
 - Exposed SD cards as MSC LUN 1 on SD-capable boards while retaining Flash as LUN 0.
+- Moved the ESP-VISION USB-Serial-JTAG interface selection to each board's `mpconfigboard.h`, explicitly enabled the USJ clock and internal PHY from the MicroPython driver, returned the ESP-IDF system console to its target defaults, removed redundant board sdkconfig overrides, and clarified transport reliability and observability documentation.
+- Changed the ESP32-S3 automatic-download hand-off to defer the DTR/RTS-triggered reset out of the TinyUSB line-state callback and independently apply the MicroPython-proven USB persistence sequence before entering ROM USB-Serial/JTAG download mode.
+- Documented esptool `--after watchdog-reset` for leaving an ESP32-S3 ROM loader entered through USB-Serial/JTAG.
 
 ### Fixed
 
 - Delayed the EV-MUX transport task until TinyUSB initialization completes, guaranteed at least one RTOS tick between pumps, and configured the ESP32-S3 boards for a 1000 Hz FreeRTOS tick, preventing USB startup races and MicroPython task starvation.
 - Fixed EV-MUX script execution to close the source file before running it, allowing a script to be overwritten immediately after it finishes.
 - Fixed ESP32-P4X-EYE LCD updates under camera and inference memory pressure by sending the PSRAM framebuffer through SPI DMA directly.
+- Fixed EV-MUX CDC startup on boards with a 100 Hz FreeRTOS tick by guaranteeing the higher-priority transport task delays for at least one tick instead of starving the MicroPython main task with `vTaskDelay(0)`; CDC hello discovery now waits for DTR-ready state, and USB serial descriptors encode only the initialized six-byte factory MAC.
 
 ### Removed
 

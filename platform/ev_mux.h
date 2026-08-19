@@ -23,9 +23,9 @@ esp_err_t ev_mux_write(ev_stream_t stream,
                        size_t payload_len);
 // Lossy variant: when the routed sink is congested (a previous write stalled),
 // the whole frame is dropped before a single byte is written and
-// ev_mux_tx_drop_count is bumped, so the wire stream stays parseable. Only
-// for frames that may be dropped silently (preview); RPC/REPL must use
-// ev_mux_write, which never drops.
+// ev_mux_tx_drop_count is bumped. This avoids adding another partial frame
+// while the host resynchronizes after the stalled write. Only for frames that
+// may be dropped silently (preview); RPC/REPL must use ev_mux_write.
 esp_err_t ev_mux_write_lossy(ev_stream_t stream,
                              const char *metadata,
                              const void *payload,

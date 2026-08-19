@@ -75,7 +75,7 @@ void usb_usj_mode(void) {
 
 void mp_usbd_port_get_serial_number(char *serial_buf) {
     // use factory default MAC as serial ID
-    uint8_t mac[8];
+    uint8_t mac[6];
     esp_efuse_mac_get_default(mac);
     MP_STATIC_ASSERT(sizeof(mac) * 2 <= MICROPY_HW_USB_DESC_STR_MAX);
     mp_usbd_hex_str(serial_buf, mac, sizeof(mac));

@@ -1739,22 +1739,23 @@ static void ev_control_transport_pump(void)
             ev_control_transport_rx_chr((ev_control_ingress_t)ingress, (uint8_t)c);
         }
     }
-
     // Route maintenance is independent of VM execution.
     ev_channel_poll_auto();
 }
 
-// Emit hello whenever a CDC link appears so the control plane stays
-// discoverable without any REPL interaction (boot-default EV-MUX).
+// Emit hello when a host opens CDC so the control plane stays discoverable
+// without any REPL interaction (boot-default EV-MUX). Enumeration alone is
+// not enough: before DTR is asserted CDC is not writable and auto-routing has
+// not selected it yet.
 static void ev_control_transport_watch_hello(void)
 {
 #if MICROPY_HW_USB_CDC
-    static bool s_cdc_was_present;
-    bool present = ev_channel_sink_present("cdc");
-    if (present && !s_cdc_was_present && ev_stdio_mux_enabled()) {
+    static bool s_cdc_was_ready;
+    bool ready = ev_channel_sink_ready("cdc");
+    if (ready && !s_cdc_was_ready && ev_stdio_mux_enabled()) {
         (void)ev_control_transport_send_hello();
     }
-    s_cdc_was_present = present;
+    s_cdc_was_ready = ready;
 #endif
 }
 
@@ -1763,6 +1764,9 @@ static void ev_control_transport_task(void *arg)
     (void)arg;
     TickType_t pump_delay_ticks = pdMS_TO_TICKS(EV_CONTROL_TRANSPORT_PUMP_MS);
     if (pump_delay_ticks == 0) {
+        // pdMS_TO_TICKS() rounds down. ESP32-S3 boards commonly use a 100 Hz
+        // tick, where a 2 ms delay would otherwise become vTaskDelay(0) and
+        // let this higher-priority task starve the MicroPython main task.
         pump_delay_ticks = 1;
     }
     for (;;) {
