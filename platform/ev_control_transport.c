@@ -73,6 +73,19 @@ extern ringbuf_t uart_stdin_ringbuf;
 #define EV_CONTROL_TRANSPORT_TASK_PRIORITY (ESP_TASK_PRIO_MIN + 2)
 #define EV_CONTROL_TRANSPORT_PUMP_MS (2)
 
+// script.write stages data in <path>.tmp before publishing it with rename().
+// Keep the public path contract within the MicroPython VFS path capacity after
+// adding that suffix. MICROPY_ALLOC_PATH_MAX is a buffer capacity, so one byte
+// is reserved for the terminating NUL by the sizeof(".tmp") subtraction.
+#define EV_CONTROL_PATH_TMP_SUFFIX ".tmp"
+#define EV_CONTROL_PATH_MAX (MICROPY_ALLOC_PATH_MAX - sizeof(EV_CONTROL_PATH_TMP_SUFFIX))
+// Keep enough room to classify an over-limit path as PATH_TOO_LONG instead of
+// letting the JSON extractor report a generic missing/invalid argument.
+#define EV_CONTROL_PATH_PARSE_CAP (EV_CONTROL_METADATA_MAX + 1)
+#define EV_CONTROL_PATH_TMP_CAP (MICROPY_ALLOC_PATH_MAX)
+
+_Static_assert(EV_CONTROL_PATH_MAX > 0, "EV control path capacity must be positive");
+
 typedef enum {
     EV_CONTROL_PARSE_SOF = 0,
     EV_CONTROL_PARSE_HEADER,
@@ -391,6 +404,9 @@ static bool ev_control_path_allowed(const char *path)
     if ((path == NULL) || (path[0] == '\0')) {
         return false;
     }
+    if (strlen(path) > EV_CONTROL_PATH_MAX) {
+        return false;
+    }
     if (strstr(path, "..") != NULL) {
         return false;
     }
@@ -405,6 +421,11 @@ static bool ev_control_path_allowed(const char *path)
         }
     }
     return true;
+}
+
+static bool ev_control_path_too_long(const char *path)
+{
+    return (path != NULL) && (strlen(path) > EV_CONTROL_PATH_MAX);
 }
 
 static int ev_control_base64_value(char c)
@@ -494,14 +515,29 @@ static const char *ev_control_bool_str(bool value)
     return value ? "true" : "false";
 }
 
-static bool ev_control_vfs_exists(const char *path)
+static esp_err_t ev_control_vfs_exists(const char *path, bool *exists)
 {
-    return mp_vfs_import_stat(path) != MP_IMPORT_STAT_NO_EXIST;
+    if (exists == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *exists = false;
+
+    nlr_buf_t nlr;
+    if (nlr_push(&nlr) == 0) {
+        *exists = mp_vfs_import_stat(path) != MP_IMPORT_STAT_NO_EXIST;
+        nlr_pop();
+        return ESP_OK;
+    }
+    return ESP_FAIL;
 }
 
 static esp_err_t ev_control_vfs_remove_if_exists(const char *path)
 {
-    if (!ev_control_vfs_exists(path)) {
+    bool exists = false;
+    if (ev_control_vfs_exists(path, &exists) != ESP_OK) {
+        return ESP_FAIL;
+    }
+    if (!exists) {
         return ESP_OK;
     }
 
@@ -894,7 +930,7 @@ static esp_err_t ev_control_send_route_auto(uint32_t seq, const char *request)
 
 static esp_err_t ev_control_send_script_write(uint32_t seq, const char *request)
 {
-    char path[128];
+    char path[EV_CONTROL_PATH_PARSE_CAP];
     char mode[16] = "overwrite";
     char encoding[16] = "utf-8";
     char content_base64[EV_CONTROL_PAYLOAD_MAX];
@@ -908,6 +944,9 @@ static esp_err_t ev_control_send_script_write(uint32_t seq, const char *request)
     }
     (void)ev_control_json_get_string(request, "mode", mode, sizeof(mode));
     (void)ev_control_json_get_string(request, "encoding", encoding, sizeof(encoding));
+    if (ev_control_path_too_long(path)) {
+        return ev_control_send_error("script.write", seq, "PATH_TOO_LONG", "script path too long");
+    }
     if (!ev_control_path_allowed(path)) {
         return ev_control_send_error("script.write", seq, "INVALID_PATH", "path is not allowed");
     }
@@ -923,8 +962,14 @@ static esp_err_t ev_control_send_script_write(uint32_t seq, const char *request)
     if (has_total && (offset > total_bytes)) {
         return ev_control_send_error("script.write", seq, "INVALID_ARGUMENT", "offset exceeds totalBytes");
     }
-    if ((strcmp(mode, "create") == 0) && ev_control_vfs_exists(path)) {
-        return ev_control_send_error("script.write", seq, "FILE_EXISTS", "target already exists");
+    if (strcmp(mode, "create") == 0) {
+        bool exists = false;
+        if (ev_control_vfs_exists(path, &exists) != ESP_OK) {
+            return ev_control_send_error("script.write", seq, "VFS_FAILED", "failed to inspect target path");
+        }
+        if (exists) {
+            return ev_control_send_error("script.write", seq, "FILE_EXISTS", "target already exists");
+        }
     }
 
     size_t decoded_capacity = (strlen(content_base64) * 3 / 4) + 4;
@@ -940,8 +985,8 @@ static esp_err_t ev_control_send_script_write(uint32_t seq, const char *request)
         return ev_control_send_error("script.write", seq, "INVALID_BASE64", esp_err_to_name(ret));
     }
 
-    char tmp_path[160];
-    int tmp_len = snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    char tmp_path[EV_CONTROL_PATH_TMP_CAP];
+    int tmp_len = snprintf(tmp_path, sizeof(tmp_path), "%s%s", path, EV_CONTROL_PATH_TMP_SUFFIX);
     if ((tmp_len <= 0) || ((size_t)tmp_len >= sizeof(tmp_path))) {
         heap_caps_free(decoded);
         return ev_control_send_error("script.write", seq, "PATH_TOO_LONG", "temporary path too long");
@@ -957,10 +1002,14 @@ static esp_err_t ev_control_send_script_write(uint32_t seq, const char *request)
     }
 
     if (!has_total || offset == 0) {
-        (void)ev_control_vfs_remove_if_exists(tmp_path);
+        if (ev_control_vfs_remove_if_exists(tmp_path) != ESP_OK) {
+            heap_caps_free(decoded);
+            return ev_control_send_error("script.write", seq, "VFS_FAILED", "failed to prepare temporary file");
+        }
         ret = ev_control_vfs_write_file(tmp_path, decoded, decoded_len);
     } else {
-        if (!ev_control_vfs_exists(tmp_path)) {
+        bool tmp_exists = false;
+        if ((ev_control_vfs_exists(tmp_path, &tmp_exists) != ESP_OK) || !tmp_exists) {
             heap_caps_free(decoded);
             return ev_control_send_error("script.write", seq, "INVALID_STATE", "missing temporary file for chunk");
         }
@@ -989,7 +1038,9 @@ static esp_err_t ev_control_send_script_write(uint32_t seq, const char *request)
         }
     }
 
-    char payload[160];
+    // Keep enough room for the complete structured acknowledgement and 32-bit
+    // counters after applying the staging-path length contract above.
+    char payload[256];
     int len = snprintf(payload,
                        sizeof(payload),
                        "{\"ok\":true,\"path\":\"%s\",\"bytes\":%u,\"offset\":%u,"
@@ -1008,15 +1059,22 @@ static esp_err_t ev_control_send_script_write(uint32_t seq, const char *request)
 
 static esp_err_t ev_control_send_script_run(uint32_t seq, const char *request)
 {
-    char path[128];
+    char path[EV_CONTROL_PATH_PARSE_CAP];
     if (!ev_control_json_get_string(request, "path", path, sizeof(path))) {
         return ev_control_send_error("script.run", seq, "INVALID_ARGUMENT", "missing path");
+    }
+    if (ev_control_path_too_long(path)) {
+        return ev_control_send_error("script.run", seq, "PATH_TOO_LONG", "script path too long");
     }
     if (!ev_control_path_allowed(path)) {
         return ev_control_send_error("script.run", seq, "INVALID_PATH", "path is not allowed");
     }
 
-    if (!ev_control_vfs_exists(path)) {
+    bool exists = false;
+    if (ev_control_vfs_exists(path, &exists) != ESP_OK) {
+        return ev_control_send_error("script.run", seq, "VFS_FAILED", "failed to inspect script path");
+    }
+    if (!exists) {
         return ev_control_send_error("script.run", seq, "NOT_FOUND", "script not found");
     }
 
@@ -1029,7 +1087,8 @@ static esp_err_t ev_control_send_script_run(uint32_t seq, const char *request)
         return ev_control_send_error("script.run", seq, "REPL_BUSY", "failed to enqueue script");
     }
 
-    char payload[160];
+    // script.run accepts the same path contract as script.write.
+    char payload[256];
     int len = snprintf(payload, sizeof(payload), "{\"ok\":true,\"path\":\"%s\",\"queued\":true}", path);
     if ((len <= 0) || ((size_t)len >= sizeof(payload))) {
         return ESP_ERR_INVALID_SIZE;
@@ -1105,8 +1164,14 @@ static esp_err_t ev_control_send_debug_info_sensor(uint32_t seq)
 
 static esp_err_t ev_control_send_debug_info_fs_list(uint32_t seq, const char *request)
 {
-    char path[128] = "/";
-    (void)ev_control_json_get_string(request, "path", path, sizeof(path));
+    char path[EV_CONTROL_PATH_PARSE_CAP] = "/";
+    const char *path_value = ev_control_json_find_value(request, "path");
+    if ((path_value != NULL) && !ev_control_json_get_string(request, "path", path, sizeof(path))) {
+        return ev_control_send_error("debug.info", seq, "INVALID_ARGUMENT", "invalid filesystem path");
+    }
+    if (ev_control_path_too_long(path)) {
+        return ev_control_send_error("debug.info", seq, "PATH_TOO_LONG", "filesystem path too long");
+    }
     if (!ev_control_path_allowed(path)) {
         return ev_control_send_error("debug.info", seq, "INVALID_PATH", "path is not allowed");
     }
@@ -1158,9 +1223,12 @@ static esp_err_t ev_control_send_debug_info_fs_list(uint32_t seq, const char *re
 
 static esp_err_t ev_control_send_debug_info_fs_read(uint32_t seq, const char *request)
 {
-    char path[128];
+    char path[EV_CONTROL_PATH_PARSE_CAP];
     if (!ev_control_json_get_string(request, "path", path, sizeof(path))) {
         return ev_control_send_error("debug.info", seq, "INVALID_ARGUMENT", "missing path");
+    }
+    if (ev_control_path_too_long(path)) {
+        return ev_control_send_error("debug.info", seq, "PATH_TOO_LONG", "filesystem path too long");
     }
     if (!ev_control_path_allowed(path)) {
         return ev_control_send_error("debug.info", seq, "INVALID_PATH", "path is not allowed");
@@ -1739,22 +1807,23 @@ static void ev_control_transport_pump(void)
             ev_control_transport_rx_chr((ev_control_ingress_t)ingress, (uint8_t)c);
         }
     }
-
     // Route maintenance is independent of VM execution.
     ev_channel_poll_auto();
 }
 
-// Emit hello whenever a CDC link appears so the control plane stays
-// discoverable without any REPL interaction (boot-default EV-MUX).
+// Emit hello when a host opens CDC so the control plane stays discoverable
+// without any REPL interaction (boot-default EV-MUX). Enumeration alone is
+// not enough: before DTR is asserted CDC is not writable and auto-routing has
+// not selected it yet.
 static void ev_control_transport_watch_hello(void)
 {
 #if MICROPY_HW_USB_CDC
-    static bool s_cdc_was_present;
-    bool present = ev_channel_sink_present("cdc");
-    if (present && !s_cdc_was_present && ev_stdio_mux_enabled()) {
+    static bool s_cdc_was_ready;
+    bool ready = ev_channel_sink_ready("cdc");
+    if (ready && !s_cdc_was_ready && ev_stdio_mux_enabled()) {
         (void)ev_control_transport_send_hello();
     }
-    s_cdc_was_present = present;
+    s_cdc_was_ready = ready;
 #endif
 }
 
@@ -1763,6 +1832,9 @@ static void ev_control_transport_task(void *arg)
     (void)arg;
     TickType_t pump_delay_ticks = pdMS_TO_TICKS(EV_CONTROL_TRANSPORT_PUMP_MS);
     if (pump_delay_ticks == 0) {
+        // pdMS_TO_TICKS() rounds down. ESP32-S3 boards commonly use a 100 Hz
+        // tick, where a 2 ms delay would otherwise become vTaskDelay(0) and
+        // let this higher-priority task starve the MicroPython main task.
         pump_delay_ticks = 1;
     }
     for (;;) {

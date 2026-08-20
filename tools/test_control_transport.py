@@ -350,8 +350,47 @@ def run(args: argparse.Namespace) -> None:
                 raise AssertionError(f"inconsistent debug.info firmware version: {payload!r}")
             print(f"debug.info {scope}: ok")
 
-        script_path = "/ev_transport_test.py"
+        # Exercise the full path contract. script.write stages through
+        # <path>.tmp, so the maximum accepted target path is 123 bytes while
+        # the resulting VFS path remains within MICROPY_ALLOC_PATH_MAX.
+        script_path = "/ev_transport_response_boundary_" + ("x" * 88) + ".py"
+        if len(script_path) != 123:
+            raise AssertionError(f"unexpected boundary path length: {len(script_path)}")
+        too_long_path = "/ev_transport_response_boundary_" + ("x" * 89) + ".py"
+        if len(too_long_path) != 124:
+            raise AssertionError(f"unexpected rejected path length: {len(too_long_path)}")
         script = 'print("EV_TRANSPORT_SCRIPT_OK")\n'
+        transport.send_rpc(
+            "script.write",
+            {
+                "path": too_long_path,
+                "encoding": "utf-8",
+                "mode": "overwrite",
+                "contentBase64": base64.b64encode(script.encode("utf-8")).decode("ascii"),
+            },
+        )
+        read_rpc_error(transport, "script.write", "PATH_TOO_LONG")
+        print("script.write path limit: ok")
+        transport.send_rpc(
+            "script.write",
+            {
+                "path": "/ev_transport/../escape.py",
+                "encoding": "utf-8",
+                "mode": "overwrite",
+                "contentBase64": base64.b64encode(script.encode("utf-8")).decode("ascii"),
+            },
+        )
+        read_rpc_error(transport, "script.write", "INVALID_PATH")
+        print("script.write path validation: ok")
+        transport.send_rpc(
+            "debug.info",
+            {
+                "scope": "fs.list",
+                "path": too_long_path,
+            },
+        )
+        read_rpc_error(transport, "debug.info", "PATH_TOO_LONG")
+        print("debug.info fs.list path limit: ok")
         transport.send_rpc(
             "script.write",
             {
@@ -456,6 +495,22 @@ def run(args: argparse.Namespace) -> None:
         if status_payload.get("action") != "status" or "user" not in status_payload:
             raise AssertionError(f"unexpected device.control status: {status_payload!r}")
         print("device.control status: ok")
+
+        cleanup_source = (
+            "import os\n"
+            f"for p in {(script_path, chunked_path)!r}:\n"
+            " try: os.remove(p)\n"
+            " except OSError: pass\n"
+            "print('EV_TRANSPORT_CLEANUP_OK')"
+        )
+        transport.send_repl(f"exec({cleanup_source!r})\r\n")
+        read_until_frame(
+            transport,
+            lambda item: item.metadata.get("channel") == "repl.stdout"
+            and b"EV_TRANSPORT_CLEANUP_OK" in item.payload,
+            timeout=5,
+        )
+        print("script test cleanup: ok")
 
         # Leave the device at a quiet REPL; EV-MUX stays enabled (boot
         # default) for the next run.

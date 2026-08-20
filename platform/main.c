@@ -74,6 +74,7 @@
 #include "fb_alloc.h"
 #include "preview.h"
 #include "storage.h"
+#include "usb_auto_download.h"
 
 #if MICROPY_BLUETOOTH_NIMBLE
 #include "extmod/modbluetooth.h"
@@ -122,6 +123,9 @@ void mp_task(void *pvParameter)
     #if MICROPY_HW_ENABLE_USBDEV
     usb_phy_init();
     #endif
+    #if MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER
+    ESP_ERROR_CHECK(esp_vision_usb_auto_download_init());
+    #endif
     #if MICROPY_HW_ENABLE_UART_REPL
     uart_stdout_init();
     #endif
@@ -151,11 +155,18 @@ soft_reset:
     mp_cstack_init_with_top((void *)sp, MICROPY_TASK_STACK_SIZE);
     gc_init(mp_task_heap, mp_task_heap + MICROPY_GC_INITIAL_HEAP_SIZE);
     mp_init();
+    #if MICROPY_HW_ENABLE_USBDEV
+    // Start the existing EV-MUX CDC stack before camera, filesystem recovery,
+    // and boot.py. The transport task below keeps it serviced while the VM is
+    // busy; no second USB driver or descriptor owner is involved.
+    mp_usbd_init();
+    #endif
+    ev_stdio_init0();
+    ev_stdio_start_transport();
     esp_vision_storage_mount_micropython();
     esp_vision_camera_init0();
     esp_vision_display_init0();
     esp_vision_preview_init0();
-    ev_stdio_init0();
     esp_vision_debug_printf("[esp-vision] storage status: flash=/ %s; sdcard=/sdcard %s\n",
                             esp_vision_storage_flash_is_mounted() ? "mounted" : "unavailable",
                             esp_vision_storage_sdcard_is_mounted() ? "mounted" : "unavailable");
@@ -171,11 +182,6 @@ soft_reset:
     pyexec_frozen_module("_boot.py", false);
     pyexec_frozen_module("py_inisetup.py", false);
     int ret = pyexec_file_if_exists("boot.py");
-
-    #if MICROPY_HW_ENABLE_USBDEV
-    mp_usbd_init();
-    #endif
-    ev_stdio_start_transport();
 
     if (ret & PYEXEC_FORCED_EXIT) {
         goto soft_reset_exit;

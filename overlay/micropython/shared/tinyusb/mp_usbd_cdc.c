@@ -36,6 +36,7 @@
 #include "freertos/task.h"
 
 #include "ev_stdio.h"
+#include "usb_auto_download.h"
 
 // EV-MUX congestion counters (debug.info "transport.stats"), indexed by
 // ev_control_ingress_t: 0=USJ, 1=CDC, 2=UART.
@@ -240,20 +241,13 @@ void MICROPY_WRAP_TUD_SOF_CB(tud_sof_cb)(uint32_t frame_count) {
     MICROPY_HW_USB_CDC || \
     MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER)
 
-#if MICROPY_HW_USB_CDC_1200BPS_TOUCH || MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER
+#if MICROPY_HW_USB_CDC_1200BPS_TOUCH
 static mp_sched_node_t mp_bootloader_sched_node;
 
 static void usbd_cdc_run_bootloader_task(mp_sched_node_t *node) {
     mp_hal_delay_ms(250);
     machine_bootloader(0, NULL);
 }
-#endif
-
-#if MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER
-static struct {
-    bool dtr : 1;
-    bool rts : 1;
-} prev_line_state = {0};
 #endif
 
 void MICROPY_WRAP_TUD_CDC_LINE_STATE_CB(tud_cdc_line_state_cb)(uint8_t itf, bool dtr, bool rts) {
@@ -276,13 +270,7 @@ void MICROPY_WRAP_TUD_CDC_LINE_STATE_CB(tud_cdc_line_state_cb)(uint8_t itf, bool
     }
     #endif
     #if MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER
-    if (dtr && !rts) {
-        if (prev_line_state.rts && !prev_line_state.dtr) {
-            mp_sched_schedule_node(&mp_bootloader_sched_node, usbd_cdc_run_bootloader_task);
-        }
-    }
-    prev_line_state.rts = rts;
-    prev_line_state.dtr = dtr;
+    esp_vision_usb_auto_download_line_state(dtr, rts);
     #endif
     #if MICROPY_HW_USB_CDC_1200BPS_TOUCH
     if (dtr == false && rts == false) {

@@ -35,7 +35,7 @@ ESP-VISION 围绕 MicroPython 固件构建、板级硬件后端、共享平台�
    }
 
 - **绑定层**\ （\ ``modules/``\ ）：即 ``USER_C_MODULES`` 层。主要模块 ``image``、 ``sensor``、``display``、``espdl`` 和 ``tflite`` 通过 ``MP_REGISTER_MODULE`` 自注册。 ``py_imageio.c`` 提供 ``image.ImageIO`` 类型，``py_helper.c`` 为共享辅助代码。 绑定层只做对象转换与轻量 API 适配，重逻辑放在纯 C 或 ``platform/`` 中。
-- **平台服务**\ （\ ``platform/``\ ）：自研的 ESP32 胶水层。``ev_channel.c`` / ``ev_mux.c`` / ``ev_control_transport.c`` / ``ev_stdio.c``\ （EV-MUX / EV-ATP 底层传输）、``preview.c``\ （EV-MUX JPEG 预览）、``display.c``\ （通用显示层）、``sdcard.c``\ （挂载到 ``/sdcard``\ ）、 ``usb_msc.c``\ （通过 TinyUSB MSC 暴露 ``ffat`` 分区）、``jpeg.c``\ （硬件或软件 JPEG）、 ``debug.c``\ ，以及 ``main.c``\ （启动初始化与软复位循环）。
+- **平台服务**\ （\ ``platform/``\ ）：自研的 ESP32 胶水层。``ev_channel.c`` / ``ev_mux.c`` / ``ev_control_transport.c`` / ``ev_stdio.c``\ （EV-MUX / EV-ATP 底层传输）、``preview.c``\ （EV-MUX JPEG 预览）、``display.c``\ （通用显示层）、``sdcard.c``\ （挂载到 ``/sdcard``\ ）、 ``usb_msc.c``\ （通过 TinyUSB MSC 暴露 ``ffat`` 分区）、``usb_auto_download.c``\ （S3 OTG CDC 复位/下载协议）、``jpeg.c``\ （硬件或软件 JPEG）、 ``debug.c``\ ，以及 ``main.c``\ （启动初始化与软复位循环）。
 - **imlib 组件**\ （\ ``components/imlib/``\ ）：纯 C 视觉算法，作为以 MIT 维护的 IDF 组件， 源自 OpenMV ``lib/imlib``。
 - **板级后端**\ （\ ``boards/<BOARD>/``\ ）：各板配置及真实的相机/显示/SD 卡实现。 P4X 与 S31 使用 ``esp_video``/V4L2，P4X 还使用 PPA；S3 使用 ``esp32-camera``。
 - **MicroPython + overlay**\ ：以 MicroPython v1.28.0 为固定基线；项目改动位于 ``overlay/micropython/``\ ，并应用到 ``build/micropython/`` 下的生成副本。
@@ -228,7 +228,7 @@ Host 的 demux 必须逐帧读取 ``metadata.channel``，再按 channel 分发�
 
 EV-MUX 上电默认启用（``ESP_VISION_EV_MUX_DEFAULT_ENABLED``），控制面无需 REPL 访问即可探测；每次软复位后 mux 状态与路由都回到同一组确定初值。
 
-帧接收不依赖 REPL。专用 transport 任务（``ev_transport``，见 ``platform/ev_control_transport.c``）拥有接收路径：泵送 TinyUSB 设备栈、把 USJ/CDC/UART 三个入站环形缓冲喂给各 ingress 的帧 parser、分发完整帧，并应用 DTR 路由规则（活跃 sink 切换与 ``route.changed`` 发出）。``mp_hal_stdin_rx_chr()`` 不再解析帧；EV-MUX 开启时它只消费 framed ``repl.stdin`` 字节。
+帧接收不依赖 REPL。专用 transport 任务（``ev_transport``，见 ``platform/ev_control_transport.c``）拥有接收路径：泵送现有 TinyUSB CDC 设备栈、把 USJ/CDC/UART 三个入站环形缓冲喂给各 ingress 的帧 parser、分发完整帧，并应用 DTR 路由规则（活跃 sink 切换与 ``route.changed`` 发出）。``mp_hal_stdin_rx_chr()`` 不再解析帧；EV-MUX 开启时它只消费 framed ``repl.stdin`` 字节。
 
 分发按执行上下文拆分：
 
@@ -236,20 +236,27 @@ EV-MUX 上电默认启用（``ESP_VISION_EV_MUX_DEFAULT_ENABLED``），控制面
 - VM 任务 RPC（排队到解释器，在 ``mp_hal_stdin_rx_chr()`` 上下文执行）：``script.write``、``script.run``、``debug.info``、``debug.capture_frame``——所有涉及 MicroPython 对象、VFS 或 camera 的方法。队列满时回复 ``VM_BUSY`` 错误。
 - ``repl.stdin`` payload 写入 framed REPL 输入环形缓冲，由 REPL 循环消费。
 
-EV-MUX 开启后，所有物理字节流只承载帧：USJ/CDC/UART 底层接收路径不再把 ``0x03`` 解释为 Ctrl-C（中断语义只属于 framed ``repl.signal`` channel），不成帧的字节由帧 parser 的 SOF 重同步丢弃。
+EV-MUX 开启后，其 USJ/CDC/UART 底层接收路径只解析帧，不再把 ``0x03`` 解释为 Ctrl-C（中断语义只属于 framed ``repl.signal`` channel），不成帧的字节由帧 parser 的 SOF 重同步丢弃。IDF system console 在协议初始化前或致命故障路径上输出的原始字节属于下述例外。
 
-已知传输问题
-~~~~~~~~~~~~
+IDF console 与接口选择
+~~~~~~~~~~~~~~~~~~~~~~~
 
-以下 USB 传输问题已知，并与正常 EV-MUX / EV-ATP 路由契约分开跟踪：
+ESP-IDF system console 与 ESP-VISION 接口选择是两层独立配置。板级 ``sdkconfig`` 不覆盖 ``CONFIG_ESP_CONSOLE_*`` 或 ``CONFIG_USJ_ENABLE_USB_SERIAL_JTAG``，console 路由、bootloader 输出与系统调试能力均采用当前 ESP-IDF target/version 的默认值。某些 target 的默认 secondary console 可能使用 USB-Serial-JTAG；这属于 IDF system console 行为，不作为 ESP-VISION 是否启用 USJ 的开关。
 
-- USB MSC 当前通过 TinyUSB callback 直接暴露 ``ffat`` / ``vfs`` 分区。MSC 写入尚未与 MicroPython VFS 或 IDE 文件写入协调，因此 host MSC 访问与脚本/文件操作并发时可能破坏文件系统。在写入协调实现前，MSC 应按只读能力处理，或与 IDE 文件写入互斥。
+MicroPython USJ 接口只由板级 ``mpconfigboard.h`` 的 ``MICROPY_HW_ESP_USB_SERIAL_JTAG`` 控制：P4 板卡显式设为 ``1``，S3/S31 板卡设为 ``0``。启用时，``usb_serial_jtag_init`` 会按照 ESP-IDF USJ driver 的初始化顺序显式开启 USJ bus clock 并选择/启用 internal PHY，因此不依赖 console Kconfig 是否顺带保持外设开启；禁用时不编译也不初始化 ESP-VISION 的 USJ 路径，但 IDF 仍可按其默认 console 配置使用该外设。
 
-实现说明（保留观测手段）：
+ESP32-S3 板卡另由 ``mpconfigboard.h`` 显式开启 ``MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER``，并把 OTG CDC 设备 PID 设为 ``0x1001``。现有 MicroPython/EV-MUX TinyUSB CDC 栈会在 VM 初始化后立即启动，早于 camera 初始化、文件系统恢复和 ``boot.py``；用户代码运行时仍由 EV-MUX transport task 独立服务同一个栈，并且该任务每轮至少延迟一个 FreeRTOS tick。不安装第二套 USB driver 或 descriptor owner，CDC/MSC 仍由 ``mpconfigboard.h`` 选择，IDF system console 配置不变。PID ``0x1001`` 使 esptool 选择 USB-Serial/JTAG 复位序列；固件仅在软件中实现相同的 DTR/RTS 状态表，OTG 设备本身不提供 JTAG 接口。TinyUSB 回调只记录 DTR/RTS 请求并启动延迟 timer，由 timer task 在 control-request callback 之外执行复位。在 S3 上，该任务独立遵循 MicroPython 的 ROM 契约（``usb_usj_mode``、``usb_dc_prepare_persist`` 和 ``USBDC_BOOT_DFU``），随后由 shutdown handler 设置 ``RTC_CNTL_FORCE_DOWNLOAD_BOOT`` 并调用 ``esp_restart``；不会等待 host bus reset，也不会在回调中拆除 TinyUSB controller。因此 host 会正常看到重新枚举并需要重新打开 ROM CDC 节点；Linux 上 esptool 5.3 可能因首个句柄已经失效而报告 ``EIO``，即使 ROM loader 已经就绪，此时可在新节点上使用 ``--before no-reset`` 重试。其他板卡默认关闭该能力。
 
-- 帧写入使用带进度检测与明确超时的 bounded write-all loop（``platform/ev_mux.c``）；底层 sink 上报真实写字节数，partial write 会确定性地中止该帧并计入统计，而不是静默截断。
-- 预览帧是唯一的有损类别。写停滞的 sink 会被标记为拥塞并进入短暂冷却；拥塞期间 ``preview.frame`` 帧在写入前整帧丢弃（``ev_mux_write_lossy``），因此线路上的字节流始终可解析。由于 USB-Serial-JTAG 吞吐远低于 OTG CDC，usj 路由下生产侧还把预览限速为每 100ms 一帧。RPC 与 REPL 帧永不被该机制丢弃。
-- 三个 ingress 输入环形缓冲均为 2048 字节。``debug.info`` 的 ``transport.stats`` scope（纯 C，VM 忙时仍可应答）上报每 ingress 的 RX 字节数与 ring 满事件、完整/畸形/拒绝帧计数，以及 replRx/VM_BUSY/TX 写超时/TX 拥塞丢弃（``txDrop``）计数。replRx 溢出目前只计数，尚无独立的 host overflow 事件。
+正常运行时，``ev_stdio_init0`` 通过 ``esp_log_set_vprintf`` 与 newlib stdout/stderr hook 把运行期输出封装为 EV-MUX 帧。IDF 在 hook 安装前发送的 boot 日志，以及绕过 hook 的致命故障输出，仍可能按 system console 默认路由以原始字节出现在 UART 或 USJ；这些字节不属于活动期 EV-MUX 契约，host 会丢弃它们并在后续 SOF 重同步。
+
+若 ROM loader 是手动进入的，或刷写后仍停留在 ROM，请在 esptool 结束阶段使用 ``--after watchdog-reset``：USB-Serial-JTAG 的默认 core reset 不会重新采样 GPIO0，而 watchdog 路径会执行完整系统复位并回到 SPI 启动。
+
+传输可靠性与观测
+~~~~~~~~~~~~~~~~
+
+- 每个帧段都使用带进度检测和 1500ms 总预算的 write-all loop（``platform/ev_mux.c``）。底层 sink 返回实际写入字节数；无法继续前进或超时会中止本次发送、增加 ``txTimeout`` 并把 sink 标记为拥塞。失败前已经写出的字节无法撤回，因此 host parser 仍须丢弃截断数据并在后续有效 SOF 重同步；这里保证的是失败可见且有界，而不是让一次 partial write 变成原子写入。
+- ``preview.frame`` 是唯一允许主动丢弃的类别。sink 拥塞后的 500ms 冷却期内，后续 preview 会在编码或写入前整帧丢弃并增加 ``txDrop``；冷却结束后的第一帧用于探测恢复。USJ 路由还限制为每 100ms 至多一帧。RPC 与 REPL 不会被拥塞预丢弃，但真实 sink 写失败仍会使当前发送返回错误。
+- USJ、CDC、UART 三个 ingress 各有一个 2048 字节物理输入环形缓冲；它们是 parser 持续排空的暂存区，不代表协议帧必须小于该缓冲。``debug.info`` 的 ``transport.stats`` scope 是纯 C 路径，VM 忙时仍可返回 RX 字节数、ring 满事件、完整/畸形/拒绝帧数，以及 ``replRx``、``vmBusy``、``txTimeout``、``txDrop``。其中 ``replRx`` 是独立的 512 字节 REPL 队列；溢出目前只计数，没有额外的异步 host 事件。
 
 源码结构
 --------

@@ -36,7 +36,9 @@
 
 #include "hal/usb_serial_jtag_ll.h"
 #include "esp_intr_alloc.h"
+#include "esp_private/periph_ctrl.h"
 #include "soc/periph_defs.h"
+#include "soc/soc_caps.h"
 #include "freertos/portmacro.h"
 
 #include "ev_stdio.h"
@@ -47,6 +49,12 @@ extern volatile uint32_t ev_transport_rx_ring_full[3];
 
 // Number of bytes in the input buffer, and number of bytes for output chunking.
 #define USB_SERIAL_JTAG_PACKET_SZ_BYTES (64)
+
+#if !SOC_RCC_IS_INDEPENDENT
+#define MICROPY_USJ_RCC_ATOMIC() PERIPH_RCC_ATOMIC()
+#else
+#define MICROPY_USJ_RCC_ATOMIC()
+#endif
 
 static DRAM_ATTR portMUX_TYPE rx_mux = portMUX_INITIALIZER_UNLOCKED;
 static uint8_t rx_buf[USB_SERIAL_JTAG_PACKET_SZ_BYTES];
@@ -101,6 +109,20 @@ static void usb_serial_jtag_isr_handler(void *arg) {
 }
 
 void usb_serial_jtag_init(void) {
+    // Do not rely on the ESP-IDF console or CONFIG_USJ_ENABLE_USB_SERIAL_JTAG
+    // to leave this peripheral enabled. MICROPY_HW_ESP_USB_SERIAL_JTAG owns
+    // the MicroPython interface selection, so explicitly perform the same
+    // clock and internal-PHY setup as the ESP-IDF USJ driver.
+    MICROPY_USJ_RCC_ATOMIC() {
+        usb_serial_jtag_ll_enable_bus_clock(true);
+    }
+#if USB_SERIAL_JTAG_LL_EXT_PHY_SUPPORTED
+    usb_serial_jtag_ll_phy_enable_external(false);
+    usb_serial_jtag_ll_phy_enable_pad(true);
+#else
+    usb_serial_jtag_ll_phy_set_defaults();
+#endif
+
     // Note: Don't clear the SERIAL_IN_EMPTY interrupt, as it's possible the
     // bootloader wrote enough data to the host that we need the interrupt to flush it.
     usb_serial_jtag_ll_clr_intsts_mask(USB_SERIAL_JTAG_INTR_SERIAL_OUT_RECV_PKT |

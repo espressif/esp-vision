@@ -262,7 +262,7 @@
 #if MICROPY_HW_ENABLE_USBDEV
 #define MICROPY_SCHEDULER_STATIC_NODES        (1)
 #ifndef MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER
-#define MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER (1)
+#define MICROPY_HW_USB_CDC_DTR_RTS_BOOTLOADER (0)
 #endif
 
 #ifndef MICROPY_HW_USB_VID
@@ -318,10 +318,10 @@
 #define MICROPY_HW_USB_CDC                  (MICROPY_HW_ENABLE_USBDEV)
 #endif
 
-// Enable stdio over USB Serial/JTAG peripheral
-// (SOC_USB_OTG_PERIPH_NUM is only 2 on the ESP32-P4, which supports both native USB & Serial/JTAG simultaneously)
+// Boards opt in explicitly: the ESP-VISION USJ interface is independent of
+// the ESP-IDF system-console Kconfig defaults.
 #ifndef MICROPY_HW_ESP_USB_SERIAL_JTAG
-#define MICROPY_HW_ESP_USB_SERIAL_JTAG      (SOC_USB_SERIAL_JTAG_SUPPORTED && (!MICROPY_HW_USB_CDC || SOC_USB_OTG_PERIPH_NUM > 1))
+#define MICROPY_HW_ESP_USB_SERIAL_JTAG      (0)
 #endif
 
 #if MICROPY_HW_USB_CDC && MICROPY_HW_ESP_USB_SERIAL_JTAG && (SOC_USB_OTG_PERIPH_NUM <= 1)

@@ -138,10 +138,11 @@ def phase_s3(host: Host) -> None:
     print("    hello answered on active cdc: ok")
 
     # Discovery on the non-active sink: a hello arriving on USJ is admitted,
-    # but the response event is emitted on the user stream, which is CDC.
+    # and its RPC response returns to the request ingress (USJ), independent
+    # of the user stream's current CDC route.
     host.send_rpc(host.usj, "hello", {})
-    host.wait_frame([host.cdc], is_method("hello"), 5, "usj-ingress hello answered via user route (cdc)")
-    print("    bootstrap hello admitted on usj, response routed to cdc: ok")
+    host.wait_frame([host.usj], is_method("hello"), 5, "usj-ingress hello answered on usj")
+    print("    bootstrap hello admitted on usj, response returned to ingress: ok")
 
     # Non-bootstrap user.rpc on the non-active sink is rejected: no response
     # on USJ, and the rejection is logged on the debug stream (now on CDC).
