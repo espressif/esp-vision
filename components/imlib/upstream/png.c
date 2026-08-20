@@ -187,8 +187,7 @@ bool png_compress(image_t *src, image_t *dst) {
             mp_raise_msg_varg(&mp_type_RuntimeError,
                               MP_ERROR_TEXT("Failed to compress image in place"));
         }
-        // free fb_alloc() memory used for umm_init_x().
-        fb_free(); // umm_init_x();
+        umm_deinit_x();
     }
     return false;
 }
@@ -235,8 +234,7 @@ void png_decompress(image_t *dst, image_t *src) {
                           MP_ERROR_TEXT("Failed to compress image in place"));
     }
 
-    // free fb_alloc() memory used for umm_init_x().
-    fb_free(); // umm_init_x();
+    umm_deinit_x();
 }
 #endif // IMLIB_ENABLE_PNG_DECODER
 #endif // IMLIB_ENABLE_PNG_ENCODER || IMLIB_ENABLE_PNG_DECODER

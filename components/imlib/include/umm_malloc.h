@@ -32,6 +32,9 @@
 
 void umm_alloc_fail(void);
 void umm_init_x(size_t size);
+void umm_deinit_x(void);
+void umm_alloc_mark(void);
+void umm_alloc_free_till_mark(void);
 void *umm_malloc(size_t size);
 void *umm_calloc(size_t num, size_t size);
 void *umm_realloc(void *ptr, size_t size);

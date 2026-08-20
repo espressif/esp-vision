@@ -9,6 +9,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Added the shared ESP-DL PicoDet pedestrian model, an `espdl.PedestrianDetect` wrapper with model-specific preprocessing and post-processing, Python stubs, and a camera example for ESP32-P4/S31/S3 boards.
 - Added a button-triggered PP-OCRv6 pipeline with separate INT8 text detection and recognition stages, Python detection/CTC post-processing, and generic BGR preprocessing through `espdl.Model`.
 - Added ESP32-S3 USB-OTG CDC automatic download-mode entry using the esptool USB-Serial/JTAG DTR/RTS sequence, controlled per board from `mpconfigboard.h` and handled outside the MicroPython VM. The existing EV-MUX CDC stack now starts before camera initialization, filesystem recovery, and `boot.py`; its transport task keeps the download path responsive while the VM is busy without introducing a second USB driver or descriptor owner.
+- Added an offline imlib allocator regression covering fallback allocation, nested marks, rollback, and failure cleanup.
 - Added OpenMV v5.0.0's MIT-licensed Edge Drawing Lines implementation and enabled `Image.find_line_segments()` on all supported boards.
 
 ### Changed
@@ -32,6 +33,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Fixed EV-MUX path validation so script/filesystem paths are limited to 123 bytes, leaving room for the transactional `.tmp` suffix within MicroPython's 128-byte VFS path capacity; over-limit paths return `PATH_TOO_LONG` without entering VFS or resetting the VM.
 - Fixed Wi-Fi authentication constant exposure after the remote Wi-Fi header update by removing the deprecated WPA3 extension bindings that no longer exist in the active API; the IDF 6 unknown-scan mode remains exposed where that enum is provided.
 - Fixed IDF 5.5 builds on AtomS3R-M12 by accepting both Wi-Fi authentication enum layouts used by the release and stable 5.5 headers without changing managed components.
+- Fixed internal-preferred fast-framebuffer allocations incorrectly reporting exhaustion when the internal largest block was small but a usable PSRAM block remained; AprilTag, QR, display, and heap-backed UMM temporary allocations now unwind through balanced normal and exceptional paths.
 
 ### Removed
 

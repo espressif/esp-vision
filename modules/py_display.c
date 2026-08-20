@@ -8,6 +8,7 @@
 
 #include "esp_err.h"
 
+#include "py/nlr.h"
 #include "py/obj.h"
 #include "py/runtime.h"
 
@@ -25,6 +26,20 @@ typedef struct {
 // from an earlier raw-REPL script cannot tear down the display reused by the
 // next script.
 static esp_vision_display_obj_t *s_display_owner;
+
+typedef struct {
+    nlr_jump_callback_node_t callback;
+    bool marked;
+} py_display_fb_alloc_cleanup_t;
+
+static void py_display_fb_alloc_cleanup(void *ctx_in)
+{
+    py_display_fb_alloc_cleanup_t *ctx = ctx_in;
+    if (ctx->marked) {
+        fb_alloc_free_till_mark();
+        ctx->marked = false;
+    }
+}
 
 static void py_display_raise_esp_err(esp_err_t err)
 {
@@ -165,7 +180,12 @@ static mp_obj_t py_display_write(size_t n_args, const mp_obj_t *pos_args, mp_map
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all(n_args - 1, pos_args + 1, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
+    py_display_fb_alloc_cleanup_t cleanup = {
+        .marked = false,
+    };
+    nlr_push_jump_callback(&cleanup.callback, py_display_fb_alloc_cleanup);
     fb_alloc_mark();
+    cleanup.marked = true;
     image_t *img = py_helper_arg_to_image(args[ARG_image].u_obj, ARG_IMAGE_ANY | ARG_IMAGE_ALLOC);
     rectangle_t roi = py_helper_arg_to_roi(args[ARG_roi].u_obj, img);
 
@@ -180,7 +200,7 @@ static mp_obj_t py_display_write(size_t n_args, const mp_obj_t *pos_args, mp_map
     py_helper_arg_to_scale(args[ARG_x_scale].u_obj, args[ARG_y_scale].u_obj, &config.x_scale, &config.y_scale);
 
     esp_err_t ret = esp_vision_display_write(img, &config);
-    fb_alloc_free_till_mark();
+    nlr_pop_jump_callback(true);
     if (ret != ESP_OK) {
         py_display_raise_esp_err(ret);
     }
