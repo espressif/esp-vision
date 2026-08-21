@@ -12104,7 +12104,7 @@ void imlib_find_apriltags(list_t *out, image_t *ptr, rectangle_t *roi, apriltag_
     apriltag_detections_destroy(detections);
     fb_free(); // grayscale_image;
     apriltag_detector_destroy(td);
-    fb_free(); // umm_init_x();
+    umm_deinit_x();
 }
 
 #ifdef IMLIB_ENABLE_FIND_RECTS
@@ -12299,7 +12299,7 @@ void imlib_find_rects(list_t *out, image_t *ptr, rectangle_t *roi, uint32_t thre
     zarray_destroy(detections);
     fb_free(); // grayscale_image;
     apriltag_detector_destroy(td);
-    fb_free(); // umm_init_x();
+    umm_deinit_x();
 }
 #endif //IMLIB_ENABLE_FIND_RECTS
 
@@ -12564,7 +12564,7 @@ void imlib_rotation_corr(image_t *img, float x_rotation, float y_rotation, float
     matd_destroy(RX);
     matd_destroy(A1);
 
-    fb_free(); // umm_init_x();
+    umm_deinit_x();
 
     fb_free();
 }

@@ -26,11 +26,27 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <string.h>
 
 #include "esp_heap_caps.h"
 #include "py/runtime.h"
 #include "umm_malloc.h"
+
+typedef union _umm_alloc_header_t umm_alloc_header_t;
+
+union _umm_alloc_header_t {
+    struct {
+        umm_alloc_header_t *prev;
+        umm_alloc_header_t *next;
+        size_t size;
+        bool mark;
+    } node;
+    max_align_t alignment;
+};
+
+static umm_alloc_header_t *s_umm_alloc_head;
 
 void umm_alloc_fail(void) {
     mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("umm_malloc failed"));
@@ -38,6 +54,11 @@ void umm_alloc_fail(void) {
 
 void umm_init_x(size_t size) {
     (void) size;
+}
+
+void umm_deinit_x(void) {
+    // Heap-backed UMM allocations are released individually, unlike the
+    // original framebuffer-backed allocator's single arena allocation.
 }
 
 static void *umm_heap_malloc(size_t size) {
@@ -62,11 +83,75 @@ static void *umm_heap_realloc(void *ptr, size_t size) {
     return new_ptr;
 }
 
+static void umm_alloc_link(umm_alloc_header_t *header) {
+    header->node.prev = NULL;
+    header->node.next = s_umm_alloc_head;
+    if (s_umm_alloc_head != NULL) {
+        s_umm_alloc_head->node.prev = header;
+    }
+    s_umm_alloc_head = header;
+}
+
+static void umm_alloc_unlink(umm_alloc_header_t *header) {
+    if (header->node.prev != NULL) {
+        header->node.prev->node.next = header->node.next;
+    } else {
+        s_umm_alloc_head = header->node.next;
+    }
+    if (header->node.next != NULL) {
+        header->node.next->node.prev = header->node.prev;
+    }
+}
+
+static umm_alloc_header_t *umm_alloc_new_node(size_t size, bool mark) {
+    if (size > (SIZE_MAX - sizeof(umm_alloc_header_t))) {
+        return NULL;
+    }
+
+    umm_alloc_header_t *header = umm_heap_malloc(sizeof(umm_alloc_header_t) + size);
+    if (header == NULL) {
+        return NULL;
+    }
+
+    header->node.size = size;
+    header->node.mark = mark;
+    umm_alloc_link(header);
+    return header;
+}
+
+void umm_alloc_mark(void) {
+    if (umm_alloc_new_node(0, true) == NULL) {
+        umm_alloc_fail();
+    }
+}
+
+void umm_alloc_free_till_mark(void) {
+    umm_alloc_header_t *mark = s_umm_alloc_head;
+    while ((mark != NULL) && !mark->node.mark) {
+        mark = mark->node.next;
+    }
+    if (mark == NULL) {
+        return;
+    }
+
+    while (s_umm_alloc_head != NULL) {
+        umm_alloc_header_t *header = s_umm_alloc_head;
+        bool stop = header->node.mark;
+        umm_alloc_unlink(header);
+        heap_caps_free(header);
+        if (stop) {
+            return;
+        }
+    }
+}
+
 void *umm_malloc(size_t size) {
     if (size == 0) {
         return NULL;
     }
-    return umm_heap_malloc(size);
+
+    umm_alloc_header_t *header = umm_alloc_new_node(size, false);
+    return header == NULL ? NULL : (void *)(header + 1);
 }
 
 void *umm_calloc(size_t num, size_t size) {
@@ -78,7 +163,7 @@ void *umm_calloc(size_t num, size_t size) {
     }
 
     size_t total_size = num * size;
-    void *ptr = umm_heap_malloc(total_size);
+    void *ptr = umm_malloc(total_size);
     if (ptr != NULL) {
         memset(ptr, 0, total_size);
     }
@@ -86,13 +171,43 @@ void *umm_calloc(size_t num, size_t size) {
 }
 
 void *umm_realloc(void *ptr, size_t size) {
+    if (ptr == NULL) {
+        return umm_malloc(size);
+    }
     if (size == 0) {
-        heap_caps_free(ptr);
+        umm_free(ptr);
         return NULL;
     }
-    return umm_heap_realloc(ptr, size);
+    if (size > (SIZE_MAX - sizeof(umm_alloc_header_t))) {
+        return NULL;
+    }
+
+    umm_alloc_header_t *header = ((umm_alloc_header_t *)ptr) - 1;
+    umm_alloc_header_t *new_header = umm_heap_realloc(header, sizeof(umm_alloc_header_t) + size);
+    if (new_header == NULL) {
+        return NULL;
+    }
+
+    if (new_header != header) {
+        if (new_header->node.prev != NULL) {
+            new_header->node.prev->node.next = new_header;
+        } else {
+            s_umm_alloc_head = new_header;
+        }
+        if (new_header->node.next != NULL) {
+            new_header->node.next->node.prev = new_header;
+        }
+    }
+    new_header->node.size = size;
+    return (void *)(new_header + 1);
 }
 
 void umm_free(void *ptr) {
-    heap_caps_free(ptr);
+    if (ptr == NULL) {
+        return;
+    }
+
+    umm_alloc_header_t *header = ((umm_alloc_header_t *)ptr) - 1;
+    umm_alloc_unlink(header);
+    heap_caps_free(header);
 }

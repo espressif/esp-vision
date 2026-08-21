@@ -63,6 +63,37 @@
 
 const mp_obj_type_t py_image_type;
 
+typedef struct {
+    nlr_jump_callback_node_t callback;
+    bool fb_marked;
+    bool umm_marked;
+} py_image_alloc_cleanup_t;
+
+static void py_image_alloc_cleanup(void *ctx_in) {
+    py_image_alloc_cleanup_t *ctx = ctx_in;
+    if (ctx->umm_marked) {
+        umm_alloc_free_till_mark();
+        ctx->umm_marked = false;
+    }
+    if (ctx->fb_marked) {
+        fb_alloc_free_till_mark();
+        ctx->fb_marked = false;
+    }
+}
+
+static void py_image_alloc_cleanup_begin(py_image_alloc_cleanup_t *ctx, bool track_umm) {
+    ctx->fb_marked = false;
+    ctx->umm_marked = false;
+    nlr_push_jump_callback(&ctx->callback, py_image_alloc_cleanup);
+
+    fb_alloc_mark();
+    ctx->fb_marked = true;
+    if (track_umm) {
+        umm_alloc_mark();
+        ctx->umm_marked = true;
+    }
+}
+
 // Haar Cascade ///////////////////////////////////////////////////////////////
 
 #ifdef IMLIB_ENABLE_FEATURES
@@ -5180,9 +5211,10 @@ static mp_obj_t py_image_find_qrcodes(size_t n_args, const mp_obj_t *args, mp_ma
     py_helper_keyword_rectangle_roi(arg_img, n_args, args, 1, kw_args, &roi);
 
     list_t out;
-    fb_alloc_mark();
+    py_image_alloc_cleanup_t cleanup;
+    py_image_alloc_cleanup_begin(&cleanup, false);
     imlib_find_qrcodes(&out, arg_img, &roi);
-    fb_alloc_free_till_mark();
+    nlr_pop_jump_callback(true);
 
     mp_obj_list_t *objects_list = mp_obj_new_list(list_size(&out), NULL);
     for (size_t i = 0; list_size(&out); i++) {
@@ -5410,9 +5442,10 @@ static mp_obj_t py_image_find_apriltags(size_t n_args, const mp_obj_t *args, mp_
     bool pose = py_helper_keyword_int(n_args, args, 7, kw_args, MP_OBJ_NEW_QSTR(MP_QSTR_pose), true);
 
     list_t out;
-    fb_alloc_mark();
+    py_image_alloc_cleanup_t cleanup;
+    py_image_alloc_cleanup_begin(&cleanup, true);
     imlib_find_apriltags(&out, arg_img, &roi, families, fx, fy, cx, cy, pose);
-    fb_alloc_free_till_mark();
+    nlr_pop_jump_callback(true);
 
     mp_obj_list_t *objects_list = mp_obj_new_list(list_size(&out), NULL);
     for (size_t i = 0; list_size(&out); i++) {

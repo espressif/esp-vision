@@ -59,25 +59,21 @@ static size_t omv_fb_largest_free_block_with_caps(uint32_t caps) {
 }
 
 static size_t omv_fb_largest_free_block(int hints) {
-    size_t largest = 0;
+    size_t preferred = 0;
+    size_t fallback = 0;
 
     if (hints & FB_ALLOC_PREFER_INTERNAL) {
-        largest = omv_fb_largest_free_block_with_caps(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        if (largest == 0) {
-            largest = omv_fb_largest_free_block_with_caps(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        }
+        preferred = omv_fb_largest_free_block_with_caps(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        fallback = omv_fb_largest_free_block_with_caps(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     } else if (hints & FB_ALLOC_PREFER_SIZE) {
-        largest = omv_fb_largest_free_block_with_caps(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (largest == 0) {
-            largest = omv_fb_largest_free_block_with_caps(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        }
+        preferred = omv_fb_largest_free_block_with_caps(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        fallback = omv_fb_largest_free_block_with_caps(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     } else {
-        largest = omv_fb_largest_free_block_with_caps(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (largest == 0) {
-            largest = omv_fb_largest_free_block_with_caps(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        }
+        preferred = omv_fb_largest_free_block_with_caps(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        fallback = omv_fb_largest_free_block_with_caps(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     }
 
+    size_t largest = preferred > fallback ? preferred : fallback;
     if (largest == 0) {
         largest = omv_fb_largest_free_block_with_caps(MALLOC_CAP_8BIT);
     }
