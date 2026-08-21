@@ -30,6 +30,12 @@
 #include "esp_netif.h"
 
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+#define ESP_VISION_WIFI_AUTH_UNKNOWN_SUPPORTED (1)
+#else
+#define ESP_VISION_WIFI_AUTH_UNKNOWN_SUPPORTED (0)
+#endif
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
 typedef int esp_interface_t;
 #define ESP_IF_WIFI_STA ((esp_interface_t)WIFI_IF_STA)
 #define ESP_IF_WIFI_AP ((esp_interface_t)WIFI_IF_AP)

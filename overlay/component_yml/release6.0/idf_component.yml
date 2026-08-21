@@ -11,7 +11,7 @@ dependencies:
   espressif/esp_wifi_remote:
     rules:
       - if: "target == esp32p4"
-    version: "1.6.0"
+    version: "1.6.4"
   espressif/lan867x:
     version: "~1.0.0"
     rules:
