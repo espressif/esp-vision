@@ -49,6 +49,8 @@ BOARD_IMAGES = {
     ),
     'ESP32_P4X_VISION': '../../_static/boards/ESP32_P4X_VISION/ESP32-P4X-VISION.png',
     'AtomS3R-M12': '../../_static/boards/AtomS3R-M12/AtomS3R-M12.png',
+    'ESP32_S31_CHATBOT': '../../_static/ESP-VISION_logo.svg',
+    'ESP32_S31_MOSAICO': '../../_static/ESP-VISION_logo.svg',
 }
 
 # Canonical (English) getting-started URL override; falls back to board.json's

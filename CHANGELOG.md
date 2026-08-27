@@ -10,10 +10,15 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Added a button-triggered PP-OCRv6 pipeline with separate INT8 text detection and recognition stages, Python detection/CTC post-processing, and generic BGR preprocessing through `espdl.Model`.
 - Added ESP32-S3 USB-OTG CDC automatic download-mode entry using the esptool USB-Serial/JTAG DTR/RTS sequence, controlled per board from `mpconfigboard.h` and handled outside the MicroPython VM. The existing EV-MUX CDC stack now starts before camera initialization, filesystem recovery, and `boot.py`; its transport task keeps the download path responsive while the VM is busy without introducing a second USB driver or descriptor owner.
 - Added OpenMV v5.0.0's MIT-licensed Edge Drawing Lines implementation and enabled `Image.find_line_segments()` on all supported boards.
+- Added initial `ESP32_S31_CHATBOT` support (requires ESP-IDF release/v6.1) with a USB Serial/JTAG console, an SC101IOT DVP camera, and a 480x480 CO5300 QSPI display managed by ESP Board Manager.
+- Added initial `ESP32_S31_MOSAICO` support on ESP-IDF release/v6.1 with native USB 2.0 High Speed CDC/Flash MSC, an OV3640 DVP camera accepting both official product IDs (`0x364C` and `0x3641`), and a 480x480 CO5300 QSPI display. Cold-start eFuse detection treats the legacy all-zero value as v1.0 and selects the v1.0 or shared v1.1/v1.2 LCD pin map while retaining the CameraBoard's common wiring; camera startup enables the shared GPIO60 VCC_3V3 rail, releases the built-in USB Serial/JTAG pads shared by Camera D2, and waits for the external oscillator before SCCB probing. The generated `main.py` previews camera frames on the LCD with a default 90-degree counter-clockwise PPA rotation. The board uses onboard NAND Flash instead of an SD card; NAND storage is not yet exposed and camera flash support remains disabled.
+- Added a camera-independent LCD color-bar and solid-color diagnostic under `example/06-Peripherals/01-Display`.
 
 ### Changed
 
+- Updated the ESP Video dependency to version 2.4.0 across the supported ESP-IDF release overlays.
 - Added periodic MicroPython event polling to long-running imlib drawing, filtering, feature-detection, QR, statistics, and template-matching loops.
+- Migrated supported boards' camera and LCD initialization to ESP Board Manager, including runtime OV3660 and SC101IOT format selection and sensor-specific orientation correction on `ESP32_S31_KORVO`; the `TEMPLATE` board remains an explicitly documented non-Board-Manager starting point.
 - Synchronized the MicroPython Wi-Fi authentication constants with the native and remote Wi-Fi backends in ESP-IDF 6.0 and 6.1.
 - Updated `esp_wifi_remote` to 1.6.4 for every supported ESP-IDF release overlay.
 - Moved Flash and SD FAT filesystem ownership to an ESP-IDF storage manager, with native MicroPython VFS bridges at `/` and `/sdcard` and a shared raw Flash backend for the existing MSC LUN.

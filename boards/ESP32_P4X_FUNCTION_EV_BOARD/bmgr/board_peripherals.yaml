@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1.0.0
+peripherals:
+  - name: i2c_camera
+    type: i2c
+    role: master
+    config:
+      port: 0
+      pins:
+        sda: 7
+        scl: 8
+
+  - name: ldo_mipi
+    type: ldo
+    config:
+      chan_id: 3
+      voltage_mv: 2500
+      adjustable: 1
+      owned_by_hw: 0
+
+  - name: dsi_display
+    type: dsi
+    config:
+      bus_id: 0
+      data_lanes: 2
+      phy_clk_src: 0
+      lane_bit_rate_mbps: 1000
+
+  - name: ledc_backlight
+    type: ledc
+    version: default
+    config:
+      gpio_num: 26
+      speed_mode: LEDC_LOW_SPEED_MODE
+      channel: 1
+      timer_sel: 1
+      freq_hz: 5000
+      duty_resolution: LEDC_TIMER_10_BIT
+      duty: 0

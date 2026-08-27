@@ -9,7 +9,8 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include "driver/ledc.h"
+#include "esp_board_manager.h"
+#include "esp_board_manager_defs.h"
 #include "esp_err.h"
 #include "esp_log.h"
 
@@ -55,7 +56,6 @@
 #endif
 
 #define ESP_VISION_CAMERA_CAPTURE_RETRY_COUNT 3
-#define ESP_VISION_CAMERA_JPEG_QUALITY        12
 
 typedef struct {
     bool initialized;
@@ -261,38 +261,9 @@ esp_err_t esp_vision_camera_init(void)
         return ret;
     }
 
-    const camera_config_t config = {
-        .pin_pwdn = ESP_VISION_CAMERA_SENSOR_PWDN_PIN,
-        .pin_reset = ESP_VISION_CAMERA_SENSOR_RESET_PIN,
-        .pin_xclk = ESP_VISION_CAMERA_XCLK_PIN,
-        .pin_sccb_sda = ESP_VISION_CAMERA_SCCB_I2C_SDA_PIN,
-        .pin_sccb_scl = ESP_VISION_CAMERA_SCCB_I2C_SCL_PIN,
-        .pin_d7 = ESP_VISION_CAMERA_DVP_D7_PIN,
-        .pin_d6 = ESP_VISION_CAMERA_DVP_D6_PIN,
-        .pin_d5 = ESP_VISION_CAMERA_DVP_D5_PIN,
-        .pin_d4 = ESP_VISION_CAMERA_DVP_D4_PIN,
-        .pin_d3 = ESP_VISION_CAMERA_DVP_D3_PIN,
-        .pin_d2 = ESP_VISION_CAMERA_DVP_D2_PIN,
-        .pin_d1 = ESP_VISION_CAMERA_DVP_D1_PIN,
-        .pin_d0 = ESP_VISION_CAMERA_DVP_D0_PIN,
-        .pin_vsync = ESP_VISION_CAMERA_DVP_VSYNC_PIN,
-        .pin_href = ESP_VISION_CAMERA_DVP_HSYNC_PIN,
-        .pin_pclk = ESP_VISION_CAMERA_DVP_PCLK_PIN,
-        .xclk_freq_hz = ESP_VISION_CAMERA_XCLK_FREQ,
-        .ledc_timer = (ledc_timer_t)ESP_VISION_CAMERA_XCLK_LEDC_TIMER,
-        .ledc_channel = (ledc_channel_t)ESP_VISION_CAMERA_XCLK_LEDC_CHANNEL,
-        .pixel_format = ESP32_CAMERA_PIXFORMAT_JPEG,
-        .frame_size = frame_size,
-        .jpeg_quality = ESP_VISION_CAMERA_JPEG_QUALITY,
-        .fb_count = ESP_VISION_CAMERA_BUFFER_COUNT,
-        .fb_location = CAMERA_FB_IN_PSRAM,
-        .grab_mode = CAMERA_GRAB_LATEST,
-        .sccb_i2c_port = ESP_VISION_CAMERA_SCCB_I2C_PORT,
-    };
-
-    ret = esp_camera_init(&config);
+    ret = esp_board_manager_init_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "failed to initialize esp32-camera: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "board manager failed to initialize camera: %s", esp_err_to_name(ret));
         esp_vision_debug_printf("[esp-vision] camera start failed: %s\r\n", esp_err_to_name(ret));
         return ret;
     }
@@ -303,6 +274,7 @@ esp_err_t esp_vision_camera_init(void)
 
     sensor_t *sensor = esp_camera_sensor_get();
     if (sensor != NULL) {
+        sensor->set_framesize(sensor, frame_size);
         sensor->set_hmirror(sensor, s_camera.hmirror ? 1 : 0);
         sensor->set_vflip(sensor, s_camera.vflip ? 1 : 0);
     }
@@ -328,7 +300,7 @@ esp_err_t esp_vision_camera_init(void)
 void esp_vision_camera_deinit(void)
 {
     if (s_camera.initialized) {
-        esp_camera_deinit();
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
         s_camera.initialized = false;
     }
 }

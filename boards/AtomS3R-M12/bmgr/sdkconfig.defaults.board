@@ -1,0 +1,2 @@
+# ESP Board Manager resources used by ESP-VISION on the AtomS3R-M12 board.
+CONFIG_ESP_BOARD_DEV_CUSTOM_SUPPORT=y

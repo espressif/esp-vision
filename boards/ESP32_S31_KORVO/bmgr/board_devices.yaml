@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1.0.0
+devices:
+  - name: display_lcd
+    chip: generic_rgb
+    type: display_lcd
+    sub_type: rgb
+    version: 1.0.0
+    init_skip: true
+    config:
+      swap_xy: false
+      mirror_y: false
+      mirror_x: false
+      invert_color: false
+      need_reset: true
+      bits_per_pixel: 16
+      rgb_ele_order: LCD_RGB_ELEMENT_ORDER_RGB
+      data_endian: LCD_RGB_DATA_ENDIAN_BIG
+      rgb_panel_config:
+        clk_src: LCD_CLK_SRC_DEFAULT
+        data_width: 16
+        in_color_format: LCD_COLOR_FMT_RGB565
+        out_color_format: LCD_COLOR_FMT_RGB565
+        num_fbs: 1
+        bounce_buffer_size_px: 0
+        dma_burst_size: 64
+        hsync_gpio_num: 44
+        vsync_gpio_num: 45
+        de_gpio_num: 43
+        pclk_gpio_num: 40
+        disp_gpio_num: -1
+        data_gpio_nums: [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 33, 34, 35, 36]
+        timings:
+          pclk_hz: 18000000
+          h_res: 800
+          v_res: 480
+          hsync_pulse_width: 1
+          hsync_back_porch: 40
+          hsync_front_porch: 20
+          vsync_pulse_width: 1
+          vsync_back_porch: 10
+          vsync_front_porch: 5
+          flags:
+            pclk_active_neg: true
+        flags:
+          fb_in_psram: true
+
+  - name: camera
+    type: camera
+    sub_type: dvp
+    version: default
+    init_skip: true
+    config:
+      dvp_config:
+        reset_io: -1
+        pwdn_io: -1
+        vsync_io: 56
+        data_width: CAM_CTLR_DATA_WIDTH_8
+        de_io: 57
+        pclk_io: 54
+        xclk_io: 55
+        xclk_freq: 20000000
+        data_io:
+          data_io_0: 46
+          data_io_1: 47
+          data_io_2: 48
+          data_io_3: 49
+          data_io_4: 50
+          data_io_5: 51
+          data_io_6: 52
+          data_io_7: 53
+    peripherals:
+      - name: i2c_master
+        frequency: 100000

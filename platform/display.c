@@ -14,6 +14,16 @@
 
 #include "boardconfig.h"
 
+#ifdef ESP_VISION_USE_BOARD_MANAGER
+#ifdef CONFIG_ESP_BOARD_DEV_LEDC_CTRL_SUPPORT
+#include "driver/ledc.h"
+#endif
+#include "esp_board_manager.h"
+#include "esp_board_manager_defs.h"
+#include "esp_board_manager_includes.h"
+#include "esp_log.h"
+#endif
+
 #ifndef CMSIS_MCU_H
 #define CMSIS_MCU_H "cmsis_compiler.h"
 #endif
@@ -28,6 +38,144 @@
 #define ESP_VISION_LCD_HEIGHT (0)
 #endif
 
+#ifdef ESP_VISION_USE_BOARD_MANAGER
+
+#ifdef CONFIG_ESP_BOARD_DEV_LEDC_CTRL_SUPPORT
+static const char *TAG = "esp_vision_display";
+static bool s_board_backlight_initialized;
+#endif
+#ifdef CONFIG_ESP_BOARD_DEV_DISPLAY_LCD_SUPPORT
+static bool s_board_display_initialized;
+#endif
+
+esp_err_t esp_vision_board_display_backlight_init(void)
+{
+#ifdef CONFIG_ESP_BOARD_DEV_LEDC_CTRL_SUPPORT
+    if (s_board_backlight_initialized) {
+        return ESP_OK;
+    }
+    if (!esp_board_manager_check_name(ESP_BOARD_DEVICE_NAME_LCD_BRIGHTNESS)) {
+        return ESP_OK;
+    }
+
+    esp_err_t ret = esp_board_manager_init_device_by_name(ESP_BOARD_DEVICE_NAME_LCD_BRIGHTNESS);
+    if (ret == ESP_OK) {
+        s_board_backlight_initialized = true;
+    }
+    return ret;
+#else
+    return ESP_OK;
+#endif
+}
+
+void esp_vision_board_display_set_backlight(uint32_t backlight)
+{
+#ifdef CONFIG_ESP_BOARD_DEV_LEDC_CTRL_SUPPORT
+    periph_ledc_handle_t *ledc = NULL;
+    dev_ledc_ctrl_config_t *device_config = NULL;
+    periph_ledc_config_t *ledc_config = NULL;
+
+    if (!s_board_backlight_initialized ||
+            (esp_board_manager_get_device_handle(ESP_BOARD_DEVICE_NAME_LCD_BRIGHTNESS,
+                                                 (void **)&ledc) != ESP_OK) ||
+            (ledc == NULL) ||
+            (esp_board_manager_get_device_config(ESP_BOARD_DEVICE_NAME_LCD_BRIGHTNESS,
+                                                 (void **)&device_config) != ESP_OK) ||
+            (device_config == NULL) ||
+            (esp_board_manager_get_periph_config(device_config->ledc_name,
+                                                 (void **)&ledc_config) != ESP_OK) ||
+            (ledc_config == NULL)) {
+        return;
+    }
+
+    uint32_t max_duty = (1U << (uint32_t)ledc_config->duty_resolution) - 1U;
+    uint32_t duty = (backlight * max_duty) / 100U;
+    if ((ledc_set_duty(ledc->speed_mode, ledc->channel, duty) != ESP_OK) ||
+            (ledc_update_duty(ledc->speed_mode, ledc->channel) != ESP_OK)) {
+        ESP_LOGW(TAG, "failed to set LCD backlight");
+    }
+#else
+    (void)backlight;
+#endif
+}
+
+esp_err_t esp_vision_board_display_init_panel(uint32_t width,
+                                              uint32_t height,
+                                              esp_lcd_panel_io_handle_t *io_handle,
+                                              esp_lcd_panel_handle_t *panel_handle)
+{
+    if ((io_handle == NULL) || (panel_handle == NULL)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+#ifndef CONFIG_ESP_BOARD_DEV_DISPLAY_LCD_SUPPORT
+    (void)width;
+    (void)height;
+    *io_handle = NULL;
+    *panel_handle = NULL;
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    if ((width != ESP_VISION_LCD_WIDTH) || (height != ESP_VISION_LCD_HEIGHT)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t ret = esp_board_manager_init_device_by_name(ESP_BOARD_DEVICE_NAME_DISPLAY_LCD);
+    if (ret != ESP_OK) {
+        goto fail;
+    }
+    s_board_display_initialized = true;
+
+    dev_display_lcd_handles_t *display = NULL;
+    ret = esp_board_manager_get_device_handle(ESP_BOARD_DEVICE_NAME_DISPLAY_LCD,
+                                              (void **)&display);
+    if ((ret != ESP_OK) || (display == NULL) || (display->panel_handle == NULL)) {
+        ret = (ret == ESP_OK) ? ESP_ERR_INVALID_STATE : ret;
+        goto fail;
+    }
+
+    *io_handle = display->io_handle;
+    *panel_handle = display->panel_handle;
+    return ESP_OK;
+
+fail:
+    if (s_board_display_initialized) {
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_DISPLAY_LCD);
+        s_board_display_initialized = false;
+    }
+#ifdef CONFIG_ESP_BOARD_DEV_LEDC_CTRL_SUPPORT
+    if (s_board_backlight_initialized) {
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_LCD_BRIGHTNESS);
+        s_board_backlight_initialized = false;
+    }
+#endif
+    return ret;
+#endif
+}
+
+void esp_vision_board_display_deinit_panel(esp_lcd_panel_io_handle_t io_handle,
+                                           esp_lcd_panel_handle_t panel_handle)
+{
+    (void)io_handle;
+
+    if (panel_handle != NULL) {
+        (void)esp_lcd_panel_disp_on_off(panel_handle, false);
+    }
+#ifdef CONFIG_ESP_BOARD_DEV_LEDC_CTRL_SUPPORT
+    if (s_board_backlight_initialized) {
+        esp_vision_board_display_set_backlight(0);
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_LCD_BRIGHTNESS);
+        s_board_backlight_initialized = false;
+    }
+#endif
+#ifdef CONFIG_ESP_BOARD_DEV_DISPLAY_LCD_SUPPORT
+    if (s_board_display_initialized) {
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_DISPLAY_LCD);
+        s_board_display_initialized = false;
+    }
+#endif
+}
+
+#else
+
 esp_err_t esp_vision_board_display_init_panel(uint32_t width,
                                               uint32_t height,
                                               esp_lcd_panel_io_handle_t *io_handle,
@@ -36,6 +184,8 @@ void esp_vision_board_display_deinit_panel(esp_lcd_panel_io_handle_t io_handle,
                                            esp_lcd_panel_handle_t panel_handle);
 esp_err_t esp_vision_board_display_backlight_init(void);
 void esp_vision_board_display_set_backlight(uint32_t backlight);
+
+#endif
 
 typedef struct {
     bool ready;

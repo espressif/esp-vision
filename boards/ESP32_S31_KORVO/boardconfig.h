@@ -24,7 +24,6 @@
 #define ESP_VISION_JPEG_QUALITY_THRESHOLD           (320 * 240 * 2)
 
 /* Camera configuration. */
-#define ESP_VISION_CAMERA_SENSOR_ID                 (0x3660)
 #define ESP_VISION_CAMERA_RAW_INPUT_WIDTH           (640)
 #define ESP_VISION_CAMERA_RAW_INPUT_HEIGHT          (480)
 #define ESP_VISION_CAMERA_ACTIVE_INPUT_WIDTH        (640)
@@ -64,7 +63,7 @@
 #define ESP_VISION_LCD_WIDTH                        (800)
 #define ESP_VISION_LCD_HEIGHT                       (480)
 #define ESP_VISION_LCD_BPP                          (16)
-#define ESP_VISION_LCD_PIXEL_CLOCK_HZ               (20 * 1000 * 1000)
+#define ESP_VISION_LCD_PIXEL_CLOCK_HZ               (18 * 1000 * 1000)
 #define ESP_VISION_LCD_DATA_WIDTH                   (16)
 #define ESP_VISION_LCD_HSYNC_PULSE_WIDTH            (1)
 #define ESP_VISION_LCD_HSYNC_BACK_PORCH             (40)

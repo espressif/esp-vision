@@ -10,6 +10,12 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 
+/*
+ * This is the display hook skeleton for boards that do not use ESP Board
+ * Manager. Remove this file when enabling ESP_VISION_USE_BOARD_MANAGER for a
+ * board, because platform/display.c provides these hooks in that configuration.
+ */
+
 esp_err_t esp_vision_board_display_backlight_init(void)
 {
     return ESP_ERR_NOT_SUPPORTED;

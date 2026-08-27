@@ -16,13 +16,14 @@ The config.toml carries two regions in one file:
     actually merged this release. Still openable by espressif.github.io/esp-launchpad.
   * a ``[website]`` table (ignored by esp-launchpad) — the ESP-VISION marketing
     site's board matrix, versioned by ``schemaVersion`` (semver; consumers pin
-    the major). Lists *every* board in boards.yml with its capability
-    data (from docs/board_model.board_info, the single source of derived truth),
-    plus ``flashable`` / ``bin`` linking each board to the standard region. It
-    also carries ``[[website.models]]``: the bundled ``.espdl`` models shipped
-    under ``models/``, read straight from each model's same-named ``.json``
-    sidecar, with size/architecture/task/download URLs so the site can list and
-    link them. Finally it carries ``releases`` (every published tag, newest first) plus
+    the major). Lists boards in boards.yml unless they set ``website: false``,
+    with capability data from docs/board_model.board_info (the single source of
+    derived truth), plus ``flashable`` / ``bin`` linking each board to the
+    standard region. It also carries ``[[website.models]]``: the bundled
+    ``.espdl`` models shipped under ``models/``, read straight from each model's
+    same-named ``.json`` sidecar, with size/architecture/task/download URLs so
+    the site can list and link them. Finally it carries ``releases`` (every
+    published tag, newest first) plus
     ``binaryNameTemplate``: because every image is named
     ``esp-vision-<board>-<tag>.bin``, the site can offer *all* historical
     versions by templating the URL itself (``firmware_images_url`` + filled
@@ -309,13 +310,15 @@ def collect_models() -> list:
 
 
 def build_website(cfg: dict, images: dict, tag: str) -> dict:
-    """Assemble the [website] region: every board + capabilities + flash link.
+    """Assemble the [website] region for boards enabled for the hardware matrix.
 
     Capability data comes from board_model.board_info (single source of derived
     truth). flashable/bin link each board to the standard launchpad region.
     """
     boards = []
     for board, meta in cfg["boards"].items():
+        if not meta.get("website", True):
+            continue
         target = meta["target"]
         info = board_info(board, target)
         flashable = board in images

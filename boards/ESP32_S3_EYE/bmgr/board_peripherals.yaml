@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1.0.0
+peripherals:
+  - name: spi_display
+    type: spi
+    role: master
+    config:
+      spi_bus_config:
+        spi_port: SPI3_HOST
+        mosi_io_num: 47
+        sclk_io_num: 21
+        max_transfer_sz: 19200
+
+  - name: ledc_backlight
+    type: ledc
+    version: default
+    config:
+      gpio_num: 48
+      speed_mode: LEDC_LOW_SPEED_MODE
+      channel: 1
+      timer_sel: 0
+      freq_hz: 5000
+      duty_resolution: LEDC_TIMER_10_BIT
+      duty: 0
+      output_invert: true

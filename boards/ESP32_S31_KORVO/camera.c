@@ -13,17 +13,14 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include "driver/gpio.h"
-#include "driver/i2c_master.h"
-#include "driver/ledc.h"
 #include "driver/ppa.h"
+#include "esp_board_manager.h"
+#include "esp_board_manager_defs.h"
+#include "esp_board_manager_includes.h"
 #include "esp_cache.h"
-#include "esp_cam_ctlr_dvp.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "esp_video_device.h"
-#include "esp_video_init.h"
 #include "esp_video_ioctl.h"
 #include "linux/videodev2.h"
 #include "sys/mman.h"
@@ -40,32 +37,16 @@
 #endif
 
 #define ESP_VISION_CAMERA_MEMORY_TYPE V4L2_MEMORY_MMAP
-#define ESP_VISION_CAMERA_OV3660_SCCB_ADDR 0x3c
+#define ESP_VISION_CAMERA_SENSOR_ID_UNKNOWN 0x0000
 #define ESP_VISION_CAMERA_OV3660_SENSOR_ID 0x3660
-#define ESP_VISION_CAMERA_OV3660_ID_HIGH_REG 0x300a
-#define ESP_VISION_CAMERA_OV3660_ID_LOW_REG 0x300b
-#define ESP_VISION_CAMERA_OV3660_SYSTEM_CONTROL0 0x3008
-#define ESP_VISION_CAMERA_OV3660_SOFT_RESET_VALUE 0x82
-#define ESP_VISION_CAMERA_OV3660_SOFT_RESET_DELAY_MS 20
-#define ESP_VISION_CAMERA_SC101IOT_SCCB_ADDR 0x68
 #define ESP_VISION_CAMERA_SC101IOT_SENSOR_ID 0xda4a
-#define ESP_VISION_CAMERA_SC101IOT_ID_HIGH_REG 0x31f7
-#define ESP_VISION_CAMERA_SC101IOT_ID_LOW_REG 0x31f8
-#define ESP_VISION_CAMERA_SC101IOT_PAGE_SELECT_REG 0xf0
 #define ESP_VISION_CAMERA_SC101IOT_RAW_INPUT_WIDTH 1280
 #define ESP_VISION_CAMERA_SC101IOT_RAW_INPUT_HEIGHT 720
-#define ESP_VISION_CAMERA_SCCB_TIMEOUT_MS 100
 #define ESP_VISION_CAMERA_DQBUF_TIMEOUT_MS 500
 #define ESP_VISION_CAMERA_DQBUF_RESTART_MAX 1
 #define ESP_VISION_CAMERA_STREAM_PRIME_ATTEMPTS 3
 #define ESP_VISION_CAMERA_FULL_INIT_ATTEMPTS 3
 #define ESP_VISION_CAMERA_INIT_RETRY_DELAY_MS 100
-
-typedef enum {
-    ESP_VISION_CAMERA_SENSOR_UNKNOWN = 0,
-    ESP_VISION_CAMERA_SENSOR_OV3660,
-    ESP_VISION_CAMERA_SENSOR_SC101IOT,
-} esp_vision_camera_sensor_t;
 
 typedef struct {
     void *ptr;
@@ -75,13 +56,10 @@ typedef struct {
 typedef struct {
     bool initialized;
     bool video_initialized;
-    bool xclk_started;
     bool streaming;
     bool hmirror;
     bool vflip;
-    i2c_master_bus_handle_t i2c_handle;
     int fd;
-    esp_vision_camera_sensor_t sensor;
     uint32_t sensor_id;
     uint32_t raw_input_width;
     uint32_t raw_input_height;
@@ -99,6 +77,7 @@ typedef struct {
     size_t ppa_out_size;
     ppa_client_handle_t ppa_handle;
     uint8_t *ppa_out_buf;
+    const char *device_path;
     esp_vision_camera_buffer_t buffers[ESP_VISION_CAMERA_BUFFER_COUNT];
 } esp_vision_camera_context_t;
 
@@ -106,7 +85,7 @@ static const char *TAG = "esp_vision_camera";
 static esp_vision_camera_context_t s_camera = {
     .fd = -1,
     .vflip = true,
-    .sensor_id = ESP_VISION_CAMERA_SENSOR_ID,
+    .sensor_id = ESP_VISION_CAMERA_SENSOR_ID_UNKNOWN,
     .width = ESP_VISION_CAMERA_PPA_OUTPUT_QVGA_WIDTH,
     .height = ESP_VISION_CAMERA_PPA_OUTPUT_QVGA_HEIGHT,
     .output_pixfmt = PIXFORMAT_RGB565,
@@ -116,8 +95,7 @@ static void esp_vision_camera_set_defaults(void)
 {
     s_camera.fd = -1;
     s_camera.vflip = true;
-    s_camera.sensor = ESP_VISION_CAMERA_SENSOR_UNKNOWN;
-    s_camera.sensor_id = ESP_VISION_CAMERA_SENSOR_ID;
+    s_camera.sensor_id = ESP_VISION_CAMERA_SENSOR_ID_UNKNOWN;
     s_camera.width = ESP_VISION_CAMERA_PPA_OUTPUT_QVGA_WIDTH;
     s_camera.height = ESP_VISION_CAMERA_PPA_OUTPUT_QVGA_HEIGHT;
     s_camera.output_pixfmt = PIXFORMAT_RGB565;
@@ -174,302 +152,6 @@ static const char *esp_vision_camera_input_name(void)
     }
 }
 
-static esp_err_t esp_vision_camera_configure_sccb_pullups(void)
-{
-#if ESP_VISION_CAMERA_SCCB_INTERNAL_PULLUP
-    ESP_RETURN_ON_ERROR(gpio_set_pull_mode(ESP_VISION_CAMERA_SCCB_I2C_SCL_PIN, GPIO_PULLUP_ONLY),
-                        TAG,
-                        "failed to enable SCCB SCL pull-up");
-    ESP_RETURN_ON_ERROR(gpio_set_pull_mode(ESP_VISION_CAMERA_SCCB_I2C_SDA_PIN, GPIO_PULLUP_ONLY),
-                        TAG,
-                        "failed to enable SCCB SDA pull-up");
-#endif
-    return ESP_OK;
-}
-
-static esp_err_t esp_vision_camera_i2c_init(void)
-{
-    if (s_camera.i2c_handle != NULL) {
-        return ESP_OK;
-    }
-
-    esp_err_t ret = esp_vision_camera_configure_sccb_pullups();
-    if (ret != ESP_OK) {
-        esp_vision_debug_printf("[esp-vision] camera init: configure SCCB pull-ups failed ret=%d\r\n", (int)ret);
-        return ret;
-    }
-
-    const i2c_master_bus_config_t bus_config = {
-        .i2c_port = ESP_VISION_CAMERA_SCCB_I2C_PORT,
-        .sda_io_num = ESP_VISION_CAMERA_SCCB_I2C_SDA_PIN,
-        .scl_io_num = ESP_VISION_CAMERA_SCCB_I2C_SCL_PIN,
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,
-        .flags = {
-            .enable_internal_pullup = ESP_VISION_CAMERA_SCCB_INTERNAL_PULLUP,
-        },
-    };
-
-    ret = i2c_new_master_bus(&bus_config, &s_camera.i2c_handle);
-    if (ret != ESP_OK) {
-        esp_vision_debug_printf("[esp-vision] camera init: create SCCB I2C bus failed ret=%d\r\n", (int)ret);
-        return ret;
-    }
-    return ESP_OK;
-}
-
-static void esp_vision_camera_i2c_deinit(void)
-{
-    if (s_camera.i2c_handle == NULL) {
-        return;
-    }
-
-    esp_err_t ret = i2c_del_master_bus(s_camera.i2c_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "failed to delete camera SCCB I2C bus: %s", esp_err_to_name(ret));
-    }
-    s_camera.i2c_handle = NULL;
-}
-
-static esp_err_t esp_vision_camera_sccb_read_reg16(uint8_t addr, uint16_t reg, uint8_t *value)
-{
-    if ((s_camera.i2c_handle == NULL) || (value == NULL)) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    i2c_master_dev_handle_t device = NULL;
-    const i2c_device_config_t device_config = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = addr,
-        .scl_speed_hz = ESP_VISION_CAMERA_SCCB_I2C_FREQ,
-    };
-
-    esp_err_t ret = i2c_master_bus_add_device(s_camera.i2c_handle, &device_config, &device);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    const uint8_t reg_addr[] = {
-        (uint8_t)(reg >> 8),
-        (uint8_t)reg,
-    };
-    ret = i2c_master_transmit_receive(device,
-                                      reg_addr,
-                                      sizeof(reg_addr),
-                                      value,
-                                      sizeof(*value),
-                                      ESP_VISION_CAMERA_SCCB_TIMEOUT_MS);
-
-    esp_err_t del_ret = i2c_master_bus_rm_device(device);
-    return (ret != ESP_OK) ? ret : del_ret;
-}
-
-static esp_err_t esp_vision_camera_sc101iot_read_reg(uint16_t reg, uint8_t *value)
-{
-    if ((s_camera.i2c_handle == NULL) || (value == NULL)) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    i2c_master_dev_handle_t device = NULL;
-    const i2c_device_config_t device_config = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = ESP_VISION_CAMERA_SC101IOT_SCCB_ADDR,
-        .scl_speed_hz = ESP_VISION_CAMERA_SCCB_I2C_FREQ,
-    };
-
-    esp_err_t ret = i2c_master_bus_add_device(s_camera.i2c_handle, &device_config, &device);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    const uint8_t page_addr[] = {
-        ESP_VISION_CAMERA_SC101IOT_PAGE_SELECT_REG,
-        (uint8_t)(reg >> 8),
-    };
-    ret = i2c_master_transmit(device,
-                              page_addr,
-                              sizeof(page_addr),
-                              ESP_VISION_CAMERA_SCCB_TIMEOUT_MS);
-    if (ret == ESP_OK) {
-        const uint8_t reg_addr = (uint8_t)reg;
-        ret = i2c_master_transmit_receive(device,
-                                          &reg_addr,
-                                          sizeof(reg_addr),
-                                          value,
-                                          sizeof(*value),
-                                          ESP_VISION_CAMERA_SCCB_TIMEOUT_MS);
-    }
-
-    esp_err_t del_ret = i2c_master_bus_rm_device(device);
-    return (ret != ESP_OK) ? ret : del_ret;
-}
-
-static esp_err_t esp_vision_camera_read_sensor_id(uint8_t addr, uint16_t high_reg, uint16_t low_reg, uint32_t *id)
-{
-    uint8_t high = 0;
-    uint8_t low = 0;
-
-    if (id == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    esp_err_t ret = esp_vision_camera_sccb_read_reg16(addr, high_reg, &high);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    ret = esp_vision_camera_sccb_read_reg16(addr, low_reg, &low);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    *id = ((uint32_t)high << 8) | low;
-    return ESP_OK;
-}
-
-static esp_err_t esp_vision_camera_read_sc101iot_sensor_id(uint32_t *id)
-{
-    uint8_t high = 0;
-    uint8_t low = 0;
-
-    if (id == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    esp_err_t ret = esp_vision_camera_sc101iot_read_reg(ESP_VISION_CAMERA_SC101IOT_ID_HIGH_REG, &high);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    ret = esp_vision_camera_sc101iot_read_reg(ESP_VISION_CAMERA_SC101IOT_ID_LOW_REG, &low);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    *id = ((uint32_t)high << 8) | low;
-    return ESP_OK;
-}
-
-static esp_err_t esp_vision_camera_probe_sensor(void)
-{
-    uint32_t id = 0;
-    esp_err_t ov_ret = esp_vision_camera_read_sensor_id(ESP_VISION_CAMERA_OV3660_SCCB_ADDR,
-                                                        ESP_VISION_CAMERA_OV3660_ID_HIGH_REG,
-                                                        ESP_VISION_CAMERA_OV3660_ID_LOW_REG,
-                                                        &id);
-    if ((ov_ret == ESP_OK) && (id == ESP_VISION_CAMERA_OV3660_SENSOR_ID)) {
-        s_camera.sensor = ESP_VISION_CAMERA_SENSOR_OV3660;
-        s_camera.sensor_id = id;
-        esp_vision_debug_printf("[esp-vision] camera init: probe sensor=OV3660 id=0x%04" PRIx32 "\r\n", id);
-        return ESP_OK;
-    }
-
-    uint32_t sc_ret_id = 0;
-    esp_err_t sc_ret = esp_vision_camera_read_sc101iot_sensor_id(&sc_ret_id);
-    if ((sc_ret == ESP_OK) && (sc_ret_id == ESP_VISION_CAMERA_SC101IOT_SENSOR_ID)) {
-        s_camera.sensor = ESP_VISION_CAMERA_SENSOR_SC101IOT;
-        s_camera.sensor_id = sc_ret_id;
-        esp_vision_debug_printf("[esp-vision] camera init: probe sensor=SC101IOT id=0x%04" PRIx32 "\r\n", sc_ret_id);
-        return ESP_OK;
-    }
-
-    esp_vision_debug_printf("[esp-vision] camera init: probe sensor failed ov_ret=%d ov_id=0x%04" PRIx32
-                            " sc_ret=%d sc_id=0x%04" PRIx32 "\r\n",
-                            (int)ov_ret,
-                            id,
-                            (int)sc_ret,
-                            sc_ret_id);
-    s_camera.sensor = ESP_VISION_CAMERA_SENSOR_UNKNOWN;
-    s_camera.sensor_id = ESP_VISION_CAMERA_SENSOR_ID;
-    return ESP_ERR_NOT_FOUND;
-}
-
-static esp_err_t esp_vision_camera_ov3660_soft_reset(void)
-{
-    i2c_master_dev_handle_t device = NULL;
-    const i2c_device_config_t device_config = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = ESP_VISION_CAMERA_OV3660_SCCB_ADDR,
-        .scl_speed_hz = ESP_VISION_CAMERA_SCCB_I2C_FREQ,
-    };
-
-    esp_err_t ret = i2c_master_bus_add_device(s_camera.i2c_handle, &device_config, &device);
-    if (ret != ESP_OK) {
-        esp_vision_debug_printf("[esp-vision] camera init: add OV3660 SCCB device failed ret=%d\r\n", (int)ret);
-        return ret;
-    }
-
-    const uint8_t tx_data[] = {
-        (uint8_t)(ESP_VISION_CAMERA_OV3660_SYSTEM_CONTROL0 >> 8),
-        (uint8_t)ESP_VISION_CAMERA_OV3660_SYSTEM_CONTROL0,
-        ESP_VISION_CAMERA_OV3660_SOFT_RESET_VALUE,
-    };
-    ret = i2c_master_transmit(device, tx_data, sizeof(tx_data), ESP_VISION_CAMERA_SCCB_TIMEOUT_MS);
-    esp_err_t del_ret = i2c_master_bus_rm_device(device);
-    if (ret != ESP_OK) {
-        esp_vision_debug_printf("[esp-vision] camera init: write OV3660 soft reset failed ret=%d\r\n", (int)ret);
-        return ret;
-    }
-    if (del_ret != ESP_OK) {
-        esp_vision_debug_printf("[esp-vision] camera init: remove OV3660 SCCB device failed ret=%d\r\n", (int)del_ret);
-        return del_ret;
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(ESP_VISION_CAMERA_OV3660_SOFT_RESET_DELAY_MS));
-    return ESP_OK;
-}
-
-static esp_err_t esp_vision_camera_start_xclk(void)
-{
-    if (s_camera.xclk_started) {
-        return ESP_OK;
-    }
-
-    const ledc_timer_config_t timer_config = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_1_BIT,
-        .timer_num = (ledc_timer_t)ESP_VISION_CAMERA_XCLK_LEDC_TIMER,
-        .freq_hz = ESP_VISION_CAMERA_XCLK_FREQ,
-        .clk_cfg = LEDC_AUTO_CLK,
-    };
-    const ledc_channel_config_t channel_config = {
-        .gpio_num = ESP_VISION_CAMERA_XCLK_PIN,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel = (ledc_channel_t)ESP_VISION_CAMERA_XCLK_LEDC_CHANNEL,
-        .intr_type = LEDC_INTR_DISABLE,
-        .timer_sel = (ledc_timer_t)ESP_VISION_CAMERA_XCLK_LEDC_TIMER,
-        .duty = 1,
-        .hpoint = 0,
-    };
-
-    ESP_RETURN_ON_ERROR(ledc_timer_config(&timer_config), TAG, "failed to configure camera XCLK timer");
-    ESP_RETURN_ON_ERROR(ledc_channel_config(&channel_config), TAG, "failed to configure camera XCLK channel");
-
-    s_camera.xclk_started = true;
-    if (ESP_VISION_CAMERA_XCLK_STABLE_MS > 0) {
-        vTaskDelay(pdMS_TO_TICKS(ESP_VISION_CAMERA_XCLK_STABLE_MS));
-    }
-    return ESP_OK;
-}
-
-static void esp_vision_camera_stop_xclk(void)
-{
-    if (!s_camera.xclk_started) {
-        return;
-    }
-
-    ledc_stop(LEDC_LOW_SPEED_MODE, (ledc_channel_t)ESP_VISION_CAMERA_XCLK_LEDC_CHANNEL, 0);
-    ledc_timer_pause(LEDC_LOW_SPEED_MODE, (ledc_timer_t)ESP_VISION_CAMERA_XCLK_LEDC_TIMER);
-
-    const ledc_timer_config_t timer_config = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .timer_num = (ledc_timer_t)ESP_VISION_CAMERA_XCLK_LEDC_TIMER,
-        .deconfigure = true,
-    };
-    ledc_timer_config(&timer_config);
-    s_camera.xclk_started = false;
-}
-
 esp_err_t esp_vision_camera_get_framesize_dimensions(esp_vision_camera_framesize_t framesize,
                                                      uint32_t *width,
                                                      uint32_t *height)
@@ -522,95 +204,73 @@ static void esp_vision_camera_release_ppa(void)
 
 static esp_err_t esp_vision_camera_video_init(void)
 {
-#if CONFIG_ESP_VIDEO_ENABLE_DVP_VIDEO_DEVICE
-    esp_cam_ctlr_dvp_pin_config_t dvp_pin = {
-        .data_width = CAM_CTLR_DATA_WIDTH_8,
-        .data_io = {
-            ESP_VISION_CAMERA_DVP_D0_PIN,
-            ESP_VISION_CAMERA_DVP_D1_PIN,
-            ESP_VISION_CAMERA_DVP_D2_PIN,
-            ESP_VISION_CAMERA_DVP_D3_PIN,
-            ESP_VISION_CAMERA_DVP_D4_PIN,
-            ESP_VISION_CAMERA_DVP_D5_PIN,
-            ESP_VISION_CAMERA_DVP_D6_PIN,
-            ESP_VISION_CAMERA_DVP_D7_PIN,
-        },
-        .vsync_io = ESP_VISION_CAMERA_DVP_VSYNC_PIN,
-        .de_io = ESP_VISION_CAMERA_DVP_HSYNC_PIN,
-        .pclk_io = ESP_VISION_CAMERA_DVP_PCLK_PIN,
-        .xclk_io = GPIO_NUM_NC,
-    };
-    esp_video_init_dvp_config_t dvp_config = {
-        .sccb_config = {
-            .init_sccb = false,
-            .freq = ESP_VISION_CAMERA_SCCB_I2C_FREQ,
-        },
-        .reset_pin = ESP_VISION_CAMERA_SENSOR_RESET_PIN,
-        .pwdn_pin = ESP_VISION_CAMERA_SENSOR_PWDN_PIN,
-        .dvp_pin = dvp_pin,
-        .xclk_freq = 0,
-    };
-    const esp_video_init_config_t video_config = {
-        .dvp = &dvp_config,
-    };
+    esp_err_t ret = esp_board_manager_init_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
+    ESP_RETURN_ON_ERROR(ret, TAG, "board manager failed to initialize camera");
 
-    esp_err_t ret = esp_vision_camera_start_xclk();
-    if (ret != ESP_OK) {
-        esp_vision_debug_printf("[esp-vision] camera init: start xclk failed ret=%d\r\n", (int)ret);
-        return ret;
+    dev_camera_handle_t *camera = NULL;
+    ret = esp_board_manager_get_device_handle(ESP_BOARD_DEVICE_NAME_CAMERA,
+                                              (void **)&camera);
+    if ((ret != ESP_OK) || (camera == NULL) || (camera->dev_path == NULL)) {
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
+        return (ret == ESP_OK) ? ESP_ERR_INVALID_STATE : ret;
     }
 
-    ret = esp_vision_camera_i2c_init();
-    if (ret != ESP_OK) {
-        esp_vision_debug_printf("[esp-vision] camera init: sccb i2c failed ret=%d\r\n", (int)ret);
-        return ret;
-    }
-
-    ret = esp_vision_camera_probe_sensor();
-    if (ret != ESP_OK) {
-        esp_vision_debug_printf("[esp-vision] camera init: sensor probe failed ret=%d\r\n", (int)ret);
-        return ret;
-    }
-
-    if (s_camera.sensor == ESP_VISION_CAMERA_SENSOR_OV3660) {
-        ret = esp_vision_camera_ov3660_soft_reset();
-        if (ret != ESP_OK) {
-            esp_vision_debug_printf("[esp-vision] camera init: ov3660 soft reset failed ret=%d\r\n", (int)ret);
-            return ret;
-        }
-        esp_vision_debug_printf("[esp-vision] camera init: ov3660 soft reset ok\r\n");
-    }
-
-    dvp_config.sccb_config.i2c_handle = s_camera.i2c_handle;
-    ret = esp_video_init_with_flags(&video_config, ESP_VIDEO_INIT_FLAGS_DVP);
-    if (ret != ESP_OK) {
-        esp_vision_debug_printf("[esp-vision] camera init: esp-video DVP failed ret=%d\r\n", (int)ret);
-        return ret;
-    }
+    s_camera.device_path = camera->dev_path;
     s_camera.video_initialized = true;
     return ESP_OK;
-#else
-    return ESP_ERR_NOT_SUPPORTED;
-#endif
+}
+
+static esp_err_t esp_vision_camera_query_sensor_id(void)
+{
+    esp_cam_sensor_id_t chip_id = {0};
+    struct v4l2_ext_control control = {
+        .id = ESP_CAM_SENSOR_IOC_G_CHIP_ID,
+        .size = sizeof(chip_id),
+        .p_u8 = (uint8_t *) &chip_id,
+    };
+    struct v4l2_ext_controls controls = {
+        .ctrl_class = V4L2_CTRL_CLASS_ESP_CAM_IOCTL,
+        .count = 1,
+        .controls = &control,
+    };
+
+    if (ioctl(s_camera.fd, VIDIOC_G_EXT_CTRLS, &controls) != 0) {
+        ESP_LOGE(TAG, "failed to query camera sensor ID");
+        return ESP_FAIL;
+    }
+
+    if ((chip_id.pid != ESP_VISION_CAMERA_OV3660_SENSOR_ID) &&
+            (chip_id.pid != ESP_VISION_CAMERA_SC101IOT_SENSOR_ID)) {
+        ESP_LOGE(TAG, "unsupported camera sensor ID: 0x%04" PRIx16, chip_id.pid);
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    s_camera.sensor_id = chip_id.pid;
+    s_camera.hmirror = (chip_id.pid == ESP_VISION_CAMERA_SC101IOT_SENSOR_ID);
+    s_camera.vflip = (chip_id.pid == ESP_VISION_CAMERA_OV3660_SENSOR_ID);
+    return ESP_OK;
 }
 
 static void esp_vision_camera_video_deinit(void)
 {
     if (s_camera.video_initialized) {
-        esp_video_deinit_with_flags(ESP_VIDEO_INIT_FLAGS_DVP);
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
+        s_camera.device_path = NULL;
         s_camera.video_initialized = false;
     }
-    esp_vision_camera_i2c_deinit();
-    esp_vision_camera_stop_xclk();
 }
 
 static esp_err_t esp_vision_camera_open_device(void)
 {
     struct v4l2_capability capability = {0};
 
-    s_camera.fd = open(ESP_VIDEO_DVP_DEVICE_NAME, O_RDWR);
+    if (s_camera.device_path == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    s_camera.fd = open(s_camera.device_path, O_RDWR);
     if (s_camera.fd < 0) {
-        ESP_LOGE(TAG, "failed to open %s", ESP_VIDEO_DVP_DEVICE_NAME);
+        ESP_LOGE(TAG, "failed to open %s", s_camera.device_path);
         return ESP_FAIL;
     }
 
@@ -694,10 +354,14 @@ static esp_err_t esp_vision_camera_configure_input_format(uint32_t width, uint32
 
 static esp_err_t esp_vision_camera_set_input_format(void)
 {
-    if (s_camera.sensor == ESP_VISION_CAMERA_SENSOR_SC101IOT) {
+    if (s_camera.sensor_id == ESP_VISION_CAMERA_SC101IOT_SENSOR_ID) {
+        // SC101IOT streams YUYV; the capture PPA converts it to the ESP-VISION output format.
         return esp_vision_camera_configure_input_format(ESP_VISION_CAMERA_SC101IOT_RAW_INPUT_WIDTH,
                                                         ESP_VISION_CAMERA_SC101IOT_RAW_INPUT_HEIGHT,
                                                         V4L2_PIX_FMT_YUYV);
+    }
+    if (s_camera.sensor_id != ESP_VISION_CAMERA_OV3660_SENSOR_ID) {
+        return ESP_ERR_INVALID_STATE;
     }
 
     return esp_vision_camera_configure_input_format(ESP_VISION_CAMERA_RAW_INPUT_WIDTH,
@@ -962,6 +626,7 @@ static void esp_vision_camera_cleanup(void)
     }
 
     esp_vision_camera_video_deinit();
+    s_camera.sensor_id = ESP_VISION_CAMERA_SENSOR_ID_UNKNOWN;
     s_camera.initialized = false;
 }
 
@@ -978,6 +643,12 @@ static esp_err_t esp_vision_camera_init_once(const char **failed_stage)
 
     stage = "open_device";
     ret = esp_vision_camera_open_device();
+    if (ret != ESP_OK) {
+        goto fail;
+    }
+
+    stage = "query_sensor_id";
+    ret = esp_vision_camera_query_sensor_id();
     if (ret != ESP_OK) {
         goto fail;
     }

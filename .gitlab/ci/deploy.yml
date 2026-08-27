@@ -136,6 +136,10 @@ pack_launchpad:
       artifacts: true
     - job: "firmware: [release-v5.5, ESP32_S3_EYE]"
       artifacts: true
+    - job: "firmware: [release-v5.5, AtomS3R-M12]"
+      artifacts: true
+    - job: "firmware: [release-v6.1, ESP32_S31_CHATBOT]"
+      artifacts: true
     - job: "firmware: [release-v6.1, ESP32_S31_KORVO]"
       artifacts: true
   before_script:

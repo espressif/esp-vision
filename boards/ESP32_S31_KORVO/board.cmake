@@ -13,3 +13,5 @@ if(NOT ESP_VISION_IDF_OVERLAY STREQUAL "release6.1")
         "Source an ESP-IDF release/v6.1 environment before building this board."
     )
 endif()
+
+set(ESP_VISION_USE_BOARD_MANAGER ON)

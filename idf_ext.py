@@ -147,9 +147,14 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
         return os.path.basename(os.path.dirname(manifest))
 
     def validate_board_idf_overlay(board: str, overlay_name: str) -> None:
-        if board == "ESP32_S31_KORVO" and overlay_name != "release6.1":
+        idf61_only_boards = {
+            "ESP32_S31_CHATBOT",
+            "ESP32_S31_KORVO",
+            "ESP32_S31_MOSAICO",
+        }
+        if board in idf61_only_boards and overlay_name != "release6.1":
             raise FatalError(
-                "ESP32_S31_KORVO is supported only with ESP-IDF "
+                f"{board} is supported only with ESP-IDF "
                 f"release/v6.1 (current overlay: {overlay_name})"
             )
 
@@ -206,7 +211,31 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
                 paths.append(path)
         return paths
 
-    def prepare_micropython_tree() -> str:
+    def merge_board_component_manifest(dst: str, board: str) -> None:
+        board_manifest = os.path.join(boards_dir, board, "idf_component.yml")
+        if not os.path.isfile(board_manifest):
+            return
+
+        try:
+            import yaml
+        except ImportError as exc:
+            raise FatalError(f"PyYAML is required to merge {board_manifest}: {exc}") from exc
+
+        with open(dst, encoding="utf-8") as file:
+            manifest = yaml.safe_load(file) or {}
+        with open(board_manifest, encoding="utf-8") as file:
+            board_patch = yaml.safe_load(file) or {}
+
+        dependencies = manifest.setdefault("dependencies", {})
+        board_dependencies = board_patch.get("dependencies", {})
+        if not isinstance(dependencies, dict) or not isinstance(board_dependencies, dict):
+            raise FatalError(f"invalid dependencies mapping in {board_manifest}")
+        dependencies.update(board_dependencies)
+
+        with open(dst, "w", encoding="utf-8") as file:
+            yaml.safe_dump(manifest, file, default_flow_style=False, sort_keys=False)
+
+    def prepare_micropython_tree(board: str) -> str:
         if not os.path.isdir(mp_repo):
             raise FatalError("lib/micropython is missing; initialize submodules before building")
 
@@ -245,11 +274,20 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
             if os.path.exists(dst):
                 shutil.rmtree(dst)
             shutil.copytree(port_dir, dst)
+            board_defaults = os.path.join(
+                boards_dir,
+                name,
+                "bmgr",
+                "sdkconfig.defaults.board",
+            )
+            if os.path.isfile(board_defaults):
+                shutil.copy2(board_defaults, dst)
 
         src = select_component_manifest()
         dst = os.path.join(mp_port_dir(), "main", "idf_component.yml")
         if not os.path.exists(dst) or not filecmp.cmp(src, dst, shallow=False):
             shutil.copy2(src, dst)
+        merge_board_component_manifest(dst, board)
 
         return os.path.relpath(src, root)
 
@@ -332,7 +370,7 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
         configure_idf_args(args, board, overlay_name)
 
         if should_prepare(tasks, args.dry_run):
-            selected = prepare_micropython_tree()
+            selected = prepare_micropython_tree(board)
             print(
                 "[prepare-micropython] selected component manifest: "
                 f"{selected} (ESP-IDF {idf_version()})"

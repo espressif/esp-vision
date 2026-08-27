@@ -1,0 +1,90 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1.0.0
+devices:
+  - name: lcd_power_ctrl
+    type: power_ctrl
+    sub_type: gpio
+    version: default
+    init_skip: true
+    peripherals:
+      - name: gpio_lcd_power
+        active_level: 1
+
+  - name: display_lcd
+    chip: co5300
+    type: display_lcd
+    sub_type: spi
+    version: default
+    init_skip: true
+    power_ctrl_device: lcd_power_ctrl
+    dependencies:
+      espressif/esp_lcd_co5300: "^2.0.3"
+    config:
+      x_max: 480
+      y_max: 480
+      need_reset: true
+      io_spi_config:
+        cs_gpio_num: 49
+        dc_gpio_num: -1
+        spi_mode: 0
+        pclk_hz: 40000000
+        trans_queue_depth: 10
+        lcd_cmd_bits: 32
+        lcd_param_bits: 8
+        flags:
+          quad_mode: true
+          psram_dma_direct: true
+      lcd_panel_config:
+        reset_gpio_num: 48
+        rgb_ele_order: LCD_RGB_ELEMENT_ORDER_RGB
+        data_endian: LCD_RGB_DATA_ENDIAN_BIG
+        bits_per_pixel: 16
+        flags:
+          reset_active_high: false
+    peripherals:
+      - name: spi_display
+
+  # Generate the 20 MHz camera XCLK before camera initialization.
+  - name: camera_xclk
+    type: ledc_ctrl
+    version: default
+    init_skip: true
+    config:
+      # With a 1-bit LEDC timer, 100% maps to raw duty 1, matching XCLK PWM.
+      default_percent: 100
+    peripherals:
+      - name: ledc_camera_xclk
+
+  # SC101IOT DVP camera.
+  - name: camera
+    type: camera
+    sub_type: dvp
+    version: default
+    init_skip: true
+    depends_on:
+      - camera_xclk
+    config:
+      dvp_config:
+        reset_io: 51
+        pwdn_io: 52
+        vsync_io: 57
+        data_width: CAM_CTLR_DATA_WIDTH_8
+        de_io: 56
+        pclk_io: 45
+        # XCLK is owned by camera_xclk, so esp_video must not configure GPIO54.
+        xclk_io: -1
+        xclk_freq: 0
+        data_io:
+          data_io_0: 43
+          data_io_1: 60
+          data_io_2: 40
+          data_io_3: 10
+          data_io_4: 44
+          data_io_5: 46
+          data_io_6: 47
+          data_io_7: 55
+    peripherals:
+      - name: i2c_control
+        frequency: 100000

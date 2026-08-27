@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1.0.0
+devices:
+  - name: camera_power_ctrl
+    type: power_ctrl
+    sub_type: gpio
+    version: default
+    init_skip: true
+    peripherals:
+      - name: gpio_camera_power
+        active_level: 1
+
+  - name: display_lcd
+    chip: st7789
+    type: display_lcd
+    sub_type: spi
+    version: default
+    init_skip: true
+    config:
+      mirror_x: false
+      mirror_y: false
+      swap_xy: false
+      invert_color: true
+      need_reset: true
+      x_max: 240
+      y_max: 240
+      io_spi_config:
+        cs_gpio_num: 18
+        dc_gpio_num: 19
+        spi_mode: 3
+        pclk_hz: 80000000
+        trans_queue_depth: 2
+        lcd_cmd_bits: 8
+        lcd_param_bits: 8
+        flags:
+          psram_dma_direct: true
+      lcd_panel_config:
+        reset_gpio_num: 15
+        rgb_ele_order: LCD_RGB_ELEMENT_ORDER_RGB
+        data_endian: LCD_RGB_DATA_ENDIAN_LITTLE
+        bits_per_pixel: 16
+        flags:
+          reset_active_high: false
+    peripherals:
+      - name: spi_display
+
+  - name: lcd_brightness
+    type: ledc_ctrl
+    version: default
+    init_skip: true
+    config:
+      default_percent: 0
+    peripherals:
+      - name: ledc_backlight
+
+  - name: camera
+    type: camera
+    sub_type: csi
+    version: default
+    init_skip: true
+    power_ctrl_device: camera_power_ctrl
+    config:
+      csi_config:
+        reset_io: 26
+        pwdn_io: -1
+        dont_init_ldo: false
+        xclk_config:
+          xclk_pin: 11
+          xclk_freq_hz: 24000000
+    peripherals:
+      - name: i2c_camera
+        frequency: 100000

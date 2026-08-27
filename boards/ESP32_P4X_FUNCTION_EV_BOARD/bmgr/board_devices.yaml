@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1.0.0
+devices:
+  - name: display_lcd
+    chip: ek79007
+    type: display_lcd
+    sub_type: dsi
+    version: default
+    init_skip: true
+    dependencies:
+      espressif/esp_lcd_ek79007: "^1.0.0"
+    config:
+      reset_gpio_num: 27
+      rgb_ele_order: LCD_RGB_ELEMENT_ORDER_RGB
+      data_endian: LCD_RGB_DATA_ENDIAN_LITTLE
+      bits_per_pixel: 16
+      reset_active_high: 0
+      dbi_config:
+        virtual_channel: 0
+        lcd_cmd_bits: 8
+        lcd_param_bits: 8
+      dpi_config:
+        virtual_channel: 0
+        dpi_clk_src: MIPI_DSI_DPI_CLK_SRC_DEFAULT
+        dpi_clock_freq_mhz: 48
+        pixel_format: LCD_COLOR_PIXEL_FORMAT_RGB565
+        in_color_format: LCD_COLOR_FMT_RGB565
+        out_color_format: LCD_COLOR_FMT_RGB565
+        num_fbs: 1
+        flags:
+          use_dma2d: false
+          disable_lp: false
+        video_timing:
+          h_size: 1024
+          v_size: 600
+          hsync_back_porch: 120
+          hsync_pulse_width: 10
+          hsync_front_porch: 120
+          vsync_back_porch: 20
+          vsync_pulse_width: 1
+          vsync_front_porch: 20
+    peripherals:
+      - name: ldo_mipi
+      - name: dsi_display
+
+  - name: lcd_brightness
+    type: ledc_ctrl
+    version: default
+    init_skip: true
+    peripherals:
+      - name: ledc_backlight
+
+  - name: camera
+    type: camera
+    sub_type: csi
+    version: default
+    init_skip: true
+    config:
+      csi_config:
+        reset_io: -1
+        pwdn_io: -1
+        dont_init_ldo: true
+    peripherals:
+      - name: i2c_camera
+        frequency: 100000
+      - name: ldo_mipi
