@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+dependencies:
+  espressif/esp_board_manager:
+    version: "0.6.1"
+    require: public
+  espressif/esp_lcd_co5300: "^2.0.3"

@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1.0.0
+devices:
+  - name: lcd_power_ctrl
+    type: power_ctrl
+    sub_type: gpio
+    version: default
+    init_skip: true
+    peripherals:
+      - name: gpio_lcd_en
+        active_level: 0
+
+  # CO5300 480x480 QSPI LCD.
+  - name: display_lcd
+    chip: co5300
+    type: display_lcd
+    sub_type: spi
+    version: default
+    init_skip: true
+    power_ctrl_device: lcd_power_ctrl
+    dependencies:
+      espressif/esp_lcd_co5300: "^2.0.3"
+    config:
+      x_max: 480
+      y_max: 480
+      swap_xy: false
+      mirror_x: false
+      mirror_y: false
+      need_reset: true
+      io_spi_config:
+        cs_gpio_num: 50
+        dc_gpio_num: -1
+        spi_mode: 0
+        pclk_hz: 40000000
+        trans_queue_depth: 2
+        lcd_cmd_bits: 32
+        lcd_param_bits: 8
+        flags:
+          quad_mode: true
+          psram_dma_direct: true
+      lcd_panel_config:
+        reset_gpio_num: 44
+        rgb_ele_order: LCD_RGB_ELEMENT_ORDER_RGB
+        data_endian: LCD_RGB_DATA_ENDIAN_BIG
+        bits_per_pixel: 16
+        flags:
+          reset_active_high: false
+    peripherals:
+      - name: spi_display
+
+  # OV3640 DVP camera. XCLK is supplied by the board's external 24 MHz oscillator.
+  - name: camera
+    type: camera
+    sub_type: dvp
+    version: default
+    init_skip: true
+    power_ctrl_device: lcd_power_ctrl
+    config:
+      dvp_config:
+        reset_io: 53
+        pwdn_io: 48
+        vsync_io: 55
+        data_width: CAM_CTLR_DATA_WIDTH_8
+        de_io: 19
+        pclk_io: 17
+        xclk_io: -1
+        xclk_freq: 0
+        data_io:
+          data_io_0: 16
+          data_io_1: 15
+          data_io_2: 33
+          data_io_3: 4
+          data_io_4: 14
+          data_io_5: 12
+          data_io_6: 18
+          data_io_7: 13
+    peripherals:
+      - name: i2c_master
+        frequency: 400000

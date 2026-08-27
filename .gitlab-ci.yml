@@ -183,4 +183,6 @@ firmware:
           - TEMPLATE
       - IDF_IMAGE: ["release-v6.1"]
         BOARD:
+          - ESP32_S31_CHATBOT
           - ESP32_S31_KORVO
+          - ESP32_S31_MOSAICO

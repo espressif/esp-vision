@@ -4,6 +4,7 @@ set(SDKCONFIG_DEFAULTS
     boards/sdkconfig.base
     boards/sdkconfig.p4_wifi_common
     boards/ESP32_P4X_EYE/sdkconfig.p4x_eye
+    boards/ESP32_P4X_EYE/sdkconfig.defaults.board
     boards/ESP32_P4X_EYE/sdkconfig.board
 )
 

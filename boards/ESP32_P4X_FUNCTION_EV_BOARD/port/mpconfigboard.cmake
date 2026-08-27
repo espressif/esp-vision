@@ -4,6 +4,7 @@ set(SDKCONFIG_DEFAULTS
     boards/sdkconfig.base
     boards/sdkconfig.p4_wifi_common
     boards/ESP32_P4X_FUNCTION_EV_BOARD/sdkconfig.p4x_function_ev_board
+    boards/ESP32_P4X_FUNCTION_EV_BOARD/sdkconfig.defaults.board
     boards/ESP32_P4X_FUNCTION_EV_BOARD/sdkconfig.board
 )
 

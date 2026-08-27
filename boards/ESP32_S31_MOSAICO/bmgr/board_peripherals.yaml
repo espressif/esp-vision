@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1.0.0
+peripherals:
+  # Camera SCCB bus.
+  - name: i2c_master
+    type: i2c
+    role: master
+    config:
+      port: 0
+      pins:
+        sda: 0
+        scl: 1
+
+  # CO5300 QSPI bus.
+  - name: spi_display
+    type: spi
+    role: master
+    config:
+      spi_bus_config:
+        spi_port: SPI2_HOST
+        sclk_io_num: 42
+        data0_io_num: 36
+        data1_io_num: 51
+        data2_io_num: 35
+        data3_io_num: 9
+        max_transfer_sz: 460800
+
+  - name: gpio_lcd_en
+    type: gpio
+    role: io
+    config:
+      pin: 60
+      mode: GPIO_MODE_OUTPUT
+      pull_up: false
+      pull_down: false
+      intr_type: GPIO_INTR_DISABLE
+      default_level: 0

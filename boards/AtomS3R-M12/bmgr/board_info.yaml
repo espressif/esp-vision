@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+board: atom_s3r_m12
+chip: esp32s3
+version: 1.0.0
+description: "M5Stack AtomS3R-M12"
+manufacturer: "M5Stack"

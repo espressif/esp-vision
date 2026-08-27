@@ -136,7 +136,13 @@ pack_launchpad:
       artifacts: true
     - job: "firmware: [release-v5.5, ESP32_S3_EYE]"
       artifacts: true
+    - job: "firmware: [release-v5.5, AtomS3R-M12]"
+      artifacts: true
+    - job: "firmware: [release-v6.1, ESP32_S31_CHATBOT]"
+      artifacts: true
     - job: "firmware: [release-v6.1, ESP32_S31_KORVO]"
+      artifacts: true
+    - job: "firmware: [release-v6.1, ESP32_S31_MOSAICO]"
       artifacts: true
   before_script:
     # Pin esptool >= 5.3: release-v5.5's bundled version predates the esp32s31

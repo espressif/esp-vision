@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1.0.0
+peripherals:
+  - name: i2c_camera
+    type: i2c
+    role: master
+    config:
+      port: 0
+      pins:
+        sda: 14
+        scl: 13
+
+  - name: spi_display
+    type: spi
+    role: master
+    config:
+      spi_bus_config:
+        spi_port: SPI2_HOST
+        mosi_io_num: 16
+        sclk_io_num: 17
+        max_transfer_sz: 19200
+
+  - name: ledc_backlight
+    type: ledc
+    version: default
+    config:
+      gpio_num: 20
+      speed_mode: LEDC_LOW_SPEED_MODE
+      channel: 0
+      timer_sel: 0
+      freq_hz: 5000
+      duty_resolution: LEDC_TIMER_10_BIT
+      duty: 0
+      output_invert: true
+
+  - name: gpio_camera_power
+    type: gpio
+    version: default
+    role: io
+    config:
+      pin: 12
+      mode: GPIO_MODE_OUTPUT
+      pull_up: false
+      pull_down: false
+      intr_type: GPIO_INTR_DISABLE
+      default_level: 1

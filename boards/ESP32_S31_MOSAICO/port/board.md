@@ -1,0 +1,9 @@
+The following firmware is applicable to the ESP32-S31-MOSAICO board based on ESP32-S31.
+
+The board configuration enables the ESP32-S31 target, native USB 2.0 High Speed CDC/Flash MSC, the ESP-VISION 16 MiB flash layout, Octal PSRAM, the OV3640 DVP camera, and the 480x480 CO5300 QSPI display. The generated default `main.py` continuously previews the camera on the LCD, with PPA rotating camera frames 90 degrees counter-clockwise into portrait-oriented output. Camera startup enables the shared active-low VCC_3V3 rail on GPIO60, releases the built-in USB Serial/JTAG pads shared by Camera D2 on GPIO33, and waits 20 ms for the external 24 MHz oscillator before probing the sensor. The board uses onboard SPI NAND Flash instead of an SD card; the current firmware does not yet mount or expose the NAND storage. Camera flash support remains disabled. Firmware download requires entering ROM download mode; this board does not override the ESP-IDF console configuration.
+
+## Hardware revisions
+
+The board configuration files describe the latest v1.2 hardware. Hardware v1.1 and v1.2 have identical camera and display wiring. Hardware v1.0 differs only in the LCD QSPI clock and reset pins: v1.0 uses CLK=GPIO44/RESET=GPIO42, while v1.1 and v1.2 use CLK=GPIO42/RESET=GPIO44. Camera SCCB remains SDA=GPIO0/SCL=GPIO1 and all DVP pins remain unchanged across v1.0, v1.1, and v1.2.
+
+At cold boot the firmware reads the first two bytes of `BLOCK_USR_DATA` as a little-endian 16-bit hardware version. Legacy v1.0 boards have an unprogrammed all-zero block; the stored byte sequence `00 01` (`0x0100`) is also accepted as v1.0. Stored byte sequences `01 01` (`0x0101`) and `02 01` (`0x0102`) identify v1.1 and v1.2 respectively. Hardware v1.0 receives the legacy LCD pin override, while v1.1 and v1.2 use the latest board configuration directly. A read failure or any other unsupported value falls back to the shared v1.1/v1.2 pin map with a warning.

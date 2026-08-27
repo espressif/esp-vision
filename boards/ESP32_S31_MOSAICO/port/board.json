@@ -1,0 +1,15 @@
+{
+    "deploy": [
+        "../deploy.md"
+    ],
+    "docs": "",
+    "features": [
+        "WiFi",
+        "USB 2.0 High Speed"
+    ],
+    "mcu": "esp32s31",
+    "product": "ESP32-S31-MOSAICO",
+    "thumbnail": "",
+    "url": "",
+    "vendor": "Espressif"
+}

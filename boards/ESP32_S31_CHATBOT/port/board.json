@@ -1,0 +1,19 @@
+{
+    "deploy": [
+        "../deploy.md"
+    ],
+    "docs": "",
+    "features": [
+        "WiFi",
+        "USB Serial/JTAG",
+        "DVP",
+        "SC101IOT",
+        "QSPI LCD",
+        "CO5300"
+    ],
+    "mcu": "esp32s31",
+    "product": "ESP32-S31-CHATBOT",
+    "thumbnail": "",
+    "url": "",
+    "vendor": "Espressif"
+}

@@ -13,14 +13,14 @@
 #include <unistd.h>
 
 #include "driver/ppa.h"
+#include "esp_board_manager.h"
+#include "esp_board_manager_defs.h"
+#include "esp_board_manager_includes.h"
 #include "esp_cache.h"
-#include "esp_cam_sensor_xclk.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_private/esp_cache_private.h"
-#include "esp_video_device.h"
-#include "esp_video_init.h"
 #include "linux/videodev2.h"
 #include "sys/mman.h"
 
@@ -62,8 +62,8 @@ typedef struct {
     pixformat_t output_pixfmt;
     size_t ppa_out_size;
     ppa_client_handle_t ppa_handle;
-    esp_cam_sensor_xclk_handle_t xclk_handle;
     uint8_t *ppa_out_buf;
+    const char *device_path;
     esp_vision_camera_buffer_t buffers[ESP_VISION_CAMERA_BUFFER_COUNT];
 } esp_vision_camera_context_t;
 
@@ -170,77 +170,29 @@ static void esp_vision_camera_release_ppa(void)
     s_camera.ppa_out_size = 0;
 }
 
-static esp_err_t esp_vision_camera_start_xclk(void)
-{
-#if ESP_VISION_CAMERA_XCLK_PIN < 0
-    return ESP_OK;
-#elif CONFIG_CAMERA_XCLK_USE_ESP_CLOCK_ROUTER
-    esp_cam_sensor_xclk_config_t xclk_config = {
-        .esp_clock_router_cfg = {
-            .xclk_pin = ESP_VISION_CAMERA_XCLK_PIN,
-            .xclk_freq_hz = ESP_VISION_CAMERA_XCLK_FREQ,
-        },
-    };
-
-    esp_err_t ret = esp_cam_sensor_xclk_allocate(ESP_CAM_SENSOR_XCLK_ESP_CLOCK_ROUTER, &s_camera.xclk_handle);
-    ESP_RETURN_ON_ERROR(ret, TAG, "failed to allocate camera xclk");
-
-    ret = esp_cam_sensor_xclk_start(s_camera.xclk_handle, &xclk_config);
-    if (ret != ESP_OK) {
-        esp_cam_sensor_xclk_free(s_camera.xclk_handle);
-        s_camera.xclk_handle = NULL;
-        ESP_LOGE(TAG, "failed to start camera xclk: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    return ESP_OK;
-#else
-    return ESP_ERR_NOT_SUPPORTED;
-#endif
-}
-
-static void esp_vision_camera_stop_xclk(void)
-{
-    if (s_camera.xclk_handle != NULL) {
-        esp_cam_sensor_xclk_stop(s_camera.xclk_handle);
-        esp_cam_sensor_xclk_free(s_camera.xclk_handle);
-        s_camera.xclk_handle = NULL;
-    }
-}
-
 static esp_err_t esp_vision_camera_video_init(void)
 {
-#if CONFIG_ESP_VIDEO_ENABLE_MIPI_CSI_VIDEO_DEVICE
-    const esp_video_init_csi_config_t csi_config = {
-        .sccb_config = {
-            .init_sccb = true,
-            .i2c_config = {
-                .port = ESP_VISION_CAMERA_SCCB_I2C_PORT,
-                .scl_pin = ESP_VISION_CAMERA_SCCB_I2C_SCL_PIN,
-                .sda_pin = ESP_VISION_CAMERA_SCCB_I2C_SDA_PIN,
-            },
-            .freq = ESP_VISION_CAMERA_SCCB_I2C_FREQ,
-        },
-        .reset_pin = ESP_VISION_CAMERA_SENSOR_RESET_PIN,
-        .pwdn_pin = ESP_VISION_CAMERA_SENSOR_PWDN_PIN,
-        .dont_init_ldo = false,
-    };
-    const esp_video_init_config_t video_config = {
-        .csi = &csi_config,
-    };
+    esp_err_t ret = esp_board_manager_init_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
+    ESP_RETURN_ON_ERROR(ret, TAG, "board manager failed to initialize camera");
 
-    esp_err_t ret = esp_video_init(&video_config);
-    ESP_RETURN_ON_ERROR(ret, TAG, "failed to initialize esp_video");
+    dev_camera_handle_t *camera = NULL;
+    ret = esp_board_manager_get_device_handle(ESP_BOARD_DEVICE_NAME_CAMERA,
+                                              (void **)&camera);
+    if ((ret != ESP_OK) || (camera == NULL) || (camera->dev_path == NULL)) {
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
+        return (ret == ESP_OK) ? ESP_ERR_INVALID_STATE : ret;
+    }
+
+    s_camera.device_path = camera->dev_path;
     s_camera.video_initialized = true;
     return ESP_OK;
-#else
-    return ESP_ERR_NOT_SUPPORTED;
-#endif
 }
 
 static void esp_vision_camera_video_deinit(void)
 {
     if (s_camera.video_initialized) {
-        esp_video_deinit();
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
+        s_camera.device_path = NULL;
         s_camera.video_initialized = false;
     }
 }
@@ -249,9 +201,13 @@ static esp_err_t esp_vision_camera_open_device(void)
 {
     struct v4l2_capability capability = {0};
 
-    s_camera.fd = open(ESP_VIDEO_MIPI_CSI_DEVICE_NAME, O_RDWR);
+    if (s_camera.device_path == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    s_camera.fd = open(s_camera.device_path, O_RDWR);
     if (s_camera.fd < 0) {
-        ESP_LOGE(TAG, "failed to open %s", ESP_VIDEO_MIPI_CSI_DEVICE_NAME);
+        ESP_LOGE(TAG, "failed to open %s", s_camera.device_path);
         return ESP_FAIL;
     }
 
@@ -469,7 +425,6 @@ static void esp_vision_camera_cleanup(void)
     }
 
     esp_vision_camera_video_deinit();
-    esp_vision_camera_stop_xclk();
     s_camera.initialized = false;
 }
 
@@ -483,11 +438,6 @@ esp_err_t esp_vision_camera_init(void)
 
     if ((s_camera.width == 0) || (s_camera.height == 0) || (s_camera.output_pixfmt == PIXFORMAT_INVALID)) {
         esp_vision_camera_set_defaults();
-    }
-
-    ret = esp_vision_camera_start_xclk();
-    if (ret != ESP_OK) {
-        goto fail;
     }
 
     ret = esp_vision_camera_video_init();

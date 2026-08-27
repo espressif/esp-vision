@@ -11,6 +11,8 @@
 # A board may be marked `optional: true`. Optional boards are published on a
 # best-effort basis: if their firmware artifacts are absent from the pipeline
 # (e.g. the build failed), they are skipped instead of failing the release.
+# A board may be marked `website: false` to publish its firmware in the standard
+# launchpad region without listing it in the website's hardware board matrix.
 
 # Root key for the esp-launchpad config.toml. ae_upload_dl publishes the merged
 # *.bin files under AE/esp-vision/bin/ and config.toml at AE/esp-vision/ (root),
@@ -30,5 +32,13 @@ boards:
     target: esp32p4
   ESP32_S3_EYE:
     target: esp32s3
+  AtomS3R-M12:
+    target: esp32s3
+  ESP32_S31_CHATBOT:
+    target: esp32s31
+    website: false
   ESP32_S31_KORVO:
     target: esp32s31
+  ESP32_S31_MOSAICO:
+    target: esp32s31
+    website: false

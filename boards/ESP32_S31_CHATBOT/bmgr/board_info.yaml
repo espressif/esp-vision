@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+board: esp32_s31_chatbot
+chip: esp32s31
+version: 1.0.0
+description: "ESP32-S31-CHATBOT"
+manufacturer: "ESPRESSIF"

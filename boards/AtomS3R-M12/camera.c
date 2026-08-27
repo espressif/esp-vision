@@ -9,12 +9,10 @@
 #include <inttypes.h>
 #include <string.h>
 
-#include "driver/gpio.h"
-#include "driver/ledc.h"
+#include "esp_board_manager.h"
+#include "esp_board_manager_defs.h"
 #include "esp_err.h"
 #include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 #include "boardconfig.h"
 #include "debug.h"
@@ -58,7 +56,6 @@
 #endif
 
 #define ESP_VISION_CAMERA_CAPTURE_RETRY_COUNT 3
-#define ESP_VISION_CAMERA_JPEG_QUALITY        12
 
 typedef struct {
     bool initialized;
@@ -123,33 +120,6 @@ static size_t esp_vision_camera_bpp(uint32_t pixfmt)
 static size_t esp_vision_camera_output_size(uint32_t width, uint32_t height, uint32_t pixfmt)
 {
     return (size_t)width * (size_t)height * esp_vision_camera_bpp(pixfmt);
-}
-
-static esp_err_t esp_vision_camera_set_power(bool enable)
-{
-#if ESP_VISION_CAMERA_POWER_PIN >= 0
-    const gpio_config_t io_config = {
-        .pin_bit_mask = BIT64(ESP_VISION_CAMERA_POWER_PIN),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-    esp_err_t ret = gpio_config(&io_config);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-
-    int level = enable ? ESP_VISION_CAMERA_POWER_ON_LEVEL : !ESP_VISION_CAMERA_POWER_ON_LEVEL;
-    ret = gpio_set_level((gpio_num_t)ESP_VISION_CAMERA_POWER_PIN, level);
-    if (ret == ESP_OK && enable) {
-        vTaskDelay(pdMS_TO_TICKS(ESP_VISION_CAMERA_POWER_STABLE_MS));
-    }
-    return ret;
-#else
-    (void)enable;
-    return ESP_OK;
-#endif
 }
 
 static esp_err_t esp_vision_camera_to_esp32_framesize(uint32_t width,
@@ -291,58 +261,26 @@ esp_err_t esp_vision_camera_init(void)
         return ret;
     }
 
-    ret = esp_vision_camera_set_power(true);
+    ret = esp_board_manager_init_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
     if (ret != ESP_OK) {
-        esp_vision_debug_printf("[esp-vision] camera power on failed: %s\r\n", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "board manager failed to initialize camera: %s", esp_err_to_name(ret));
+        esp_vision_debug_printf("[esp-vision] camera start failed: %s\r\n", esp_err_to_name(ret));
         return ret;
     }
 
-    const camera_config_t config = {
-        .pin_pwdn = ESP_VISION_CAMERA_SENSOR_PWDN_PIN,
-        .pin_reset = ESP_VISION_CAMERA_SENSOR_RESET_PIN,
-        .pin_xclk = ESP_VISION_CAMERA_XCLK_PIN,
-        .pin_sccb_sda = ESP_VISION_CAMERA_SCCB_I2C_SDA_PIN,
-        .pin_sccb_scl = ESP_VISION_CAMERA_SCCB_I2C_SCL_PIN,
-        .pin_d7 = ESP_VISION_CAMERA_DVP_D7_PIN,
-        .pin_d6 = ESP_VISION_CAMERA_DVP_D6_PIN,
-        .pin_d5 = ESP_VISION_CAMERA_DVP_D5_PIN,
-        .pin_d4 = ESP_VISION_CAMERA_DVP_D4_PIN,
-        .pin_d3 = ESP_VISION_CAMERA_DVP_D3_PIN,
-        .pin_d2 = ESP_VISION_CAMERA_DVP_D2_PIN,
-        .pin_d1 = ESP_VISION_CAMERA_DVP_D1_PIN,
-        .pin_d0 = ESP_VISION_CAMERA_DVP_D0_PIN,
-        .pin_vsync = ESP_VISION_CAMERA_DVP_VSYNC_PIN,
-        .pin_href = ESP_VISION_CAMERA_DVP_HSYNC_PIN,
-        .pin_pclk = ESP_VISION_CAMERA_DVP_PCLK_PIN,
-        .xclk_freq_hz = ESP_VISION_CAMERA_XCLK_FREQ,
-        .ledc_timer = (ledc_timer_t)ESP_VISION_CAMERA_XCLK_LEDC_TIMER,
-        .ledc_channel = (ledc_channel_t)ESP_VISION_CAMERA_XCLK_LEDC_CHANNEL,
-        .pixel_format = ESP32_CAMERA_PIXFORMAT_JPEG,
-        .frame_size = frame_size,
-        .jpeg_quality = ESP_VISION_CAMERA_JPEG_QUALITY,
-        .fb_count = ESP_VISION_CAMERA_BUFFER_COUNT,
-        .fb_location = CAMERA_FB_IN_PSRAM,
-        .grab_mode = CAMERA_GRAB_LATEST,
-        .sccb_i2c_port = ESP_VISION_CAMERA_SCCB_I2C_PORT,
-    };
-
-    ret = esp_camera_init(&config);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "failed to initialize esp32-camera: %s", esp_err_to_name(ret));
-        esp_vision_debug_printf("[esp-vision] camera start failed: %s\r\n", esp_err_to_name(ret));
-        esp_vision_camera_set_power(false);
-        return ret;
+    sensor_t *sensor = esp_camera_sensor_get();
+    if ((sensor == NULL) ||
+            (sensor->set_framesize == NULL) ||
+            (sensor->set_framesize(sensor, frame_size) != 0)) {
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
+        return ESP_FAIL;
     }
 
     s_camera.vflip = false;
     s_camera.hmirror = true;
+    sensor->set_hmirror(sensor, s_camera.hmirror ? 1 : 0);
+    sensor->set_vflip(sensor, s_camera.vflip ? 1 : 0);
     s_camera.initialized = true;
-
-    sensor_t *sensor = esp_camera_sensor_get();
-    if (sensor != NULL) {
-        sensor->set_hmirror(sensor, s_camera.hmirror ? 1 : 0);
-        sensor->set_vflip(sensor, s_camera.vflip ? 1 : 0);
-    }
 
     esp_vision_debug_printf("[esp-vision] camera started: sensor=0x%04" PRIx32
                             " raw=%" PRIu32 "x%" PRIu32
@@ -365,10 +303,9 @@ esp_err_t esp_vision_camera_init(void)
 void esp_vision_camera_deinit(void)
 {
     if (s_camera.initialized) {
-        esp_camera_deinit();
+        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
         s_camera.initialized = false;
     }
-    esp_vision_camera_set_power(false);
 }
 
 bool esp_vision_camera_is_ready(void)

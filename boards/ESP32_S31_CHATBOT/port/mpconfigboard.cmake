@@ -1,0 +1,10 @@
+set(IDF_TARGET esp32s31)
+
+set(SDKCONFIG_DEFAULTS
+    boards/sdkconfig.base
+    boards/ESP32_S31_CHATBOT/sdkconfig.s31_chatbot
+    boards/ESP32_S31_CHATBOT/sdkconfig.defaults.board
+    boards/ESP32_S31_CHATBOT/sdkconfig.board
+)
+
+set(MICROPY_PY_BTREE OFF)
