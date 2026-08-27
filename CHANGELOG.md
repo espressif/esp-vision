@@ -16,6 +16,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Updated the `ESP32_S31_MOSAICO` generated `main.py` to capture VGA, crop the center 480x480, and fit that square to the 480x480 display.
 - Updated the ESP Video dependency to version 2.4.0 across the supported ESP-IDF release overlays.
 - Added periodic MicroPython event polling to long-running imlib drawing, filtering, feature-detection, QR, statistics, and template-matching loops.
 - Migrated supported boards' camera and LCD initialization to ESP Board Manager, including runtime OV3660 and SC101IOT format selection and sensor-specific orientation correction on `ESP32_S31_KORVO`; the `TEMPLATE` board remains an explicitly documented non-Board-Manager starting point.
