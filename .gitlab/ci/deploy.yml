@@ -142,6 +142,8 @@ pack_launchpad:
       artifacts: true
     - job: "firmware: [release-v6.1, ESP32_S31_KORVO]"
       artifacts: true
+    - job: "firmware: [release-v6.1, ESP32_S31_MOSAICO]"
+      artifacts: true
   before_script:
     # Pin esptool >= 5.3: release-v5.5's bundled version predates the esp32s31
     # target (ESP32_S31_KORVO, IDF_TARGET esp32s31). esptool 5.3 adds esp32s31

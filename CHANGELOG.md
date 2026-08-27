@@ -2,7 +2,7 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
-## [Unreleased]
+## [2026.08.27]
 
 ### Added
 
@@ -12,6 +12,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Added OpenMV v5.0.0's MIT-licensed Edge Drawing Lines implementation and enabled `Image.find_line_segments()` on all supported boards.
 - Added initial `ESP32_S31_CHATBOT` support (requires ESP-IDF release/v6.1) with a USB Serial/JTAG console, an SC101IOT DVP camera, and a 480x480 CO5300 QSPI display managed by ESP Board Manager.
 - Added initial `ESP32_S31_MOSAICO` support on ESP-IDF release/v6.1 with native USB 2.0 High Speed CDC/Flash MSC, an OV3640 DVP camera accepting both official product IDs (`0x364C` and `0x3641`), and a 480x480 CO5300 QSPI display. Cold-start eFuse detection treats the legacy all-zero value as v1.0 and selects the v1.0 or shared v1.1/v1.2 LCD pin map while retaining the CameraBoard's common wiring; camera startup enables the shared GPIO60 VCC_3V3 rail, releases the built-in USB Serial/JTAG pads shared by Camera D2, and waits for the external oscillator before SCCB probing. The generated `main.py` previews camera frames on the LCD with a default 90-degree counter-clockwise PPA rotation. The board uses onboard NAND Flash instead of an SD card; NAND storage is not yet exposed and camera flash support remains disabled.
+- Added `ESP32_S31_MOSAICO` to the release manifest so tagged releases publish its merged firmware in the website's ESP32-S31 download and online-flashing selector.
 - Added a camera-independent LCD color-bar and solid-color diagnostic under `example/06-Peripherals/01-Display`.
 
 ### Changed

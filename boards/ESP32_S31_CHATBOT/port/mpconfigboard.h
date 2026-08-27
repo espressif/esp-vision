@@ -10,6 +10,7 @@
 
 /* The board exposes USJ only; disable the unconnected USB-OTG device port. */
 #define MICROPY_HW_ENABLE_USBDEV (0)
+#define MICROPY_HW_ESP_USB_SERIAL_JTAG (1)
 
 #define MICROPY_PY_ESPNOW (0)
 #define MICROPY_HW_ENABLE_SDCARD (0)
