@@ -2,6 +2,12 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
+## [Unreleased]
+
+### Fixed
+
+- Enabled ESP Video CSI format conversion for supported ESP32-P4 revisions when the IDF CSI header exposes the backported API, fixing camera startup on release/v5.5 snapshots whose version macro still selects the legacy RAW-to-RGB CSI path.
+
 ## [2026.08.27]
 
 ### Added

@@ -78,6 +78,19 @@ project(esp-vision)
 if(TARGET idf::espressif__esp_video)
     idf_component_get_property(esp_video_lib espressif__esp_video COMPONENT_LIB)
     target_compile_options(${esp_video_lib} PRIVATE -Wno-deprecated-declarations)
+
+    # release/v5.5 backported CSI format conversion before bumping its version.
+    # Detect the input swap field added with that API instead of using a tag.
+    if(IDF_TARGET STREQUAL "esp32p4" AND CONFIG_ESP32P4_REV_MIN_FULL GREATER_EQUAL 300)
+        idf_component_get_property(esp_cam_dir esp_driver_cam COMPONENT_DIR)
+        set(esp_csi_header "${esp_cam_dir}/csi/include/esp_cam_ctlr_csi.h")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${esp_csi_header}")
+        file(STRINGS "${esp_csi_header}" esp_csi_input_swap
+            REGEX "input_8bit_swap_en[ \t]*:")
+        if(esp_csi_input_swap)
+            target_compile_definitions(${esp_video_lib} PUBLIC ESP_VIDEO_CSI_DEVICE_CONV_FORMAT=1)
+        endif()
+    endif()
 endif()
 
 if(TARGET idf::espressif__esp-tflite-micro)
