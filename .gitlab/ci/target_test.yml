@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+# Hardware-in-the-loop tests: flash a firmware build onto the board attached to
+# the tagged runner and test it. See tools/ci/flash_and_test.py.
+#
+# Runner: docker executor, so the image must carry python3 and the runner must
+# pass the board's serial device into the container. With more than one board
+# attached, pin ESPPORT per job; otherwise the port is auto-detected.
+
+.target_test_base:
+  stage: target_test
+  extends: .rules:test:target
+  image: $CI_PYTHON_IMAGE
+  variables:
+    ESPBAUD: "460800"
+  timeout: 20 minutes
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  before_script:
+    # Use what the runner has; the last form is the PEP 668 escape hatch.
+    - |
+      python3 -c "import serial, esptool" || \
+        python3 -m pip install --user --upgrade pyserial "esptool>=5.3" || \
+        python3 -m pip install --user --break-system-packages --upgrade pyserial "esptool>=5.3"
+    - python3 -c "import esptool, serial; print('esptool', esptool.__version__, '/ pyserial', serial.__version__)"
+  script:
+    # Exists up front so a failure before the capture still uploads something.
+    - mkdir -p logs
+    - |
+      python3 tools/ci/flash_and_test.py --board "$BOARD" \
+        --log "logs/$BOARD-$IDF_LABEL-target-test.log" \
+        --output "logs/$BOARD-$IDF_LABEL-frame.jpg"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - logs/
+
+# One IDF release per job, all on the same board: they share a resource_group
+# so they run one at a time. `needs` cannot expand variables, hence the literal
+# job names; it also picks the firmware, since only that job's artifacts land
+# in build/<BOARD>/. IDF_LABEL only keeps the three runs' artifacts apart.
+.target_test_p4x_function_ev_board:
+  extends: .target_test_base
+  tags:
+    - esp32p4x_function_ev_board
+  resource_group: esp32p4x_function_ev_board
+  variables:
+    BOARD: ESP32_P4X_FUNCTION_EV_BOARD
+
+target_test_p4x_function_ev_board_idf5.5:
+  extends: .target_test_p4x_function_ev_board
+  needs:
+    - job: "firmware: [release-v5.5, ESP32_P4X_FUNCTION_EV_BOARD]"
+      artifacts: true
+  variables:
+    IDF_LABEL: idf5.5
+
+target_test_p4x_function_ev_board_idf6.0:
+  extends: .target_test_p4x_function_ev_board
+  needs:
+    - job: "firmware: [release-v6.0, ESP32_P4X_FUNCTION_EV_BOARD]"
+      artifacts: true
+  variables:
+    IDF_LABEL: idf6.0
+
+target_test_p4x_function_ev_board_idf6.1:
+  extends: .target_test_p4x_function_ev_board
+  needs:
+    - job: "firmware: [release-v6.1, ESP32_P4X_FUNCTION_EV_BOARD]"
+      artifacts: true
+  variables:
+    IDF_LABEL: idf6.1

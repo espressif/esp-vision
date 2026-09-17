@@ -4,8 +4,13 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- Added a hardware-in-the-loop CI stage that flashes the `ESP32_P4X_FUNCTION_EV_BOARD` build onto a real board and tests its camera and LCD, through `tools/ci/flash_and_test.py` and `tools/ci/device_checks.py`.
+
 ### Fixed
 
+- Fixed the Python CI jobs failing with `wget: command not found` by moving them from `python:3.11-slim` to `python:3.11`.
 - Reduced `ESP32_S31_KORVO` and `ESP32_S31_CHATBOT` to two camera capture buffers, freeing 1.76 MiB of PSRAM so a model still fits alongside the 1280x720 SC101IOT capture path and the LCD framebuffers.
 - Enabled ESP Video CSI format conversion for supported ESP32-P4 revisions when the IDF CSI header exposes the backported API, fixing camera startup on release/v5.5 snapshots whose version macro still selects the legacy RAW-to-RGB CSI path.
 

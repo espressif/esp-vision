@@ -4,7 +4,7 @@
 docs_impact_check:
   stage: check
   extends: .rules:docs:impact
-  image: python:3.11-slim
+  image: $CI_PYTHON_IMAGE
   tags:
     - build
   variables:
