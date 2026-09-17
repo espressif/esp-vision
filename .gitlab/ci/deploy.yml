@@ -93,7 +93,7 @@ deploy_docs_production:
 post_docs_preview:
   stage: post_deploy
   extends: .rules:docs:preview
-  image: python:3.11-slim
+  image: $CI_PYTHON_IMAGE
   tags:
     - deploy_docs
   needs:
