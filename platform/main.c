@@ -73,6 +73,7 @@
 #include "ev_stdio.h"
 #include "fb_alloc.h"
 #include "preview.h"
+#include "lcd_touch.h"
 #include "storage.h"
 #include "usb_auto_download.h"
 
@@ -165,6 +166,7 @@ soft_reset:
     ev_stdio_start_transport();
     esp_vision_storage_mount_micropython();
     esp_vision_camera_init0();
+    esp_vision_lcd_touch_deinit();
     esp_vision_display_init0();
     esp_vision_preview_init0();
     esp_vision_debug_printf("[esp-vision] storage status: flash=/ %s; sdcard=/sdcard %s\n",
@@ -208,6 +210,7 @@ soft_reset:
     }
 
 soft_reset_exit:
+    esp_vision_lcd_touch_deinit();
     esp_vision_display_deinit();
     esp_vision_preview_deinit();
     esp_vision_camera_deinit();

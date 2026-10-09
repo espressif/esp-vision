@@ -12,6 +12,41 @@ devices:
       - name: gpio_lcd_en
         active_level: 0
 
+  # CST9220 touch controller on the shared I2C0 bus.
+  - name: lcd_touch
+    chip: cst9220
+    type: lcd_touch
+    sub_type: i2c
+    version: default
+    init_skip: true
+    power_ctrl_device: lcd_power_ctrl
+    dependencies:
+      espressif/esp_lcd_touch_cst9220: "0.1.1"
+    config:
+      io_i2c_config:
+        scl_speed_hz: 400000
+        lcd_cmd_bits: 8
+        lcd_param_bits: 8
+        transaction_timeout_ms: 100
+        flags:
+          disable_control_phase: true
+      touch_config:
+        x_max: 480
+        y_max: 480
+        rst_gpio_num: -1
+        int_gpio_num: 6
+        levels:
+          reset: 0
+          interrupt: 0
+        flags:
+          swap_xy: false
+          mirror_x: false
+          mirror_y: false
+    peripherals:
+      - name: i2c_master
+        # Board Manager uses 8-bit addresses (CST9220 7-bit address: 0x5A).
+        i2c_addr: [0xB4]
+
   # CO5300 480x480 QSPI LCD.
   - name: display_lcd
     chip: co5300

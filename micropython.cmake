@@ -31,6 +31,7 @@ set(ESP_VISION_MODULE_SOURCES
     ${ESP_VISION_ROOT}/modules/py_imageio.c
     ${ESP_VISION_ROOT}/modules/py_helper.c
     ${ESP_VISION_ROOT}/modules/py_sensor.c
+    ${ESP_VISION_ROOT}/modules/py_lcd_touch.c
 )
 
 if((IDF_TARGET STREQUAL "esp32p4") OR (IDF_TARGET STREQUAL "esp32s3") OR (IDF_TARGET STREQUAL "esp32s31"))
@@ -182,6 +183,7 @@ target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_ROOT}/platform/sdcard.c
     ${ESP_VISION_ROOT}/platform/storage.c
     ${ESP_VISION_ROOT}/platform/storage_vfs.c
+    ${ESP_VISION_ROOT}/platform/lcd_touch.c
     ${ESP_VISION_ROOT}/platform/usb_msc.c
     ${ESP_VISION_BOARD_SOURCES}
 )

@@ -19,4 +19,8 @@ set(ESP_VISION_BOARD_MANAGER_SETUP_SOURCES
     "${ESP_VISION_BOARD_DIR}/bmgr/board_variant.c"
     "${ESP_VISION_BOARD_DIR}/bmgr/setup_device.c"
 )
-list(APPEND ESP_VISION_BOARD_MANAGER_EXTRA_COMPONENTS efuse)
+list(APPEND ESP_VISION_BOARD_MANAGER_EXTRA_COMPONENTS
+    efuse
+    espressif__esp_lcd_touch
+    espressif__esp_lcd_touch_cst9220
+)

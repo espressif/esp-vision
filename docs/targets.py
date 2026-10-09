@@ -23,12 +23,13 @@ BOARD_ROOT = REPO_ROOT / 'boards'
 MP_BOARD_ROOT = BOARD_ROOT
 
 TARGETS = ('esp32s31', 'esp32p4', 'esp32s3')
-DOCUMENTED_MODULES = ('sensor', 'image', 'display', 'espdl', 'tflite', 'imageio', 'h264', 'rtsp')
+DOCUMENTED_MODULES = ('sensor', 'image', 'display', 'lcd_touch', 'espdl', 'tflite', 'imageio', 'h264', 'rtsp')
 
 _SOURCE_MODULES = {
     'py_sensor': 'sensor',
     'py_image': 'image',
     'py_display': 'display',
+    'py_lcd_touch': 'lcd_touch',
     'py_espdl': 'espdl',
     'py_tflite': 'tflite',
     'py_imageio': 'imageio',
