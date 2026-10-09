@@ -60,8 +60,44 @@ typedef struct {
     float *lsc_gain[4];
 } esp_vision_isp_config_t;
 
+// Stable ESP32-P4 statistics layout, independent of ESP Video/IPA headers.
+#define ESP_VISION_ISP_STATS_GRID_X 5
+#define ESP_VISION_ISP_STATS_GRID_Y 5
+#define ESP_VISION_ISP_STATS_HIST_BINS 16
+#define ESP_VISION_ISP_STATS_AF_WINDOWS 3
+#define ESP_VISION_IPA_STATS_AWB (1U << 0)
+#define ESP_VISION_IPA_STATS_AE (1U << 1)
+#define ESP_VISION_IPA_STATS_HIST (1U << 2)
+#define ESP_VISION_IPA_STATS_SHARPEN (1U << 3)
+#define ESP_VISION_IPA_STATS_AF (1U << 4)
+#define ESP_VISION_IPA_STATS_AWB_SUBWIN (1U << 5)
+
+typedef struct {
+    uint32_t counted;
+    uint32_t sum_r;
+    uint32_t sum_g;
+    uint32_t sum_b;
+} esp_vision_isp_awb_stats_t;
+
+typedef struct {
+    uint64_t seq;
+    uint32_t flags;
+    uint32_t ae[ESP_VISION_ISP_STATS_GRID_X][ESP_VISION_ISP_STATS_GRID_Y];
+    esp_vision_isp_awb_stats_t awb;
+    esp_vision_isp_awb_stats_t awb_subwin[ESP_VISION_ISP_STATS_GRID_X][ESP_VISION_ISP_STATS_GRID_Y];
+    uint32_t hist[ESP_VISION_ISP_STATS_HIST_BINS];
+    uint8_t sharpen;
+    struct {
+        uint32_t definition;
+        uint32_t luminance;
+    } af[ESP_VISION_ISP_STATS_AF_WINDOWS];
+} esp_vision_ipa_stats_t;
+
 esp_err_t esp_vision_camera_set_ipa(bool enable);
 esp_err_t esp_vision_camera_get_ipa(bool *enabled);
+// One-shot read: requires a running IPA controller. Timeout has no cached result.
+esp_err_t esp_vision_camera_get_ipa_stats(esp_vision_ipa_stats_t *stats, uint32_t timeout_ms);
+esp_err_t esp_vision_video_isp_get_stats(esp_vision_ipa_stats_t *stats, uint32_t timeout_ms);
 esp_err_t esp_vision_camera_get_isp(esp_vision_isp_block_t block, esp_vision_isp_config_t *config);
 esp_err_t esp_vision_camera_set_isp(esp_vision_isp_block_t block, const esp_vision_isp_config_t *config);
 

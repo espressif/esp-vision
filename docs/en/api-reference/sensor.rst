@@ -83,6 +83,50 @@ A failed switch leaves the camera shut down rather than in its previous state: t
 
 Disabling IPA stops its automatic parameter updates; it does not bypass the ISP or clear existing tuning. The image may initially look unchanged. To compare the effect, change the illumination or light source color while previewing, then enable IPA and allow its algorithms to settle again. The algorithms controlled by this switch depend on the active IPA configuration.
 
+Reading IPA Statistics
+----------------------
+
+``sensor.get_ipa_stats(timeout=1000)`` collects one new ISP statistics packet while IPA is running. Check ``hasattr(sensor, "get_ipa_stats")`` before use. Initialize the camera and enable IPA first. ``timeout`` is an integer from 1 through 1000 milliseconds; invalid values raise ``ValueError``. The call returns ``None`` on timeout or when runtime IPA control is unsupported, and raises ``OSError`` for an uninitialized camera, disabled IPA, or a device error.
+
+Each read creates a one-entry statistics queue and releases it before returning, including on timeout. It does not stop capture or alter tuning. Reads briefly add copying work to the controller and may block Python for the timeout duration, so sample periodically rather than on every preview frame. Keep calling ``sensor.snapshot()`` between reads to drain camera capture buffers. The statistics sequence is independent of the Python image returned by ``snapshot()``; the two are not guaranteed to describe the same frame.
+
+The returned dictionary always contains these keys. A statistics block without a valid flag in this packet is ``None``; blocks are not accumulated across packets.
+
+.. list-table:: IPA statistics
+   :header-rows: 1
+   :widths: 22 78
+
+   * - Key
+     - Value
+   * - ``seq``
+     - 64-bit statistics sequence; may restart after camera/IPA initialization.
+   * - ``flags``
+     - IPA validity bits: AWB=1, AE=2, HIST=4, SHARPEN=8, AF=16, AWB_SUBWIN=32. These differ from the raw ESP Video AE/AWB bits.
+   * - ``ae``
+     - 5×5 luminance grid indexed as ``[x][y]``.
+   * - ``awb``
+     - Dictionary with ``counted`` (white patch count), ``sum_r``, ``sum_g``, and ``sum_b``. A valid result can have zero white patches.
+   * - ``awb_subwin``
+     - 5×5 grid indexed as ``[x][y]``, each cell with the same fields as ``awb``. Requires backend, chip, and statistics configuration support.
+   * - ``hist``
+     - 16 pixel counts in hardware histogram segment order; segment boundaries depend on the active ISP configuration.
+   * - ``sharpen``
+     - Maximum high-frequency pixel value.
+   * - ``af``
+     - Three window dictionaries, each with ``definition`` and ``luminance``. These are focus statistics, not lens positions.
+
+.. code-block:: python
+
+   sensor.reset()
+   sensor.set_ipa(True)
+   sensor.skip_frames(time=2000)
+   sensor.snapshot()
+   stats = sensor.get_ipa_stats(timeout=200)
+   if stats is not None:
+       print(stats["seq"], stats["ae"], stats["awb"])
+
+See ``example/01-Camera/04-IPA/ipa_stats.py`` for periodic statistics reads during preview. This API exposes the ISP inputs consumed by IPA; it does not report inferred color temperature, converged exposure, or other algorithm outputs. Use ``get_isp()`` for supported driver parameter readback.
+
 Manual ISP Control
 ------------------
 

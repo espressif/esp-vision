@@ -5,7 +5,7 @@
 
 Runs in the hardware-in-the-loop CI job after tools/test_control_transport.py:
 that test proves the transport contract, this one drives the camera end to end
-- capture, framesizes, pixel formats, orientation, frame rate, host preview,
+- capture, framesizes, pixel formats, orientation, IPA statistics, frame rate, host preview,
 imlib on the captured frames, and the frames going out to the LCD - and logs
 what it measured, so a job log says how the board behaved and not just whether
 it answered.
@@ -438,6 +438,130 @@ def check_orientation(ctx: Context) -> str:
     return "hmirror and vflip toggle on and off, frames keep coming"
 
 
+def check_camera_ipa_stats(ctx: Context) -> str:
+    """Validate fresh statistics and recovery after toggling IPA on real hardware."""
+    board = str(ctx.link.rpc_json("hello").get("board", "")).upper().replace("-", "_")
+    required = board in ("ESP32_P4X_EYE", "ESP32_P4X_FUNCTION_EV_BOARD")
+    try:
+        answer = ctx.link.run_on_device(
+            ctx.script(ctx.sensor_setup(), f"""
+            import json
+            if not hasattr(sensor, 'get_ipa_stats'):
+                raise RuntimeError('ESP_ERR_NOT_SUPPORTED: IPA statistics API absent')
+            original = sensor.get_ipa()
+            if original is None:
+                raise RuntimeError('ESP_ERR_NOT_SUPPORTED: runtime IPA unavailable')
+
+            def uint(value, bits):
+                assert type(value) is int and 0 <= value < (1 << bits), 'invalid unsigned statistic'
+
+            def awb(value):
+                assert isinstance(value, dict), 'AWB must be a dictionary'
+                assert set(value) == set(('counted', 'sum_r', 'sum_g', 'sum_b')), 'AWB fields'
+                for number in value.values():
+                    uint(number, 32)
+
+            def grid(value, validate):
+                assert isinstance(value, list) and len(value) == 5, 'grid X size'
+                for column in value:
+                    assert isinstance(column, list) and len(column) == 5, 'grid Y size'
+                    for cell in column:
+                        validate(cell)
+
+            def validate(stats):
+                assert isinstance(stats, dict), 'statistics must be a dictionary'
+                keys = ('seq', 'flags', 'ae', 'awb', 'awb_subwin', 'hist', 'sharpen', 'af')
+                assert set(stats) == set(keys), 'statistics fields'
+                uint(stats['seq'], 64)
+                uint(stats['flags'], 6)
+                assert stats['flags'] != 0, 'no valid statistics blocks'
+                for name, flag in (('awb', 1), ('ae', 2), ('hist', 4),
+                                   ('sharpen', 8), ('af', 16), ('awb_subwin', 32)):
+                    assert (stats[name] is not None) == bool(stats['flags'] & flag), 'validity mismatch: ' + name
+                if stats['ae'] is not None:
+                    grid(stats['ae'], lambda value: uint(value, 32))
+                if stats['awb'] is not None:
+                    awb(stats['awb'])
+                if stats['awb_subwin'] is not None:
+                    assert stats['awb'] is not None, 'subwindows without global AWB'
+                    grid(stats['awb_subwin'], awb)
+                if stats['hist'] is not None:
+                    assert isinstance(stats['hist'], list) and len(stats['hist']) == 16, 'histogram size'
+                    for value in stats['hist']:
+                        uint(value, 32)
+                if stats['sharpen'] is not None:
+                    uint(stats['sharpen'], 8)
+                if stats['af'] is not None:
+                    assert isinstance(stats['af'], list) and len(stats['af']) == 3, 'AF window count'
+                    for window in stats['af']:
+                        assert isinstance(window, dict), 'AF must be a dictionary'
+                        assert set(window) == set(('definition', 'luminance')), 'AF fields'
+                        uint(window['definition'], 32)
+                        uint(window['luminance'], 32)
+
+            def sample():
+                # Drain capture buffers so CSI can keep producing new statistics.
+                # Allow transient timeouts without accepting a permanently empty stream.
+                for _ in range(5):
+                    sensor.skip_frames(n=2)
+                    stats = sensor.get_ipa_stats(timeout=200)
+                    if stats is not None:
+                        validate(stats)
+                        return stats
+                raise RuntimeError('no IPA statistics after five reads')
+
+            sequences = []
+            flags = []
+            try:
+                sensor.set_ipa(True)
+                assert sensor.get_ipa() is True, 'IPA did not start'
+                for timeout in (-1, 0, 1001):
+                    try:
+                        sensor.get_ipa_stats(timeout=timeout)
+                    except ValueError:
+                        pass
+                    else:
+                        raise RuntimeError('invalid timeout accepted')
+                for _ in range(3):
+                    stats = sample()
+                    if sequences:
+                        assert stats['seq'] > sequences[-1], 'stale statistics sequence'
+                    sequences.append(stats['seq'])
+                    flags.append(stats['flags'])
+                sensor.set_ipa(False)
+                assert sensor.get_ipa() is False, 'IPA did not stop'
+                sensor.snapshot()
+                try:
+                    sensor.get_ipa_stats(timeout=200)
+                except OSError as exc:
+                    assert 'ESP_ERR_INVALID_STATE' in str(exc), 'wrong disabled-IPA error'
+                else:
+                    raise RuntimeError('statistics read accepted while IPA disabled')
+                sensor.set_ipa(True)
+                assert sensor.get_ipa() is True, 'IPA did not restart'
+                stats = sample()
+                # A new controller may restart its sequence; compare only within a session.
+                restarted_seq = stats['seq']
+                sensor.snapshot()
+            finally:
+                sensor.set_ipa(original)
+            assert sensor.get_ipa() is original, 'IPA state was not restored'
+            print('{MARKER_OK}', json.dumps(dict(seq=sequences, flags=flags, restarted_seq=restarted_seq)))
+            """),
+            timeout=ctx.args.frame_timeout + 40,
+        )
+    except CheckSkipped as exc:
+        if required:
+            raise CheckFailure(f"IPA statistics required on {board}: {exc}") from exc
+        raise
+    try:
+        result = json.loads(answer)
+        ctx.note(f"sequences={result['seq']}, flags={result['flags']}, restart sequence={result['restarted_seq']}")
+    except (ValueError, KeyError, TypeError) as exc:
+        raise CheckFailure(f"invalid IPA statistics report: {answer!r}") from exc
+    return "fresh statistics, field validity, timeout validation and IPA stop/restart passed"
+
+
 def check_snapshot_rate(ctx: Context) -> str:
     frames = ctx.args.frames
     answer = ctx.link.run_on_device(
@@ -575,6 +699,7 @@ CHECKS: dict[str, tuple[Callable[[Context], str], str]] = {
     "framesizes": (check_framesizes, "capture one frame per supported framesize"),
     "pixformats": (check_pixformats, "capture one frame per supported pixel format"),
     "orientation": (check_orientation, "hmirror / vflip take effect and revert"),
+    "ipa_stats": (check_camera_ipa_stats, "fresh IPA statistics, field validity and IPA stop/restart"),
     "snapshot_rate": (check_snapshot_rate, "sustained sensor.snapshot() frame rate"),
     "preview": (check_preview_stream, "img.flush() streams preview frames to the host"),
     "image_ops": (check_image_ops, "imlib drawing, scaling, statistics and JPEG compression"),

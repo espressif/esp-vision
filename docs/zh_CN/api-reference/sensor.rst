@@ -83,6 +83,50 @@ IPA 和 ISP 控制接口是可选固件功能。使用前可通过 ``hasattr(sen
 
 关闭 IPA 会停止其自动参数更新，但不会绕过 ISP 或清除已有调校参数，因此画面最初可能没有明显变化。对比时可以在预览中改变照度或光源颜色，再开启 IPA 并等待算法重新稳定。此开关控制哪些算法取决于当前 IPA 配置。
 
+读取 IPA 统计信息
+-----------------
+
+``sensor.get_ipa_stats(timeout=1000)`` 在 IPA 运行期间读取一份新的 ISP 统计数据。使用前通过 ``hasattr(sensor, "get_ipa_stats")`` 检查固件是否提供接口，并初始化摄像头、开启 IPA。``timeout`` 为 1 至 1000 毫秒的整数，超出范围抛出 ``ValueError``。超时或摄像头不支持运行时 IPA 控制时返回 ``None``；摄像头未初始化、IPA 已关闭或设备操作失败时抛出 ``OSError``。
+
+每次调用创建一个单条目的统计队列，返回前释放，超时也会清理。读取不会停止采集或修改调校参数，但会临时增加统计复制开销，并可能在超时期限内阻塞 Python，因此建议定期采样。两次读取之间继续调用 ``sensor.snapshot()`` 消费图像缓冲。统计序号与 Python 的 ``snapshot()`` 图像没有一一对应保证。
+
+返回字典始终包含以下键。本次数据包中无有效标记的统计块为 ``None``，不会拼接不同数据包的统计值。
+
+.. list-table:: IPA 统计字段
+   :header-rows: 1
+   :widths: 22 78
+
+   * - 键
+     - 含义
+   * - ``seq``
+     - 64 位统计序号；摄像头或 IPA 重新初始化后可能重新计数。
+   * - ``flags``
+     - IPA 有效位：AWB=1、AE=2、HIST=4、SHARPEN=8、AF=16、AWB_SUBWIN=32。AE/AWB 位序与原始 ESP Video 标记不同。
+   * - ``ae``
+     - 5×5 亮度网格，按 ``[x][y]`` 索引。
+   * - ``awb``
+     - 包含 ``counted`` （白点计数）、``sum_r``、``sum_g``、``sum_b`` 的字典。有效结果的白点计数也可能为零。
+   * - ``awb_subwin``
+     - 按 ``[x][y]`` 索引的 5×5 网格，各单元字段与 ``awb`` 相同。需要后端、芯片及统计配置支持。
+   * - ``hist``
+     - 按硬件直方图区间顺序排列的 16 个像素计数；区间边界由当前 ISP 配置决定。
+   * - ``sharpen``
+     - 高频像素最大值。
+   * - ``af``
+     - 三个窗口的字典列表，各包含 ``definition`` （清晰度）和 ``luminance`` （亮度）。这些是对焦统计值，不是镜头位置。
+
+.. code-block:: python
+
+   sensor.reset()
+   sensor.set_ipa(True)
+   sensor.skip_frames(time=2000)
+   sensor.snapshot()
+   stats = sensor.get_ipa_stats(timeout=200)
+   if stats is not None:
+       print(stats["seq"], stats["ae"], stats["awb"])
+
+``example/01-Camera/04-IPA/ipa_stats.py`` 演示预览期间定期读取统计。该接口返回 IPA 消费的 ISP 输入统计，不包含算法推算的色温、收敛曝光等输出状态；驱动支持的参数可通过 ``get_isp()`` 回读。
+
 手动控制 ISP
 ------------
 
