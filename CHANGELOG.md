@@ -6,11 +6,18 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Added INT8 `espdl.NanoTrack` for automatic single-object tracking, with models and an example that continuously tracks a target after BOOT-button selection.
 - Added runtime IPA and manual ISP control to the `sensor` module through `set_ipa()`, `get_ipa()`, `set_isp()`, and `get_isp()`, covering the exposure, pixel gain, demosaic, white balance, LSC, BLC, BF, sharpen, CCM, and gamma blocks over the ESP Video V4L2 controls. The feature is opt-in per board through `ESP_VISION_ENABLE_CAMERA_IPA_CONTROL` and is enabled on `ESP32_P4X_FUNCTION_EV_BOARD` and `ESP32_P4X_EYE`, with documentation in the `sensor` API reference and an example under `example/01-Camera/04-IPA`.
 - Added a hardware-in-the-loop CI stage that flashes the `ESP32_P4X_FUNCTION_EV_BOARD` build onto a real board and tests its camera and LCD, through `tools/ci/flash_and_test.py` and `tools/ci/device_checks.py`.
 
+### Changed
+
+- Upgraded ESP-DL to 3.3.13 and enabled dual-core NanoTrack inference on ESP32-P4.
+- Optimized NanoTrack preprocessing and raised the example match threshold to 0.95.
+
 ### Fixed
 
+- Fixed NanoTrack model compatibility and ESP32-P4 inference crashes.
 - Fixed Windows QSTR preprocessing with ESP-IDF 6.1 by evaluating CMake generator expressions in compiler response files, including Mbed TLS header paths, and omitting empty include and definition entries.
 - Fixed the hardware-in-the-loop device checks intermittently failing with `ValueError: not enough values to unpack` by parsing a device answer only once its whole line has arrived.
 - Fixed the Python CI jobs failing with `wget: command not found` by moving them from `python:3.11-slim` to `python:3.11`.

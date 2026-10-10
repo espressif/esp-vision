@@ -64,6 +64,10 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - 外部 SDK
      - 构建系统、驱动和媒体组件
      - Apache-2.0
+   * - `NanoTrack V2 预训练模型 <https://github.com/HonglinChu/SiamTrackers/tree/248663fde6bf7c40190cf10ee396d5662919ecd3/NanoTrack/models/nanotrackv2>`__
+     - ``models/nanotrack_v2``
+     - 本地量化的单目标追踪模型资源
+     - 上游 NanoTrack 提供 Apache-2.0 文本；权重独立条款尚未核实，见目录内 README 和来源清单
 
 如何理解许可证
 --------------

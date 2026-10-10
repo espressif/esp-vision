@@ -3,7 +3,22 @@ espdl -- Model Inference
 
 :link_to_translation:`zh_CN:[中文]`
 
-The ``espdl`` module runs ESP-DL ``.espdl`` models on captured images. It provides task-specific wrappers for object detection (:py:class:`PedestrianDetect`, :py:class:`ESPDet`, :py:class:`YOLO11`), pose estimation (:py:class:`YOLO11nPose`), and image classification (:py:class:`ImageNetCls`), plus :py:class:`Model` for exposing raw ESP-DL output tensors to Python.
+The ``espdl`` module runs ESP-DL ``.espdl`` models on captured images. It provides task-specific wrappers for object detection (:py:class:`PedestrianDetect`, :py:class:`ESPDet`, :py:class:`YOLO11`), pose estimation (:py:class:`YOLO11nPose`), image classification (:py:class:`ImageNetCls`), and single-object tracking (:py:class:`NanoTrack`), plus :py:class:`Model` for exposing raw ESP-DL output tensors to Python.
+
+Button-Confirmed Single-Object Tracking
+---------------------------------------
+
+``espdl.NanoTrack`` runs NanoTrack V2 full-INT8 models. Copy the three ``.espdl`` files from ``models/nanotrack_v2/`` to ``/sdcard/nanotrack_v2/``. Local quantization experiments live under ignored ``build/experiments/nanotrack-v2`` and are not included in a clean checkout. Use the ESP32-P4 exports for P4/S31; the mixed INT16 experiment exports are not accepted by this wrapper. S3 requires target-specific quantization and separate validation.
+
+``example/03-Machine-Learning/00-ESP-DL/nanotrack.py`` displays a centered 64x64 selection box. Place the target inside it and press BOOT (GPIO35 on ESP32-P4X-EYE and P4 Function EV Board) to start tracking; press again to return to selection. Missed matches keep the original template and continue local searching. The camera image is displayed at native size, center-cropped on smaller LCDs. Change ``BUTTON_PIN`` and ``BOX_SIZE`` for other hardware or target sizes. Inference precedes drawing so overlays do not enter model inputs.
+
+The example uses a configurable ``MATCH_THRESHOLD = 0.95``. The displayed ``match`` value is a model score, not a target-identity probability.
+
+.. literalinclude:: ../../../example/03-Machine-Learning/00-ESP-DL/nanotrack.py
+   :language: python
+   :start-at: from machine import Pin
+
+``init(image, roi)`` caches target features, then frees the template model. Search and head models remain loaded; selecting a new target reloads the template model temporarily. Use unannotated RGB565 or grayscale images of the same dimensions throughout a track. The returned tuple is ``(x, y, w, h, score)``; below-threshold results return ``None`` without updating the previous search state. Scores do not guarantee target visibility. This is local single-object tracking without automatic global reacquisition or training of network weights.
 
 Raw Output Tensors
 ------------------
@@ -118,11 +133,12 @@ Result tuples
 - Detection: ``(x, y, w, h, score, category)``
 - Pose: ``(x, y, w, h, score, category, keypoints)`` with 17 COCO keypoints
 - Classification: ``(label, score)``
+- Tracking: ``(x, y, w, h, score)`` or ``None`` below the match threshold
 
 .. seealso::
 
    :doc:`../concepts/ai-inference` describes the ESP-DL inference pipeline, the ``.espdl`` format, quantization, and pre-/post-processing. To deploy a new model, see :doc:`../how-to/add-model`.
 
-   Runnable examples: ``example/03-Machine-Learning/00-ESP-DL`` (pedestrian detection, ESP-DL raw output decoding, ESPDet, YOLO11, pose, ImageNet classification).
+   Runnable examples: ``example/03-Machine-Learning/00-ESP-DL`` (pedestrian detection, ESP-DL raw output decoding, ESPDet, YOLO11, pose, ImageNet classification, BOOT-confirmed NanoTrack tracking).
 
 .. include:: _generated/espdl.rst

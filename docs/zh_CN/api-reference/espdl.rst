@@ -3,7 +3,22 @@ espdl -- 模型推理
 
 :link_to_translation:`en:[English]`
 
-``espdl`` 模块在采集到的图像上运行 ESP-DL 的 ``.espdl`` 模型，并提供常见任务封装：目标检测（:py:class:`PedestrianDetect`\ 、:py:class:`ESPDet`\ 、:py:class:`YOLO11`\ ）、姿态估计（:py:class:`YOLO11nPose`\ ）和图像分类（:py:class:`ImageNetCls`\ ），同时可通过 :py:class:`Model` 将 ESP-DL 原始输出 tensor 暴露给 Python。
+``espdl`` 模块在采集到的图像上运行 ESP-DL 的 ``.espdl`` 模型，并提供常见任务封装：目标检测（:py:class:`PedestrianDetect`\ 、:py:class:`ESPDet`\ 、:py:class:`YOLO11`\ ）、姿态估计（:py:class:`YOLO11nPose`\ ）、图像分类（:py:class:`ImageNetCls`\ ）和单目标追踪（:py:class:`NanoTrack`\ ），同时可通过 :py:class:`Model` 将 ESP-DL 原始输出 tensor 暴露给 Python。
+
+按键确认单目标追踪
+------------------
+
+``espdl.NanoTrack`` 运行 NanoTrack V2 全 INT8 模型。将 ``models/nanotrack_v2/`` 中的三个 ``.espdl`` 文件复制到设备的 ``/sdcard/nanotrack_v2/`` 即可，本地量化实验保存在被忽略的 ``build/experiments/nanotrack-v2``，不包含在全新检出的仓库中。P4/S31 使用 ESP32-P4 导出物；本封装不接受混合 INT16 实验模型。S3 需要面向 S3 重新量化并单独验证。
+
+``example/03-Machine-Learning/00-ESP-DL/nanotrack.py`` 默认显示中心 64x64 选框。将目标放入框内，按 BOOT 键（ESP32-P4X-EYE 和 P4 Function EV Board 均为 GPIO35）开始追踪；再次按键返回选框状态。丢失目标后保留原模板并继续局部搜索。相机图像按原尺寸显示，小屏幕只裁切中心区域，不缩放。可通过 ``BUTTON_PIN`` 和 ``BOX_SIZE`` 适配其他硬件或目标尺寸。推理在绘制标注前完成，避免图形进入模型输入。
+
+示例使用可配置的 ``MATCH_THRESHOLD = 0.95``，画面上的 ``match`` 是模型匹配分数，不是目标身份正确的概率。
+
+.. literalinclude:: ../../../example/03-Machine-Learning/00-ESP-DL/nanotrack.py
+   :language: python
+   :start-at: from machine import Pin
+
+``init(image, roi)`` 缓存目标特征，然后释放模板模型；搜索模型和 head 常驻，重新框选时临时重载模板模型。同一次追踪使用尺寸不变、未绘制标注的 RGB565 或灰度图像。结果为 ``(x, y, w, h, score)``；低于阈值时返回 ``None``，不更新上一搜索状态。分数不能保证目标仍然可见。这是局部单目标追踪，不包含全局自动找回或网络权重训练。
 
 原始输出 tensor
 ---------------
@@ -118,11 +133,12 @@ PedestrianDetect
 - 检测：``(x, y, w, h, score, category)``
 - 姿态：``(x, y, w, h, score, category, keypoints)``\ ，含 17 个 COCO 关键点
 - 分类：``(label, score)``
+- 追踪：``(x, y, w, h, score)``，低于匹配阈值时为 ``None``
 
 .. seealso::
 
    :doc:`../concepts/ai-inference` 介绍 ESP-DL 推理流程、``.espdl`` 格式、量化以及 前后处理。部署新模型请参见 :doc:`../how-to/add-model`\ 。
 
-   可运行示例：``example/03-Machine-Learning/00-ESP-DL``\ （行人检测、ESP-DL 原始输出解码、ESPDet、YOLO11、姿态、ImageNet 分类）。
+   可运行示例：``example/03-Machine-Learning/00-ESP-DL``\ （行人检测、ESP-DL 原始输出解码、ESPDet、YOLO11、姿态、ImageNet 分类、BOOT 按键确认的 NanoTrack 追踪）。
 
 .. include:: _generated/espdl.rst

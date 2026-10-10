@@ -1,0 +1,13 @@
+{
+    "name": "NanoTrack V2 Head INT8",
+    "architecture": "NanoTrack V2",
+    "api": "espdl.NanoTrack",
+    "task": "tracking",
+    "input": "8x8x48 + 16x16x48",
+    "inputFormat": "INT8 NHWC features",
+    "dataset": "Training set of upstream published weights not independently verified",
+    "labels": [],
+    "sizeBytes": 241728,
+    "description": "Head branch for touch-selected single-object tracking. Requires all three NanoTrack V2 model files.",
+    "sha256": "3adc3c740ca191520f632d15e48574f8523987bb6f4775c4e7c5c2c495717ce9"
+}
