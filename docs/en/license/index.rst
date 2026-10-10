@@ -64,6 +64,10 @@ The following table lists the direct dependencies most relevant to redistributio
      - External SDK
      - Build system, drivers, and media components
      - Apache-2.0
+   * - `NanoTrack V2 pretrained models <https://github.com/HonglinChu/SiamTrackers/tree/248663fde6bf7c40190cf10ee396d5662919ecd3/NanoTrack/models/nanotrackv2>`__
+     - ``models/nanotrack_v2``
+     - Locally quantized single-object tracking assets
+     - Upstream NanoTrack supplies Apache-2.0 text; separate weight terms not verified (see local README and provenance)
 
 How to Interpret the Licenses
 -----------------------------

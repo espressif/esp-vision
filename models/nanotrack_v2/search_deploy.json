@@ -1,0 +1,13 @@
+{
+    "name": "NanoTrack V2 Search INT8",
+    "architecture": "NanoTrack V2",
+    "api": "espdl.NanoTrack",
+    "task": "tracking",
+    "input": "255x255",
+    "inputFormat": "RGB565",
+    "dataset": "Training set of upstream published weights not independently verified",
+    "labels": [],
+    "sizeBytes": 328096,
+    "description": "Search branch for touch-selected single-object tracking. Requires all three NanoTrack V2 model files.",
+    "sha256": "c846cc09b39bc1cdab0b9b470cc96a6333bd82785e15910cc6dc24a3eb179c2a"
+}

@@ -24,6 +24,24 @@ RawTensor = tuple[str, tuple[int, ...], int, int, bytes]
 TensorInfo = tuple[str, tuple[int, ...], int, int]
 
 
+#: NanoTrack V2 single-object tracker using full-INT8 NHWC ESP-DL models.
+class NanoTrack:
+    #: Load search and head models. The template model is loaded only during init().
+    #: template: 127x127 template backbone .espdl path.
+    #: search: 255x255 search backbone .espdl path.
+    #: head: two-input NanoTrack V2 head .espdl path.
+    def __init__(self, template: str, search: str, head: str) -> None: ...
+    def __del__(self) -> None: ...
+    #: Cache target features from an unannotated RGB565/grayscale image, then release the template model.
+    #: roi: (x, y, w, h), inside the image, at least 10x10 pixels.
+    def init(self, image: Image, roi: tuple[int, int, int, int]) -> None: ...
+    #: Track in a same-size image; return (x, y, w, h, score), or None below threshold.
+    #: threshold: raw foreground score in [0, 1]; rejected frames do not update the search state.
+    def track(self, image: Image, *, threshold: float = 0.5) -> tuple[int, int, int, int, float] | None: ...
+    #: Release models and cached features. Repeated calls are safe.
+    def deinit(self) -> None: ...
+
+
 #: Preload an ESP-DL model file.
 #: path: model path, for example "/sdcard/model.espdl" or "/flash/model.espdl".
 #: profile: True enables ESP-DL profiling output when supported.
