@@ -32,6 +32,29 @@ class SensorStatus(TypedDict):
     active_height: int
 
 
+class IPAAWBStats(TypedDict):
+    counted: int
+    sum_r: int
+    sum_g: int
+    sum_b: int
+
+
+class IPAAFStats(TypedDict):
+    definition: int
+    luminance: int
+
+
+class IPAStats(TypedDict):
+    seq: int
+    flags: int
+    ae: list[list[int]] | None
+    awb: IPAAWBStats | None
+    awb_subwin: list[list[IPAAWBStats]] | None
+    hist: list[int] | None
+    sharpen: int | None
+    af: list[IPAAFStats] | None
+
+
 #: Reset and initialize the camera with the board default sensor configuration.
 def reset() -> None: ...
 #: Stop or restart the camera stream.
@@ -71,6 +94,11 @@ def set_ipa(enable: bool) -> None: ...
 #: Return the IPA controller state, or None when runtime control is unsupported.
 #: A supported camera must be initialized first.
 def get_ipa() -> bool | None: ...
+#: Optional API: collect one new statistics packet while IPA is running.
+#: timeout: 1..1000 milliseconds; None means timeout or unsupported backend.
+#: Uninitialized/stopped cameras or disabled IPA raise OSError.
+#: AE and AWB subwindow grids use [x][y]; unavailable blocks are None.
+def get_ipa_stats(timeout: int = 1000) -> IPAStats | None: ...
 #: Optional API: present only in firmware with IPA/ISP control enabled.
 #: Read current ISP block parameters, or None if unsupported. Initialize the camera first.
 #: Blocks the camera driver or chip revision does not implement return None,

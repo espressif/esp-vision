@@ -10,7 +10,7 @@ order:
 
   * ``tools/test_control_transport.py`` - the EV-MUX transport contract,
   * ``tools/ci/device_checks.py`` - the camera (capture, framesizes, pixel
-    formats, orientation, frame rate, host preview, imlib) and the LCD.
+    formats, orientation, IPA statistics, frame rate, host preview, imlib) and the LCD.
 
 Everything printed here and by those two scripts is mirrored into a log file
 (``--log``) that the job keeps as an artifact, and each stage ends up in a

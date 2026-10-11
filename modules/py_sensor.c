@@ -369,6 +369,7 @@ static const mp_rom_map_elem_t sensor_module_globals_table[] = {
 #if ESP_VISION_ENABLE_CAMERA_IPA_CONTROL
     { MP_ROM_QSTR(MP_QSTR_set_ipa), MP_ROM_PTR(&sensor_set_ipa_obj) },
     { MP_ROM_QSTR(MP_QSTR_get_ipa), MP_ROM_PTR(&sensor_get_ipa_obj) },
+    { MP_ROM_QSTR(MP_QSTR_get_ipa_stats), MP_ROM_PTR(&sensor_get_ipa_stats_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_isp), MP_ROM_PTR(&sensor_set_isp_obj) },
     { MP_ROM_QSTR(MP_QSTR_get_isp), MP_ROM_PTR(&sensor_get_isp_obj) },
 #endif

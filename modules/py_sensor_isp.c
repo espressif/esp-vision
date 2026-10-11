@@ -13,6 +13,93 @@
 #include "camera_isp.h"
 #include "py_sensor_isp.h"
 
+static mp_obj_t sensor_stats_uints(const uint32_t *values, size_t count)
+{
+    mp_obj_t result = mp_obj_new_list(count, NULL);
+    mp_obj_list_t *list = MP_OBJ_TO_PTR(result);
+    for (size_t i = 0; i < count; i++) {
+        list->items[i] = mp_obj_new_int_from_uint(values[i]);
+    }
+    return result;
+}
+
+static mp_obj_t sensor_stats_awb(const esp_vision_isp_awb_stats_t *awb)
+{
+    mp_obj_t result = mp_obj_new_dict(4);
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_counted), mp_obj_new_int_from_uint(awb->counted));
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_sum_r), mp_obj_new_int_from_uint(awb->sum_r));
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_sum_g), mp_obj_new_int_from_uint(awb->sum_g));
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_sum_b), mp_obj_new_int_from_uint(awb->sum_b));
+    return result;
+}
+
+static mp_obj_t sensor_get_ipa_stats(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args)
+{
+    enum { ARG_timeout };
+    static const mp_arg_t allowed_args[] = {
+        {MP_QSTR_timeout, MP_ARG_INT, {.u_int = 1000}},
+    };
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+    mp_int_t timeout = args[ARG_timeout].u_int;
+    if (timeout < 1 || timeout > 1000) {
+        mp_raise_ValueError(MP_ERROR_TEXT("timeout must be 1..1000 ms"));
+    }
+    esp_vision_ipa_stats_t stats;
+    // Keep the GIL while the bounded read owns the queue: another Python
+    // thread must not reset the camera or stop IPA during this operation.
+    esp_err_t ret = esp_vision_camera_get_ipa_stats(&stats, timeout);
+    if (ret == ESP_ERR_NOT_SUPPORTED || ret == ESP_ERR_TIMEOUT) {
+        return mp_const_none;
+    }
+    if (ret != ESP_OK) {
+        mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("IPA statistics error: %s"), esp_err_to_name(ret));
+    }
+    mp_obj_t result = mp_obj_new_dict(8);
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_seq), mp_obj_new_int_from_ull(stats.seq));
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_flags), mp_obj_new_int_from_uint(stats.flags));
+    mp_obj_t ae = mp_const_none;
+    if (stats.flags & ESP_VISION_IPA_STATS_AE) {
+        ae = mp_obj_new_list(ESP_VISION_ISP_STATS_GRID_X, NULL);
+        for (size_t x = 0; x < ESP_VISION_ISP_STATS_GRID_X; x++) {
+            ((mp_obj_list_t *)MP_OBJ_TO_PTR(ae))->items[x] =
+                sensor_stats_uints(stats.ae[x], ESP_VISION_ISP_STATS_GRID_Y);
+        }
+    }
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_ae), ae);
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_awb),
+                      stats.flags & ESP_VISION_IPA_STATS_AWB ? sensor_stats_awb(&stats.awb) : mp_const_none);
+    mp_obj_t subwin = mp_const_none;
+    if (stats.flags & ESP_VISION_IPA_STATS_AWB_SUBWIN) {
+        subwin = mp_obj_new_list(ESP_VISION_ISP_STATS_GRID_X, NULL);
+        for (size_t x = 0; x < ESP_VISION_ISP_STATS_GRID_X; x++) {
+            mp_obj_t row = mp_obj_new_list(ESP_VISION_ISP_STATS_GRID_Y, NULL);
+            ((mp_obj_list_t *)MP_OBJ_TO_PTR(subwin))->items[x] = row;
+            for (size_t y = 0; y < ESP_VISION_ISP_STATS_GRID_Y; y++) {
+                ((mp_obj_list_t *)MP_OBJ_TO_PTR(row))->items[y] = sensor_stats_awb(&stats.awb_subwin[x][y]);
+            }
+        }
+    }
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_awb_subwin), subwin);
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_hist), stats.flags & ESP_VISION_IPA_STATS_HIST ?
+                      sensor_stats_uints(stats.hist, ESP_VISION_ISP_STATS_HIST_BINS) : mp_const_none);
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_sharpen), stats.flags & ESP_VISION_IPA_STATS_SHARPEN ?
+                      mp_obj_new_int(stats.sharpen) : mp_const_none);
+    mp_obj_t af = mp_const_none;
+    if (stats.flags & ESP_VISION_IPA_STATS_AF) {
+        af = mp_obj_new_list(ESP_VISION_ISP_STATS_AF_WINDOWS, NULL);
+        for (size_t i = 0; i < ESP_VISION_ISP_STATS_AF_WINDOWS; i++) {
+            mp_obj_t window = mp_obj_new_dict(2);
+            ((mp_obj_list_t *)MP_OBJ_TO_PTR(af))->items[i] = window;
+            mp_obj_dict_store(window, MP_OBJ_NEW_QSTR(MP_QSTR_definition), mp_obj_new_int_from_uint(stats.af[i].definition));
+            mp_obj_dict_store(window, MP_OBJ_NEW_QSTR(MP_QSTR_luminance), mp_obj_new_int_from_uint(stats.af[i].luminance));
+        }
+    }
+    mp_obj_dict_store(result, MP_OBJ_NEW_QSTR(MP_QSTR_af), af);
+    return result;
+}
+MP_DEFINE_CONST_FUN_OBJ_KW(sensor_get_ipa_stats_obj, 0, sensor_get_ipa_stats);
+
 typedef enum {
     ISP_BOOL, ISP_U8, ISP_U16, ISP_I32, ISP_FLOAT, ISP_FLOAT_ARRAY, ISP_U8_ARRAY, ISP_LSC_ARRAY, ISP_SIZE,
 } sensor_isp_field_type_t;

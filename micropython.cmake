@@ -255,6 +255,7 @@ if(ESP_VISION_ENABLE_CAMERA_IPA_CONTROL)
         ${ESP_VISION_ROOT}/modules/py_sensor_isp.c
         ${ESP_VISION_ROOT}/platform/camera_isp.c
         ${ESP_VISION_ROOT}/platform/video_isp.c
+        ${ESP_VISION_ROOT}/platform/video_isp_stats.c
     )
     list(APPEND IDF_COMPONENTS espressif__esp_video)
     if(CONFIG_ESP_VIDEO_ENABLE_ISP_PIPELINE_CONTROLLER)

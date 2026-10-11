@@ -30,6 +30,22 @@ __attribute__((weak)) esp_err_t esp_vision_camera_get_isp(esp_vision_isp_block_t
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t esp_vision_camera_get_ipa_stats(esp_vision_ipa_stats_t *stats, uint32_t timeout_ms)
+{
+    if (stats == NULL || timeout_ms == 0 || timeout_ms > 1000) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    bool enabled;
+    esp_err_t ret = esp_vision_camera_get_ipa(&enabled);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    if (!enabled) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    return esp_vision_video_isp_get_stats(stats, timeout_ms);
+}
+
 __attribute__((weak)) esp_err_t esp_vision_camera_set_isp(esp_vision_isp_block_t block, const esp_vision_isp_config_t *config)
 {
     (void)block;
