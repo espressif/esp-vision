@@ -10,11 +10,20 @@
 
 #include "esp_check.h"
 #include "esp_lcd_co5300.h"
+#include "esp_lcd_touch_cst9220.h"
 #include "esp_lcd_panel_interface.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_log.h"
 
 static const char *TAG = "ESP32_S31_MOSAICO_SETUP";
+
+esp_err_t lcd_touch_factory_entry_t(esp_lcd_panel_io_handle_t io,
+                                    const esp_lcd_touch_config_t *touch_config,
+                                    esp_lcd_touch_handle_t *touch_handle)
+{
+    return esp_lcd_touch_new_i2c_cst9220(io, touch_config, touch_handle);
+}
+
 static esp_err_t (*s_co5300_draw_bitmap)(esp_lcd_panel_t *panel,
                                          int x_start,
                                          int y_start,

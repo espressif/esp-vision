@@ -8,3 +8,9 @@ dependencies:
   espressif/esp_lcd_ek79007:
     version: "^1.0.0"
     require: public
+  espressif/esp_lcd_touch:
+    version: "1.2.1"
+    require: public
+  espressif/esp_lcd_touch_gt911:
+    version: "1.2.0~3"
+    require: public

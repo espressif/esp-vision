@@ -3,6 +3,33 @@
 
 version: 1.0.0
 devices:
+  - name: lcd_touch
+    chip: gt911
+    type: lcd_touch
+    sub_type: i2c
+    version: default
+    init_skip: true
+    dependencies:
+      espressif/esp_lcd_touch_gt911: "1.2.0~3"
+    config:
+      io_i2c_config:
+        lcd_cmd_bits: 16
+        scl_speed_hz: 100000
+        transaction_timeout_ms: 100  # ESP-IDF 6.1+; older IDF uses its driver timeout.
+      touch_config:
+        # esp_lcd_touch mirrors as max - coordinate; use the last pixel index.
+        x_max: 1023
+        y_max: 599
+        rst_gpio_num: -1
+        int_gpio_num: -1
+        flags:
+          mirror_x: true
+          mirror_y: true
+    peripherals:
+      - name: i2c_camera
+        # Board Manager uses 8-bit addresses (GT911 7-bit: 0x5D / 0x14).
+        i2c_addr: [0xBA, 0x28]
+
   - name: display_lcd
     chip: ek79007
     type: display_lcd

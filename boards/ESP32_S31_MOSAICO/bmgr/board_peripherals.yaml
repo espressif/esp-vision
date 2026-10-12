@@ -3,7 +3,7 @@
 
 version: 1.0.0
 peripherals:
-  # Camera SCCB bus.
+  # Shared camera SCCB and touchscreen I2C bus.
   - name: i2c_master
     type: i2c
     role: master
