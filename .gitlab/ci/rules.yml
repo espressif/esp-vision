@@ -27,7 +27,8 @@
   - "micropython.cmake"
   - ".gitmodules"
   - ".gitlab-ci.yml"
-  - ".gitlab/ci/**/*"
+  - ".gitlab/ci/rules.yml"
+  - ".gitlab/ci/target_test.yml"
   - "platform/**/*"
   - "modules/**/*"
   - "components/**/*"
@@ -71,27 +72,49 @@
   rules:
     - if: '$CI_COMMIT_BRANCH == "master"'
 
-# Firmware build: always on tags and on master, otherwise only when
-# firmware-relevant files change (so docs-only commits skip compilation).
+# Firmware and SDK releases are independent. A Device Core tag only verifies
+# its npm package; it never builds, flashes or publishes firmware.
+#
+# API/web SDK verification: ESP_VISION_DEVICE_CORE_ONLY=1.
+# Final firmware matrix: ESP_VISION_BUILD_FIRMWARE=1 (omit TEST_BOARD).
+# Targeted bin: ESP_VISION_TEST_BOARD + ESP_VISION_TEST_IDF_IMAGE.
+#
+# Use ordinary push changes against the previous commit, including master;
+# compare new-branch and non-push pipelines to master explicitly because GitLab
+# otherwise considers every path changed when there is no previous push.
 .rules:build:firmware:
   rules:
+    - if: '$ESP_VISION_DEVICE_CORE_ONLY == "1" || $CI_COMMIT_TAG =~ /^device-core-v/'
+      when: never
+    - if: '$ESP_VISION_TEST_BOARD && ($BOARD != $ESP_VISION_TEST_BOARD || $IDF_IMAGE != $ESP_VISION_TEST_IDF_IMAGE)'
+      when: never
+    - if: '$ESP_VISION_TEST_BOARD || $ESP_VISION_BUILD_FIRMWARE == "1"'
     - if: '$CI_COMMIT_TAG'
-    - if: '$CI_COMMIT_BRANCH == "master"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: *firmware_changes
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BEFORE_SHA != "0000000000000000000000000000000000000000"'
       changes: *firmware_changes
+    - if: '$CI_COMMIT_BRANCH && ($CI_PIPELINE_SOURCE != "push" || $CI_COMMIT_BEFORE_SHA == "0000000000000000000000000000000000000000")'
+      changes:
+        compare_to: 'refs/heads/master'
+        paths: *firmware_changes
 
-# Hardware-in-the-loop test: gated on the same changes as the firmware build,
-# since it flashes that build's artifacts onto a physical board.
+# HIL consumes the same firmware matrix. Targeted-bin and SDK-only runs cannot
+# enqueue HIL jobs whose literal firmware artifact dependencies were omitted.
 .rules:test:target:
   rules:
+    - if: '$ESP_VISION_DEVICE_CORE_ONLY == "1" || $CI_COMMIT_TAG =~ /^device-core-v/ || $ESP_VISION_TEST_BOARD'
+      when: never
+    - if: '$ESP_VISION_BUILD_FIRMWARE == "1"'
     - if: '$CI_COMMIT_TAG'
-    - if: '$CI_COMMIT_BRANCH == "master"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: *firmware_changes
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BEFORE_SHA != "0000000000000000000000000000000000000000"'
       changes: *firmware_changes
+    - if: '$CI_COMMIT_BRANCH && ($CI_PIPELINE_SOURCE != "push" || $CI_COMMIT_BEFORE_SHA == "0000000000000000000000000000000000000000")'
+      changes:
+        compare_to: 'refs/heads/master'
+        paths: *firmware_changes
 
 # Launchpad release: only on release tags. Two accepted shapes:
 #   * semantic version  -> v1.0, v1.2.3, v1.2.3-rc1

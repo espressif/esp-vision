@@ -8,6 +8,8 @@
 
 # ESP-VISION
 
+[![npm version](https://img.shields.io/npm/v/%40esp-vision%2Fdevice-core?logo=npm)](https://www.npmjs.com/package/@esp-vision/device-core) [![npm license](https://img.shields.io/npm/l/%40esp-vision%2Fdevice-core)](host/device-core/LICENSE)
+
 **Low-Code Edge AI & Computer Vision Framework for Espressif SoCs**
 
 [English](README.md) | [简体中文](README_ZH.md)
@@ -32,10 +34,10 @@ ESP-VISION is a Low-Code Edge AI & Computer Vision Framework for Espressif SoCs.
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/_static/esp-vision-architecture.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/_static/esp-vision-architecture-light.svg">
-  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION layered architecture" width="960" height="730">
+  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION layered architecture" width="960" height="1066">
 </picture>
 
-See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html) for the role of each layer.
+IDE, Agent, CLI and custom tools share Device Core; EV-MUX connects that host SDK to device firmware. See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html) for the role of each layer.
 
 ## Quickstart
 
@@ -76,6 +78,8 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 |||
 
 ## Resources
+
+- [Device Core SDK and API reference](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/index.html)
 
 - [Supported Chips and Boards](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/target-support/index.html)
 - [Web IDE](https://ide.vision.espressif.com/)

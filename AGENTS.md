@@ -23,9 +23,15 @@ Notes:
 - After changing the build system, board config, platform drivers, or imlib options, verify the `ESP32_P4X_EYE` build first; other boards only when the task touches them.
 - Firmware build/flash/monitor/config commands first prepare the MicroPython tree: `idf_ext.py` asserts `lib/micropython` is at the pinned commit (`v1.28.0`, `e0e9fbb17ed6fd06bb76e266ae554784c9c80804`), recreates a clean MicroPython copy under `build/micropython/`, applies `overlay/micropython/` to that copy, then projects each `boards/<BOARD>/port/` onto the copy's `ports/esp32/boards/<BOARD>/`. This build-copy strategy does not dirty `lib/micropython`.
 
+## Host SDK
+
+`host/device-core` is the canonical source of the independently versioned Apache-2.0-licensed `@esp-vision/device-core` npm package. Preserve its Apache-2.0 license and historical/third-party attributions in NOTICE. Its public application entry is `createDevice()`; IDE/Agent clients consume npm rather than maintain another protocol implementation.
+
+Install SDK dependencies with `npm install --ignore-scripts --no-audit --no-fund --package-lock=false`, then run `npm run release:check` from `host/device-core` with Node.js 22 for SDK changes. Keep SDK validation separate from firmware compilation; API/web CI can set `ESP_VISION_DEVICE_CORE_ONLY=1`, while the final firmware matrix can use `ESP_VISION_BUILD_FIRMWARE=1`. Do not create SDK Git tags: npm versions live in `package.json`, and Git tags identify firmware/documentation versions. Hardware acceptance is opt-in with `npm run test:hardware -- --help`; it uses the same public SDK API.
+
 ## Lint & Checks
 
-There is no test suite; CI runs `pre-commit` and a firmware build matrix.
+CI runs `pre-commit`, firmware host tests, the Host SDK checks and the applicable firmware build matrix.
 
 - C/C++ formatting (astyle 3.4.7): `pre-commit run --all-files astyle_py`
 - Copyright/SPDX headers: `pre-commit run --all-files check-copyright`

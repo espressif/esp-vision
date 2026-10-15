@@ -20,6 +20,14 @@ The following table lists the direct dependencies most relevant to redistributio
      - Local path
      - Role in ESP-VISION
      - License
+   * - Device Core host SDK
+     - ``host/device-core``
+     - EV-MUX v4 host communication, Python, resource files, discovery and images
+     - Apache-2.0 (``host/device-core/LICENSE``); historical MIT notices in ``NOTICE``
+   * - Device-side camera/LCD test fixture
+     - ``host/device-core/tests/fixtures/device-checks.py``
+     - Hardware acceptance functions migrated from the firmware tests; excluded from npm
+     - Apache-2.0 (original notice retained)
    * - `MicroPython <https://github.com/micropython/micropython>`__ v1.28.0
      - ``lib/micropython``
      - Python runtime and ESP32 port baseline

@@ -1,0 +1,614 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ESP Vision Device Actions",
+  "deviceCoreVersion": "0.1.0",
+  "schemaVersion": 1,
+  "actions": [
+    {
+      "name": "device.listPorts",
+      "description": "List platform-native serial candidates for the user to select; this action never chooses a device.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": true,
+        "destructive": false,
+        "openWorld": false
+      },
+      "requiresReadyDevice": false,
+      "concurrency": "shared-read"
+    },
+    {
+      "name": "device.connect",
+      "description": "Connect to an ESP Vision device using standard elicitation for a serial port or an explicit device TCP address, then acquire an EV-MUX v4 session.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "transport": {
+            "enum": [
+              "serial",
+              "tcp"
+            ],
+            "default": "serial",
+            "description": "Use serial for a platform port or tcp for an IP address on the device network."
+          },
+          "port": {
+            "type": "string",
+            "description": "Platform-native serial identifier, such as /dev/ttyACM0 or /dev/cu.usbmodem*. Omit it only when the MCP host advertises elicitation or ESP_VISION_PORT is configured. Non-interactive callers must pass it explicitly. A direct network address may also be supplied as tcp://IP:PORT or IP:PORT; alternatively set transport to tcp and provide host and tcpPort."
+          },
+          "host": {
+            "type": "string",
+            "description": "IPv4 or IPv6 address of the device when transport is tcp."
+          },
+          "tcpPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "default": 3232,
+            "description": "Device EV-MUX TCP port."
+          },
+          "baudRate": {
+            "type": "integer",
+            "minimum": 1200,
+            "maximum": 4000000,
+            "default": 115200
+          },
+          "drainMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3000,
+            "default": 300
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": false,
+        "openWorld": true
+      },
+      "requiresReadyDevice": false,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "device.disconnect",
+      "description": "Disconnect the active device session and release its lease.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": true,
+        "openWorld": false
+      },
+      "requiresReadyDevice": false,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "device.negotiate",
+      "description": "Discover EV-MUX v4, explicitly acquire a session, and prove the framed REPL is live.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "default": "unknown"
+          },
+          "drainMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3000,
+            "default": 300
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": false,
+        "openWorld": false
+      },
+      "requiresReadyDevice": false,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "device.inspect",
+      "description": "Inspect protocol state, device identity, filesystem, and recent logs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "includeFiles": {
+            "type": "boolean",
+            "default": true
+          },
+          "logLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 500,
+            "default": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": true,
+        "destructive": false,
+        "openWorld": false
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "shared-read"
+    },
+    {
+      "name": "python.execute",
+      "description": "Execute MicroPython through the shared interpreter using bounded REPL or chunked script transport.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 120000,
+            "default": 8000
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": true,
+        "openWorld": true
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "python.runEphemeral",
+      "description": "Run one Python draft from the reserved temporary device path without modifying a user-owned file.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "maxDurationMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 180000,
+            "default": 180000
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": true,
+        "openWorld": true
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "python.observeEphemeral",
+      "description": "Observe the bounded output and status of the current temporary Python run.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "waitMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "default": 1000
+          },
+          "outputOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1048576,
+            "default": 0
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": true,
+        "destructive": false,
+        "openWorld": false
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "shared-read"
+    },
+    {
+      "name": "python.stopEphemeral",
+      "description": "Stop the current temporary Python run and remove its reserved device file.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "runId"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": true,
+        "openWorld": false
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "deviceFile.read",
+      "description": "Read a file from the device filesystem.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "encoding": {
+            "enum": [
+              "utf-8",
+              "base64"
+            ],
+            "default": "utf-8"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": true,
+        "destructive": false,
+        "openWorld": false
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "deviceFile.write",
+      "description": "Write a file to the device using the negotiated transfer path.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "encoding": {
+            "enum": [
+              "utf-8",
+              "base64"
+            ],
+            "default": "utf-8"
+          },
+          "runAfterWrite": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": true,
+        "openWorld": true
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "workspaceFile.deploy",
+      "description": "Stream one workspace-relative file to the device without placing binary content in the model context.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sourcePath": {
+            "type": "string",
+            "description": "Workspace-relative source file path."
+          },
+          "devicePath": {
+            "type": "string",
+            "description": "Absolute destination path on the device."
+          },
+          "expectedBytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16777216
+          },
+          "expectedSha256": {
+            "type": "string",
+            "description": "Optional lowercase SHA-256 expected before transfer."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "sourcePath",
+          "devicePath"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": true,
+        "openWorld": true
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "deviceFile.remove",
+      "description": "Remove one file or one empty directory from the device filesystem.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "directory"
+            ],
+            "default": "file"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": true,
+        "openWorld": true
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "deviceTest.run",
+      "description": "Write, run, and capture a target-side MicroPython test.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "default": "/.agent_test.py"
+          },
+          "source": {
+            "type": "string"
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 500,
+            "maximum": 120000,
+            "default": 10000
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": true,
+        "openWorld": true
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "device.control",
+      "description": "Interrupt, reset, or enter the bootloader.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "enum": [
+              "stop",
+              "soft-reset",
+              "hard-reset",
+              "bootloader"
+            ]
+          },
+          "confirmBootloader": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": true,
+        "openWorld": false
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "device.rpc",
+      "description": "Call a negotiated user or debug RPC method. For network.configure, network.enable, and network.forget, include a 32-character lowercase hexadecimal operationId and reuse the exact same ID and payload when retrying after a timeout.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "object",
+            "default": {}
+          },
+          "channel": {
+            "enum": [
+              "user.rpc",
+              "debug.rpc"
+            ]
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 120000,
+            "default": 4000
+          }
+        },
+        "required": [
+          "method"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": false,
+        "destructive": true,
+        "openWorld": true
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    },
+    {
+      "name": "frame.capture",
+      "description": "Capture one JPEG frame for an explicitly requested observation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 500,
+            "maximum": 30000,
+            "default": 8000
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "risk": {
+        "readOnly": true,
+        "destructive": false,
+        "openWorld": false
+      },
+      "requiresReadyDevice": true,
+      "concurrency": "exclusive"
+    }
+  ]
+}

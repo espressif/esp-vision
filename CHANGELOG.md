@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Moved the independently versioned `@esp-vision/device-core` host SDK into `host/device-core`, with the grouped `createDevice()` API, standalone npm checks/dry runs and shared firmware/SDK documentation. IDE and Agent remain npm consumers.
+
 - Added `sensor.get_ipa_stats()` for IPA statistics, with documentation, an example, and CI hardware coverage.
 - Added INT8 `espdl.NanoTrack` for automatic single-object tracking, with models and an example that continuously tracks a target after BOOT-button selection.
 - Added the `lcd_touch.Touch` API with stubs, documentation, and touch examples with continuous drawing and reduced polling delay.
@@ -14,12 +16,19 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Show IDE, Agent, CLI and custom host applications sharing Device Core above EV-MUX in the architecture diagram, labeling its interface with representative public API names, reusing the SVG across architecture/SDK guides and clarifying host, protocol, byte transport, discovery and ROM-flashing boundaries; keep npm badges at the top of both READMEs and move SDK usage details to its existing guide.
+
+- Align the Device Core npm package license with firmware Apache-2.0, retaining historical MIT attributions and permissions in its distributed NOTICE file.
+
+- Aligned Device Core CLI queries with `device.inspect()`, with OS-aware USB serial discovery, macOS callout deduplication and `--all-ports` for native UART/Bluetooth endpoints; explicit port connections remain available.
+
 - Upgraded ESP-DL to 3.3.13 and enabled dual-core NanoTrack inference on ESP32-P4.
 - Optimized NanoTrack preprocessing and raised the example match threshold to 0.95.
 
 ### Fixed
 
 - Added theme-aware logos and architecture diagrams to both English and Chinese READMEs, with self-contained adaptive SVG fallbacks for GitLab renderers that strip picture sources, responsive 960-pixel logo sizing, and image backgrounds that keep text readable when site and browser themes differ.
+- Fixed Device Core CLI discovery alignment with Unicode-aware column padding and device blocks on narrow terminals, preserving complete field values.
 
 - Fixed NanoTrack model compatibility and ESP32-P4 inference crashes.
 - Fixed Windows QSTR preprocessing with ESP-IDF 6.1 by evaluating CMake generator expressions in compiler response files, including Mbed TLS header paths, and omitting empty include and definition entries.

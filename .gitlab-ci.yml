@@ -34,6 +34,7 @@ variables:
 
 include:
   - local: '.gitlab/ci/rules.yml'
+  - local: '.gitlab/ci/device-core.yml'
   - local: '.gitlab/ci/target_test.yml'
   - local: '.gitlab/ci/docs.yml'
   - local: '.gitlab/ci/deploy.yml'
@@ -67,6 +68,21 @@ python_stubs:
   script:
     - python -m py_compile stubs/*.pyi
     - python -m py_compile idf_ext.py
+
+evmux_host_checks:
+  stage: check
+  tags:
+    - build
+  image: python:3.11-slim
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates git gcc libc6-dev
+    - python -m pip install PyYAML
+    - git submodule sync -- lib/micropython
+    - git submodule update --init --depth 1 lib/micropython
+  script:
+    - python -m unittest discover -s tools/tests -p 'test_*.py' -v
+    - python tools/ci/check_docs_format.py
 
 # Catch board-config drift early: build config.toml's [website] region from the
 # board configs without IDF/esptool (--dry-run). This exercises board_model and

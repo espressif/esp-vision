@@ -354,7 +354,7 @@ def extract_micropython() -> List[dict]:
 
 EXAMPLE_DIR = os.path.join(REPO_ROOT, 'example')
 PROSE_SECTIONS = ('introduction', 'get-started', 'concepts', 'how-to',
-                  'architecture', 'target-support', 'project-relationship')
+                  'architecture', 'device-core', 'target-support', 'project-relationship')
 _IMPORT_RE = re.compile(r'^\s*(?:import|from)\s+([A-Za-z_][\w]*)', re.M)
 
 

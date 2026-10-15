@@ -1,0 +1,9 @@
+# Host tools
+
+This directory contains code that runs on a development host and communicates with ESP-VISION firmware. It is separate from the device-side `platform/`, `modules/` and board code.
+
+- `device-core/`: the UI-independent `@esp-vision/device-core` npm package. It owns EV-MUX sessions, Python interaction, files, networking, capture and the separate ROM-flashing adapter. See [the package README](device-core/README.md) for APIs, adapter contracts and validation commands.
+
+Keep firmware protocol changes, Device Core, documentation and matching tests in the same change. Device-side camera/LCD test fixtures retain their original Apache-2.0 notices and are excluded from the Apache-2.0 npm package. The package retains its own version and npm release lifecycle; its version does not need to match firmware or IDE versions. SDK-only changes must not require the firmware build matrix. Track SDK versions only in `device-core/package.json` and npm; do not create SDK Git tags in this repository, because repository tags also determine firmware `PROJECT_VER` and documentation versions.
+
+IDE, Agent, CLI and custom tools are peer host applications: they use Device Core, which implements EV-MUX runtime communication with the firmware. Host byte adapters provide physical serial/socket I/O, LAN discovery enumerates endpoints before connection, and ROM flashing uses a separate loader lifecycle. The shared architecture diagram and responsibility boundaries are documented in the [system architecture](../docs/en/architecture/index.rst). IDE and Agent applications consume a pinned npm release. Their UI, model providers, MCP tools, plugins and application release artifacts belong in their own repositories, rather than this shared communication library. The host supplies serial/TCP/WebSocket byte transports; the package does not bundle physical drivers, a bridge service or firmware images.

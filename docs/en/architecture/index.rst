@@ -3,42 +3,28 @@ Solution Architecture
 
 :link_to_translation:`zh_CN:[中文]`
 
-ESP-VISION is organized around a MicroPython firmware build, board-specific hardware backends, shared platform services, and Python-facing vision modules. Code is layered by whether it touches MicroPython (``mp_obj_t`` / ``py/*.h``).
+ESP-VISION separates host applications from device firmware. IDE, Agent, CLI and custom tools share Device Core; the SDK implements the host side of EV-MUX v4 over board-supported USB CDC, USB Serial/JTAG, UART or TCP. Device firmware combines MicroPython, vision/inference modules, platform services and board backends. Firmware code is further layered by whether it touches MicroPython (``mp_obj_t`` / ``py/*.h``).
 
-.. figure:: ../../_static/esp-vision-architecture.svg
+.. figure:: ../../_static/esp-vision-architecture-adaptive.svg
    :align: center
    :alt: ESP-VISION layered architecture
 
-   ESP-VISION layered architecture overview
+   Host applications → Device Core → EV-MUX → device firmware
 
 Layered Overview
 ----------------
 
-.. blockdiag::
-
-   blockdiag {
-     orientation = portrait;
-     default_group_color = none;
-
-     scripts  [label = "MicroPython scripts\n(example/)"];
-     bindings [label = "Bindings (modules/)\nsensor / image / display / espdl / tflite"];
-     platform [label = "Platform services\n(platform/)"];
-     imlib    [label = "imlib component\n(components/imlib)"];
-     boards   [label = "Board backends\n(boards/<BOARD>)"];
-     mp       [label = "MicroPython + overlay\n(build/, overlay/)"];
-
-     scripts  -> bindings;
-     bindings -> platform;
-     bindings -> imlib;
-     platform -> boards;
-     boards   -> mp;
-   }
-
+- **Host applications**: IDE presents editing/debugging UI, Agent runs automation workflows, CLI handles terminal commands, and custom tools supply their own application policy. These are peer consumers of the same SDK.
+- **Device Core** (``host/device-core``): the independently versioned ``@esp-vision/device-core`` npm package owns protocol parsing, request correlation, sessions, keepalive and operation lifecycles. The diagram selects representative API names instead of listing every method; complete contracts are in :doc:`../device-core/api`.
+- **EV-MUX v4**: the runtime wire protocol between Core and firmware, covering framing, logical channels, ownership and VM epochs across USB CDC, USJ, UART and TCP. Host adapters and network bridges carry bytes without creating another session owner.
+- **Device application**: MicroPython scripts run on the board and call its Python bindings. They can continue running after a host disconnects.
 - **Bindings** (``modules/``): the ``USER_C_MODULES`` layer. The main modules ``image``, ``sensor``, ``display``, ``espdl``, and ``tflite`` self-register via ``MP_REGISTER_MODULE``. ``py_imageio.c`` provides the ``image.ImageIO`` type, and ``py_helper.c`` is shared helper code. Bindings only do object conversion and light API adaptation; heavy logic lives in pure C or ``platform/``.
 - **Platform services** (``platform/``): self-written ESP32 glue. ``ev_channel.c`` / ``ev_mux.c`` / ``ev_control_transport.c`` / ``ev_stdio.c`` (EV-MUX / EV-ATP transport), ``preview.c`` (EV-MUX JPEG preview), ``display.c`` (generic display layer), ``sdcard.c`` (mount at ``/sdcard``), ``usb_msc.c`` (exposes the ``ffat`` partition over TinyUSB MSC), ``usb_auto_download.c`` (S3 OTG CDC reset/download protocol), ``jpeg.c`` (hardware or software JPEG), ``debug.c``, and ``main.c`` (startup init plus the soft-reset loop).
 - **imlib component** (``components/imlib/``): pure-C vision algorithms, an IDF component maintained as MIT, derived from OpenMV ``lib/imlib``.
 - **Board backends** (``boards/<BOARD>/``): per-board configuration and the real camera/display/sdcard implementations. P4X and S31 use ``esp_video``/V4L2; P4X also uses PPA, while S3 uses ``esp32-camera``.
 - **MicroPython + overlay**: MicroPython v1.28.0 is the fixed baseline; project changes live in ``overlay/micropython/`` and are applied to a generated build copy under ``build/micropython/``.
+
+Host-provided byte transports implement physical I/O beneath the SDK protocol. LAN DNS-SD discovery is an enumeration path before connection; ROM firmware flashing uses a separate loader lifecycle and does not send application images through EV-MUX. Firmware and SDK versions remain independent. See :doc:`../device-core/index` for host integration and API documentation.
 
 Capture-to-Output Data Flow
 ---------------------------

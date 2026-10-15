@@ -8,6 +8,8 @@
 
 # ESP-VISION
 
+[![npm version](https://img.shields.io/npm/v/%40esp-vision%2Fdevice-core?logo=npm)](https://www.npmjs.com/package/@esp-vision/device-core) [![npm license](https://img.shields.io/npm/l/%40esp-vision%2Fdevice-core)](host/device-core/LICENSE)
+
 **Low-Code Edge AI & Computer Vision Framework for Espressif SoCs**
 
 [English](README.md) | [简体中文](README_ZH.md)
@@ -32,10 +34,10 @@ ESP-VISION 是面向乐鑫 SoC 的低代码端侧 AI 与计算机视觉框架，
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/_static/esp-vision-architecture.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/_static/esp-vision-architecture-light.svg">
-  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION 分层架构" width="960" height="730">
+  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION 分层架构" width="960" height="1066">
 </picture>
 
-各层的职责说明见 [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)。
+IDE、Agent、CLI 和自定义工具共用 Device Core，通过 EV-MUX 与设备固件通信。各层职责见 [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)。
 
 ## 快速开始
 
@@ -76,6 +78,8 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 |||
 
 ## 资源
+
+- [Device Core SDK 与 API 参考](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/index.html)
 
 - [芯片与开发板支持](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/target-support/index.html)
 - [Web IDE](https://ide.vision.espressif.com/)
