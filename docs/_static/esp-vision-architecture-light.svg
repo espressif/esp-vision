@@ -1,154 +1,163 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="730" viewBox="0 0 960 730" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
-  <!-- background -->
-  <rect width="960" height="730" fill="#ffffff"/>
-
-  <!-- ===== top bar ===== -->
-  <g>
-    <text x="22" y="35" font-size="18" font-weight="700" fill="#1f2328">ESP-<tspan fill="#59636e" font-weight="400">VISION</tspan></text>
-  </g>
-
-  <!-- ===== Application band : Python yellow ===== -->
-  <g>
-    <rect x="16" y="60" width="928" height="96" rx="8" fill="#fffbea" stroke="#9a7209" stroke-width="1.5"/>
-    <text x="116" y="113" font-size="15" font-weight="700" fill="#604600" text-anchor="middle">Application</text>
-
-    <rect x="230" y="78" width="320" height="60" rx="6" fill="#fff3c4" stroke="#9a7209"/>
-    <text x="390" y="103" font-size="13" font-weight="600" fill="#604600" text-anchor="middle">MicroPython App Scripts</text>
-    <text x="390" y="122" font-size="11" fill="#705500" text-anchor="middle">example/ &#183; /lib &#183; frozen packages</text>
-
-    <rect x="580" y="78" width="330" height="60" rx="6" fill="#fff7d6" stroke="#9a7209" stroke-dasharray="5 4"/>
-    <text x="745" y="103" font-size="13" font-weight="600" fill="#604600" text-anchor="middle">VSCode Host Tool / Web IDE</text>
-    <text x="745" y="122" font-size="11" fill="#705500" text-anchor="middle">(separate repository)</text>
-  </g>
-
-  <!-- ===== Service & Framework band : neutral shell ===== -->
-  <g>
-    <rect x="16" y="172" width="928" height="430" rx="8" fill="#f6f8fa" stroke="#b7c0ca" stroke-width="1.5"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1066" viewBox="0 0 960 1066" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" role="img" aria-labelledby="architecture-title architecture-description">
+  <title id="architecture-title">ESP-VISION system architecture</title>
+  <desc id="architecture-description">IDE, Agent, CLI and custom host applications share Device Core. EV-MUX v4 connects the host SDK to ESP-VISION firmware over USB CDC, USB Serial/JTAG, UART or TCP. Device firmware includes MicroPython scripts, Python bindings, vision and inference libraries, runtime, platform services and board backends.</desc>
+  <defs>
+    <marker id="arrowhead" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#59636e" />
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="960" height="1066" rx="0" fill="#ffffff" />
+  <text x="22" y="34" font-size="18" fill="#1f2328" font-weight="700" text-anchor="start">ESP-VISION</text>
+  <text x="928" y="34" font-size="11" fill="#59636e" font-weight="400" text-anchor="end">Host  /  Device Core  /  EV-MUX  /  Firmware</text>
+  <rect x="16" y="58" width="928" height="230" rx="8" fill="#f6f8fa" stroke="#b7c0ca" />
+  <text x="116" y="149" font-size="16" fill="#303842" font-weight="700" text-anchor="middle">Host</text>
+  <text x="116" y="172" font-size="16" fill="#303842" font-weight="700" text-anchor="middle">applications</text>
+  <text x="116" y="198" font-size="10.5" fill="#59636e" font-weight="400" text-anchor="middle">Browser · Desktop · Node.js</text>
+  <rect x="230" y="78" width="164" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" />
+  <text x="312" y="102" font-size="14" fill="#234f73" font-weight="600" text-anchor="middle">IDE</text>
+  <text x="312" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle">Web IDE / VS Code</text>
+  <path d="M 312 136 V 160" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" />
+  <rect x="408" y="78" width="164" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" />
+  <text x="490" y="102" font-size="14" fill="#234f73" font-weight="600" text-anchor="middle">Agent</text>
+  <text x="490" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle">Automation / integrations</text>
+  <path d="M 490 136 V 160" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" />
+  <rect x="586" y="78" width="164" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" />
+  <text x="668" y="102" font-size="14" fill="#234f73" font-weight="600" text-anchor="middle">CLI</text>
+  <text x="668" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle">esp-vision-device</text>
+  <path d="M 668 136 V 160" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" />
+  <rect x="764" y="78" width="164" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" />
+  <text x="846" y="102" font-size="14" fill="#234f73" font-weight="600" text-anchor="middle">Custom tools</text>
+  <text x="846" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle">Node.js / applications</text>
+  <path d="M 846 136 V 160" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" />
+  <rect x="230" y="164" width="698" height="96" rx="6" fill="#edf9f3" stroke="#28866d" />
+  <text x="579" y="189" font-size="18" fill="#18624b" font-weight="700" text-anchor="middle">Device Core</text>
+  <text x="579" y="212" font-size="12" fill="#18533f" font-weight="600" text-anchor="middle">@esp-vision/device-core</text>
+  <text x="579" y="231" font-size="11.5" fill="#18624b" font-weight="400" text-anchor="middle" font-family="'Cascadia Code', 'SFMono-Regular', Consolas, monospace">discover() · connect() · inspect() · configure() · control()</text>
+  <text x="579" y="250" font-size="11.5" fill="#18624b" font-weight="400" text-anchor="middle" font-family="'Cascadia Code', 'SFMono-Regular', Consolas, monospace">python.execute() · files.write() · capture() · firmware.update()</text>
+  <path d="M 16 304 H 944" fill="none" stroke="#b7c0ca" stroke-dasharray="5 5" />
+  <rect x="24" y="294" width="172" height="20" rx="0" fill="#ffffff" />
+  <text x="30" y="308" font-size="10.5" fill="#59636e" font-weight="400" text-anchor="start">Host / device boundary</text>
+  <path d="M 579 263 V 317" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" />
+  <rect x="16" y="320" width="928" height="64" rx="8" fill="#fff3ed" stroke="#be6047" />
+  <text x="116" y="356" font-size="15" fill="#923b24" font-weight="700" text-anchor="middle">EV-MUX v4</text>
+  <text x="579" y="345" font-size="12" fill="#80371f" font-weight="600" text-anchor="middle">Control · Framed Python · File operations · Preview / Capture</text>
+  <text x="579" y="369" font-size="11.5" fill="#923b24" font-weight="400" text-anchor="middle">USB CDC  ·  USB Serial/JTAG  ·  UART  ·  TCP</text>
+  <text x="22" y="408" font-size="11" fill="#59636e" font-weight="600" text-anchor="start">ESP-VISION firmware</text>
+  <rect x="16" y="420" width="928" height="72" rx="8" fill="#fffbea" stroke="#9a7209" />
+  <text x="116" y="462" font-size="15" fill="#604600" font-weight="700" text-anchor="middle">Device application</text>
+  <rect x="230" y="432" width="698" height="48" rx="6" fill="#fff3c4" stroke="#9a7209" />
+  <text x="579" y="451" font-size="13" fill="#604600" font-weight="600" text-anchor="middle">MicroPython application scripts</text>
+  <text x="579" y="470" font-size="11" fill="#705500" font-weight="400" text-anchor="middle">User scripts · examples · frozen packages</text>
+  <g transform="translate(0 336)">
+    <rect x="16" y="172" width="928" height="430" rx="8" fill="#f6f8fa" stroke="#b7c0ca" stroke-width="1.5" />
     <text x="116" y="378" font-size="15" font-weight="700" fill="#303842" text-anchor="middle">Service &amp;</text>
     <text x="116" y="398" font-size="15" font-weight="700" fill="#303842" text-anchor="middle">Framework</text>
-
-    <!-- Python API Bindings : Python blue -->
     <g>
-      <rect x="230" y="190" width="698" height="84" rx="6" fill="#edf5ff" stroke="#3975a8" stroke-dasharray="5 4"/>
+      <rect x="230" y="190" width="698" height="84" rx="6" fill="#edf5ff" stroke="#3975a8" stroke-dasharray="5 4" />
       <text x="579" y="210" font-size="12.5" font-weight="600" fill="#24577f" text-anchor="middle">Python API Bindings (modules/)</text>
       <g font-size="12" fill="#234f73" text-anchor="middle">
-        <rect x="265" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <rect x="265" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" />
         <text x="305" y="245">sensor</text>
-        <rect x="355" y="224" width="120" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <rect x="355" y="224" width="120" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" />
         <text x="415" y="245">image / ImageIO</text>
-        <rect x="485" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <rect x="485" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" />
         <text x="525" y="245">display</text>
-        <rect x="575" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <rect x="575" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" />
         <text x="610" y="245">espdl</text>
-        <rect x="655" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <rect x="655" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" />
         <text x="695" y="245">tflite</text>
-        <rect x="745" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <rect x="745" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" />
         <text x="780" y="245">h264</text>
-        <rect x="825" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <rect x="825" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" />
         <text x="860" y="245">rtsp</text>
       </g>
     </g>
-
-    <!-- Vision Library (imlib) : emerald -->
     <g>
-      <rect x="230" y="290" width="300" height="150" rx="6" fill="#edf9f3" stroke="#28866d" stroke-dasharray="5 4"/>
+      <rect x="230" y="290" width="300" height="150" rx="6" fill="#edf9f3" stroke="#28866d" stroke-dasharray="5 4" />
       <text x="380" y="310" font-size="12.5" font-weight="600" fill="#18624b" text-anchor="middle">Vision Library (imlib)</text>
       <g font-size="11.5" fill="#18533f" text-anchor="middle">
-        <rect x="237" y="322" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <rect x="237" y="322" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" />
         <text x="306" y="341">Drawing / Filters</text>
-        <rect x="385" y="322" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <rect x="385" y="322" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" />
         <text x="454" y="341">Color Tracking</text>
-        <rect x="237" y="360" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <rect x="237" y="360" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" />
         <text x="306" y="379">Feature Detection</text>
-        <rect x="385" y="360" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <rect x="385" y="360" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" />
         <text x="454" y="379">QR Code</text>
-        <rect x="237" y="398" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <rect x="237" y="398" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" />
         <text x="306" y="417">Barcode (ZXing)</text>
-        <rect x="385" y="398" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <rect x="385" y="398" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" />
         <text x="454" y="417">AprilTag</text>
       </g>
     </g>
-
-    <!-- AI Inference : violet -->
     <g>
-      <rect x="542" y="290" width="190" height="150" rx="6" fill="#f6f0fc" stroke="#8655b5" stroke-dasharray="5 4"/>
+      <rect x="542" y="290" width="190" height="150" rx="6" fill="#f6f0fc" stroke="#8655b5" stroke-dasharray="5 4" />
       <text x="637" y="310" font-size="12.5" font-weight="600" fill="#653b90" text-anchor="middle">AI Inference</text>
       <g font-size="10.8" fill="#56317d" text-anchor="middle">
-        <rect x="552" y="322" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf"/>
+        <rect x="552" y="322" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" />
         <text x="637" y="338">ESP-DL Runtime</text>
-        <rect x="552" y="352" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf"/>
+        <rect x="552" y="352" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" />
         <text x="637" y="368">TFLite Micro</text>
-        <rect x="552" y="382" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf"/>
+        <rect x="552" y="382" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" />
         <text x="637" y="398">.espdl / .tflite Models</text>
-        <rect x="552" y="412" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf"/>
+        <rect x="552" y="412" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" />
         <text x="637" y="428">Detect / Classify / Pose</text>
       </g>
     </g>
-
-    <!-- Runtime : Python blue -->
     <g>
-      <rect x="744" y="290" width="184" height="150" rx="6" fill="#edf5ff" stroke="#3975a8" stroke-dasharray="5 4"/>
+      <rect x="744" y="290" width="184" height="150" rx="6" fill="#edf5ff" stroke="#3975a8" stroke-dasharray="5 4" />
       <text x="836" y="310" font-size="12.5" font-weight="600" fill="#24577f" text-anchor="middle">Runtime</text>
       <g font-size="11.5" fill="#234f73" text-anchor="middle">
-        <rect x="754" y="322" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <rect x="754" y="322" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3" />
         <text x="836" y="341">MicroPython v1.28.0</text>
-        <rect x="754" y="360" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <rect x="754" y="360" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3" />
         <text x="836" y="379">ESP-VISION Overlay</text>
-        <rect x="754" y="398" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <rect x="754" y="398" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3" />
         <text x="836" y="417">ulab</text>
       </g>
     </g>
-
-    <!-- Platform Services : Espressif coral -->
     <g>
-      <rect x="230" y="456" width="420" height="130" rx="6" fill="#fff3ed" stroke="#be6047" stroke-dasharray="5 4"/>
+      <rect x="230" y="456" width="420" height="130" rx="6" fill="#fff3ed" stroke="#be6047" stroke-dasharray="5 4" />
       <text x="440" y="476" font-size="12.5" font-weight="600" fill="#923b24" text-anchor="middle">Platform Services (platform/)</text>
       <g font-size="11.5" fill="#80371f" text-anchor="middle">
-        <rect x="238" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
-        <text x="302" y="507">Preview (USB CDC)</text>
-        <rect x="376" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <rect x="238" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" />
+        <text x="302" y="507">Preview / Capture</text>
+        <rect x="376" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" />
         <text x="440" y="507">JPEG Codec</text>
-        <rect x="514" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <rect x="514" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" />
         <text x="578" y="507">Display Layer</text>
-        <rect x="238" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <rect x="238" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" />
         <text x="302" y="545">SD Card</text>
-        <rect x="376" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <rect x="376" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" />
         <text x="440" y="545">USB MSC</text>
-        <rect x="514" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <rect x="514" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" />
         <text x="578" y="545">Boot / Soft-reset</text>
       </g>
     </g>
-
-    <!-- Board Backends : Espressif red -->
     <g>
-      <rect x="666" y="456" width="262" height="130" rx="6" fill="#fff0f2" stroke="#b54255" stroke-dasharray="5 4"/>
+      <rect x="666" y="456" width="262" height="130" rx="6" fill="#fff0f2" stroke="#b54255" stroke-dasharray="5 4" />
       <text x="797" y="476" font-size="12.5" font-weight="600" fill="#943044" text-anchor="middle">Board Backends (boards/)</text>
       <g font-size="11.5" fill="#82283b" text-anchor="middle">
-        <rect x="676" y="488" width="242" height="30" rx="5" fill="#fbdde3" stroke="#bd5264"/>
+        <rect x="676" y="488" width="242" height="30" rx="5" fill="#fbdde3" stroke="#bd5264" />
         <text x="797" y="507" font-size="11">Camera (V4L2 + PPA / esp32-camera)</text>
-        <rect x="676" y="526" width="116" height="30" rx="5" fill="#fbdde3" stroke="#bd5264"/>
+        <rect x="676" y="526" width="116" height="30" rx="5" fill="#fbdde3" stroke="#bd5264" />
         <text x="734" y="545">Display</text>
-        <rect x="802" y="526" width="116" height="30" rx="5" fill="#fbdde3" stroke="#bd5264"/>
+        <rect x="802" y="526" width="116" height="30" rx="5" fill="#fbdde3" stroke="#bd5264" />
         <text x="860" y="545">SD Card</text>
       </g>
     </g>
   </g>
-
-  <!-- ===== Environment & Dependency band : Espressif red ===== -->
-  <g>
-    <rect x="16" y="614" width="928" height="96" rx="8" fill="#fff0f3" stroke="#ac3c50" stroke-width="1.5"/>
+  <g transform="translate(0 336)">
+    <rect x="16" y="614" width="928" height="96" rx="8" fill="#fff0f3" stroke="#ac3c50" stroke-width="1.5" />
     <text x="116" y="657" font-size="15" font-weight="700" fill="#8d2d40" text-anchor="middle">Environment &amp;</text>
     <text x="116" y="677" font-size="15" font-weight="700" fill="#8d2d40" text-anchor="middle">Dependency</text>
-
-    <rect x="230" y="634" width="200" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60"/>
+    <rect x="230" y="634" width="200" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60" />
     <text x="330" y="667" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle">ESP-IDF</text>
-
-    <rect x="440" y="634" width="300" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60"/>
+    <rect x="440" y="634" width="300" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60" />
     <text x="590" y="657" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle">ESP Component Registry</text>
-    <text x="590" y="676" font-size="10.5" fill="#943448" text-anchor="middle">esp_video &#183; esp32-camera &#183; ESP-DL &#183; esp-tflite-micro</text>
-
-    <rect x="750" y="634" width="178" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60"/>
+    <text x="590" y="676" font-size="10.5" fill="#943448" text-anchor="middle">esp_video · esp32-camera · ESP-DL · esp-tflite-micro</text>
+    <rect x="750" y="634" width="178" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60" />
     <text x="839" y="657" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle">ESP32 SoCs</text>
-    <text x="839" y="676" font-size="10.5" fill="#943448" text-anchor="middle">P4 &#183; S3 &#183; S31</text>
+    <text x="839" y="676" font-size="10.5" fill="#943448" text-anchor="middle">P4 · S3 · S31</text>
   </g>
 </svg>

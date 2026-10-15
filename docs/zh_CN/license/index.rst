@@ -20,6 +20,14 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - 本地路径
      - 在 ESP-VISION 中的作用
      - 许可证
+   * - Device Core 主机 SDK
+     - ``host/device-core``
+     - EV-MUX v4 主机通信、Python、资源文件、发现及图像接入
+     - Apache-2.0（``host/device-core/LICENSE``）；历史 MIT 声明保留于 ``NOTICE``
+   * - 设备端相机/LCD 测试片段
+     - ``host/device-core/tests/fixtures/device-checks.py``
+     - 从固件测试迁入的真机验收函数，不包含在 npm 包中
+     - Apache-2.0，保留原版权声明
    * - `MicroPython <https://github.com/micropython/micropython>`__ v1.28.0
      - ``lib/micropython``
      - Python 运行时与 ESP32 port 基线

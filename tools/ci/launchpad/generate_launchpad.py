@@ -190,13 +190,15 @@ def load_merge_args(build_dir: str) -> list:
 
 
 def collect_release_tags(current_tag: str) -> list:
-    """Every published release tag, newest first.
+    """Every published firmware release tag, newest first.
 
     Releases are git tags (the pipeline is tag-gated and uploads are additive,
     so each tag's bins stay downloadable). Sorted by tag creation date so the
     order is stable regardless of the tag naming scheme. ``current_tag`` is
     always included and placed first: at release time it is the tag being built,
     and in --dry-run it seeds the snapshot even though it is not a real tag.
+    Independent ``device-core-v*`` SDK tags never name firmware images and are
+    excluded, including when an SDK-only pipeline dry-runs this generator.
     """
     try:
         out = subprocess.run(
@@ -206,9 +208,12 @@ def collect_release_tags(current_tag: str) -> list:
             text=True,
             check=True,
         ).stdout
-        tags = [line.strip() for line in out.splitlines() if line.strip()]
+        tags = [line.strip() for line in out.splitlines()
+                if line.strip() and not line.strip().startswith("device-core-v")]
     except (subprocess.CalledProcessError, FileNotFoundError):
         tags = []
+    if current_tag.startswith("device-core-v"):
+        return tags
     if current_tag in tags:
         tags.remove(current_tag)
     return [current_tag] + tags

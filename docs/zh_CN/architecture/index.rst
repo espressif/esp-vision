@@ -3,42 +3,28 @@
 
 :link_to_translation:`en:[English]`
 
-ESP-VISION 围绕 MicroPython 固件构建、板级硬件后端、共享平台服务以及面向 Python 的 视觉模块进行组织。代码按是否触及 MicroPython（``mp_obj_t`` / ``py/*.h``）进行分层。
+ESP-VISION 将主机应用与设备固件分开：IDE、Agent、CLI 和自定义工具共用 Device Core，由 SDK 通过开发板支持的 USB CDC、USB Serial/JTAG、UART 或 TCP 实现 EV-MUX v4 主机端。设备固件包含 MicroPython、视觉/推理模块、平台服务和板级后端；固件代码进一步按是否触及 MicroPython（``mp_obj_t`` / ``py/*.h``）分层。
 
-.. figure:: ../../_static/esp-vision-architecture.svg
+.. figure:: ../../_static/esp-vision-architecture-adaptive.svg
    :align: center
    :alt: ESP-VISION 分层架构
 
-   ESP-VISION 分层架构总览
+   主机应用 → Device Core → EV-MUX → 设备固件
 
 分层概览
 --------
 
-.. blockdiag::
-
-   blockdiag {
-     orientation = portrait;
-     default_group_color = none;
-
-     scripts  [label = "MicroPython 脚本\n(example/)"];
-     bindings [label = "绑定层 (modules/)\nsensor / image / display / espdl / tflite"];
-     platform [label = "平台服务\n(platform/)"];
-     imlib    [label = "imlib 组件\n(components/imlib)"];
-     boards   [label = "板级后端\n(boards/<BOARD>)"];
-     mp       [label = "MicroPython + overlay\n(build/, overlay/)"];
-
-     scripts  -> bindings;
-     bindings -> platform;
-     bindings -> imlib;
-     platform -> boards;
-     boards   -> mp;
-   }
-
+- **主机应用：** IDE 提供编辑/调试界面，Agent 承载自动化流程，CLI 处理终端命令，自定义工具提供自己的应用策略；它们平级使用同一个 SDK。
+- **Device Core** （``host/device-core``）：独立版本的 ``@esp-vision/device-core`` npm 包负责协议解析、请求关联、会话、保活与操作生命周期。图中只选有代表性的 API 名称，完整契约见 :doc:`../device-core/api`。
+- **EV-MUX v4：** Core 与固件之间的运行时线协议，在 USB CDC、USJ、UART、TCP 上统一帧格式、逻辑通道、所有权与 VM epoch。主机适配器和网络桥只传字节，不另建会话 owner。
+- **设备应用：** MicroPython 脚本运行于开发板并调用 Python 绑定；主机断开后，设备应用仍可独立运行。
 - **绑定层**\ （\ ``modules/``\ ）：即 ``USER_C_MODULES`` 层。主要模块 ``image``、 ``sensor``、``display``、``espdl`` 和 ``tflite`` 通过 ``MP_REGISTER_MODULE`` 自注册。 ``py_imageio.c`` 提供 ``image.ImageIO`` 类型，``py_helper.c`` 为共享辅助代码。 绑定层只做对象转换与轻量 API 适配，重逻辑放在纯 C 或 ``platform/`` 中。
 - **平台服务**\ （\ ``platform/``\ ）：自研的 ESP32 胶水层。``ev_channel.c`` / ``ev_mux.c`` / ``ev_control_transport.c`` / ``ev_stdio.c``\ （EV-MUX / EV-ATP 底层传输）、``preview.c``\ （EV-MUX JPEG 预览）、``display.c``\ （通用显示层）、``sdcard.c``\ （挂载到 ``/sdcard``\ ）、 ``usb_msc.c``\ （通过 TinyUSB MSC 暴露 ``ffat`` 分区）、``usb_auto_download.c``\ （S3 OTG CDC 复位/下载协议）、``jpeg.c``\ （硬件或软件 JPEG）、 ``debug.c``\ ，以及 ``main.c``\ （启动初始化与软复位循环）。
 - **imlib 组件**\ （\ ``components/imlib/``\ ）：纯 C 视觉算法，作为以 MIT 维护的 IDF 组件， 源自 OpenMV ``lib/imlib``。
 - **板级后端**\ （\ ``boards/<BOARD>/``\ ）：各板配置及真实的相机/显示/SD 卡实现。 P4X 与 S31 使用 ``esp_video``/V4L2，P4X 还使用 PPA；S3 使用 ``esp32-camera``。
 - **MicroPython + overlay**\ ：以 MicroPython v1.28.0 为固定基线；项目改动位于 ``overlay/micropython/``\ ，并应用到 ``build/micropython/`` 下的生成副本。
+
+宿主提供的字节传输适配器承接 SDK 协议之下的物理 I/O。局域网 DNS-SD 发现属于连接前的枚举路径；ROM 固件烧写使用独立 loader 生命周期，不通过 EV-MUX 传输应用镜像。固件与 SDK 版本保持独立；主机接入及 API 文档见 :doc:`../device-core/index`。
 
 采集到输出的数据流
 ------------------

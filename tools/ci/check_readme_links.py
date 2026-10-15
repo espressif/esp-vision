@@ -15,6 +15,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from collections import defaultdict, namedtuple
 from pathlib import Path
 from typing import List
@@ -132,6 +133,17 @@ def get_md_links(root: Path) -> List:
     return links
 
 
+def documentation_source(url: str, root: Path):
+    """Validate latest generated pages against this checkout before deployment."""
+    parsed = urlsplit(url)
+    if parsed.scheme != 'https' or parsed.netloc != 'docs.espressif.com':
+        return None
+    match = re.fullmatch(r'/projects/esp-vision/(en|zh_CN)/latest/esp32p4/([A-Za-z0-9_/-]+)\.html', parsed.path)
+    if match is None:
+        return None
+    return root / 'docs' / match.group(1) / (match.group(2) + '.rst')
+
+
 def check_readme_links(args: argparse.Namespace) -> int:
 
     links = get_md_links(get_project_root())
@@ -144,7 +156,10 @@ def check_readme_links(args: argparse.Namespace) -> int:
 
     # Sort links into file and web links
     for link in links:
-        if link.url.startswith('http'):
+        source = documentation_source(link.url, get_project_root())
+        if source is not None:
+            file_links.append(Link(link.file, str(source)))
+        elif link.url.startswith('http'):
             web_links[link.url].append(link.file)
         else:
             file_links.append(link)

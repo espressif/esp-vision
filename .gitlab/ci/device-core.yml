@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+# SDK-only checks do not need MicroPython, ESP-IDF or a firmware build.
+# device-core-vX.Y.Z tags verify the standalone package; npm publication remains
+# restricted to protected default-branch pushes, matching release-npm.mjs.
+.device_core_changes: &device_core_changes
+  - "host/device-core/**/*"
+  - ".gitlab/ci/device-core.yml"
+  - ".gitlab/ci/rules.yml"
+  - ".gitlab-ci.yml"
+  - "tools/tests/test_ci_device_core_rules.py"
+
+device_core_checks:
+  image: node:22-bookworm
+  stage: check
+  tags: [build, internet, amd64]
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.cache/npm"
+  rules:
+    - if: '$ESP_VISION_DEVICE_CORE_ONLY == "1"'
+    - if: '$CI_COMMIT_TAG =~ /^device-core-v[0-9]+\.[0-9]+\.[0-9]+$/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: *device_core_changes
+    - if: '$CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BEFORE_SHA != "0000000000000000000000000000000000000000"'
+      changes: *device_core_changes
+    - if: '$CI_COMMIT_BRANCH && ($CI_PIPELINE_SOURCE != "push" || $CI_COMMIT_BEFORE_SHA == "0000000000000000000000000000000000000000")'
+      changes:
+        compare_to: 'refs/heads/master'
+        paths: *device_core_changes
+  script:
+    - cd host/device-core
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/device-core-tmp" TMP="$CI_PROJECT_DIR/.cache/device-core-tmp" TEMP="$CI_PROJECT_DIR/.cache/device-core-tmp"
+    - mkdir -p "$TMPDIR"
+    - npm install --ignore-scripts --no-audit --no-fund --package-lock=false --registry=https://registry.npmjs.org/
+    - npm test
+    - npm run check:schema
+    - npm run check:package
+    - node scripts/release-npm.mjs --dry-run
+
+publish_device_core_npm:
+  image: node:22-bookworm
+  stage: deploy
+  tags: [build, internet, amd64]
+  needs: [device_core_checks]
+  resource_group: device-core-npm-release
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.cache/npm"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes:
+        - "host/device-core/**/*"
+    - when: never
+  script:
+    - cd host/device-core
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/device-core-tmp" TMP="$CI_PROJECT_DIR/.cache/device-core-tmp" TEMP="$CI_PROJECT_DIR/.cache/device-core-tmp"
+    - mkdir -p "$TMPDIR"
+    - npm run release:npm

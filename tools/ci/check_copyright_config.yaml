@@ -35,3 +35,19 @@ ignore:
     - 'patches/**/*'
     - '**/*.patch'
     - 'tools/ci/check_copyright_ignore.txt'
+
+# Device Core follows the project Apache-2.0 license; historical notices ship in NOTICE.
+host_device_core:
+  include:
+    - 'host/device-core/**/*'
+  allowed_licenses:
+    - Apache-2.0
+  license_for_new_files: Apache-2.0
+
+# Device-side HIL fixtures retain the firmware test suite's Apache license.
+host_device_core_fixtures:
+  include:
+    - 'host/device-core/tests/fixtures/*.py'
+  allowed_licenses:
+    - Apache-2.0
+  license_for_new_files: Apache-2.0
