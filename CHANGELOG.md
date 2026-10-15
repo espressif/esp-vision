@@ -6,29 +6,66 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Official release artifacts now include application-only update images and per-board/version metadata (SHA-256, partition layout and silicon revision bounds) for automatic Device Core/CLI updates from dl.espressif.com.
+
+- Added a bilingual Device Core host SDK chapter with the complete application API, events/errors, all package exports and public advanced class methods, discovery and ROM flashing contracts.
+
+- Added dedicated LCD JPEG capture (`debug.capture_screen`) of the last submitted RGB565 display frame through Device Core, with explicit uninitialized/unsupported errors and binary response metadata.
+
 - Moved the independently versioned `@esp-vision/device-core` host SDK into `host/device-core`, with the grouped `createDevice()` API, standalone npm checks/dry runs and shared firmware/SDK documentation. IDE and Agent remain npm consumers.
+
+- Added EV-MUX v4 ownership, leases, keepalive and bounded frame transmission across USB-Serial-JTAG, USB-OTG, UART and TCP, including session/VM-epoch isolation for REPL, preview and inherited Python threads.
+- Added shared native/Hosted background Wi-Fi, transactional NVS provisioning and reconnect, an IPv4 TCP server, and explicit per-board default/fallback endpoint and service policies.
+- Added session-bound storage-writer leases with MSC handoff/quarantine gates, typed launcher boot/trial status and MicroPython bindings, plus native contract/fault tests and hardware acceptance tools.
+- Added lightweight `_esp-vision._tcp.local` discovery synchronized with the STA TCP listener and a shared mDNS lifecycle.
+- Added one stable device ID and canonical hostname from the full board name, main-chip MAC suffix and firmware version, shared by USB/USJ/UART/TCP metadata, DHCP and Python hostname queries.
+- Added a bilingual EV-MUX communication reference covering architecture, interfaces, ownership, wire framing, Python/files, preview/debug, validation and Device Core npm/IDE integration.
 
 - Added `sensor.get_ipa_stats()` for IPA statistics, with documentation, an example, and CI hardware coverage.
 - Added INT8 `espdl.NanoTrack` for automatic single-object tracking, with models and an example that continuously tracks a target after BOOT-button selection.
 - Added the `lcd_touch.Touch` API with stubs, documentation, and touch examples with continuous drawing and reduced polling delay.
 - Added runtime IPA and manual ISP control to the `sensor` module through `set_ipa()`, `get_ipa()`, `set_isp()`, and `get_isp()`, covering the exposure, pixel gain, demosaic, white balance, LSC, BLC, BF, sharpen, CCM, and gamma blocks over the ESP Video V4L2 controls. The feature is opt-in per board through `ESP_VISION_ENABLE_CAMERA_IPA_CONTROL` and is enabled on `ESP32_P4X_FUNCTION_EV_BOARD` and `ESP32_P4X_EYE`, with documentation in the `sensor` API reference and an example under `example/01-Camera/04-IPA`.
-- Added a hardware-in-the-loop CI stage that flashes the `ESP32_P4X_FUNCTION_EV_BOARD` build onto a real board and tests its camera and LCD, through `tools/ci/flash_and_test.py` and `tools/ci/device_checks.py`.
+- Added a hardware-in-the-loop CI stage that flashes the `ESP32_P4X_FUNCTION_EV_BOARD` build onto a real board and tests its camera and LCD, through `tools/ci/flash_and_test.py` and the shared Device Core hardware-check entry point.
 
 ### Changed
+
+- Updated SDK installation guides for the published Device Core 0.1.0 npm release; firmware integration remains independent of npm and IDE version numbers.
+
+- Simplified the coding-agent guide into implementation and documentation indexes, including Device Core APIs/CLI, shared hardware acceptance, current build boundaries and release rules.
 
 - Show IDE, Agent, CLI and custom host applications sharing Device Core above EV-MUX in the architecture diagram, labeling its interface with representative public API names, reusing the SVG across architecture/SDK guides and clarifying host, protocol, byte transport, discovery and ROM-flashing boundaries; keep npm badges at the top of both READMEs and move SDK usage details to its existing guide.
 
 - Align the Device Core npm package license with firmware Apache-2.0, retaining historical MIT attributions and permissions in its distributed NOTICE file.
 
 - Aligned Device Core CLI queries with `device.inspect()`, with OS-aware USB serial discovery, macOS callout deduplication and `--all-ports` for native UART/Bluetooth endpoints; explicit port connections remain available.
+- Separate SDK-only CI and `device-core-vX.Y.Z` validation tags from firmware build/HIL jobs; retain explicit targeted-bin and final-matrix controls. The migrated SDK uses Apache-2.0 and retains historical MIT attributions in its distributed NOTICE.
+
+- Renamed board default credential macros to `ESP_VISION_WIFI_DEFAULT_SSID` and `ESP_VISION_WIFI_DEFAULT_PASSWORD`; saved NVS profiles and protocol fields are unchanged.
+- Unified hardware CI and manual acceptance under `host/device-core` and `npm run test:hardware`, removed the redundant Python EV-MUX clients/runners and their duplicate tests, aligned MCP guide validation, and retained native C contract checks; v3 clients must update to the corresponding v4 host implementation.
+- Added optional single-board/IDF CI filters for experimental hardware validation; unfiltered final pipelines retain the complete build matrix and hardware tests.
+- Separated EV-MUX protocol documentation from the Agent code-generation walkthrough, retained the former how-to entry as a redirect, and included communication pages in navigation and MCP document metadata; aligned system, SDK, host-integration and physical-link diagrams with Host → Device Core → EV-MUX → firmware and shared the canonical SVG.
 
 - Upgraded ESP-DL to 3.3.13 and enabled dual-core NanoTrack inference on ESP32-P4.
 - Optimized NanoTrack preprocessing and raised the example match threshold to 0.95.
 
 ### Fixed
 
+- Corrected bilingual communication guides to distinguish public Core file/Python APIs from low-level helpers, clarified firmware-unit versus Core hardware tests, and kept SDK documentation links within the current documentation version and target.
+
 - Added theme-aware logos and architecture diagrams to both English and Chinese READMEs, with self-contained adaptive SVG fallbacks for GitLab renderers that strip picture sources, responsive 960-pixel logo sizing, and image backgrounds that keep text readable when site and browser themes differ.
 - Fixed Device Core CLI discovery alignment with Unicode-aware column padding and device blocks on narrow terminals, preserving complete field values.
+- Wait for LCD color DMA completion before reusing its framebuffer; share lazy, reusable camera snapshot storage between Python and Core capture, and release it on reconfiguration/shutdown/VM reset.
+
+- Reserved VFS registration headroom on `ESP32_P4X_EYE` so repeated camera resets can recreate video devices after the network and storage interfaces have initialized.
+
+- Bounded P4X-EYE SPI LCD bounce-buffer memory and balanced the dedicated DMA reserve against DEFAULT-capable JPEG allocations so display and capture work alongside Wi-Fi/TCP; release display resources when the initial clear fails.
+
+- Report Flash mount/writer state alongside hardware-test upload failures without automatically formatting or clearing a storage quarantine.
+- Unified Python bootloader/reset and deferred USB DTR/RTS entry through one ROM-download/restart path, preserving P4 revision 3.2 system control bits and USB control completion before reboot.
+- Bounded startup draining, same-link reacquisition and stale TCP socket reclamation; preserved owner routing and partial-frame boundaries across soft resets and backpressure.
+- Prevented damaged/unknown Flash FAT from being automatically formatted, guarded SDMMC synchronization on unsupported boards, and retained touch cleanup and required Launcher/storage headers across IDF builds.
+- Aligned ESP-IDF network-interface hostnames to the 63-byte DNS limit, reserved DHCP option space, and matched the mDNS 1.1 Ethernet event/header guards for STA-only discovery.
+- Corrected bilingual RST heading/literal formatting and MCP cross-reference validation for warning-free documentation builds.
 
 - Fixed NanoTrack model compatibility and ESP32-P4 inference crashes.
 - Fixed Windows QSTR preprocessing with ESP-IDF 6.1 by evaluating CMake generator expressions in compiler response files, including Mbed TLS header paths, and omitting empty include and definition entries.
@@ -78,6 +115,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Fixed internal-preferred fast-framebuffer allocations incorrectly reporting exhaustion when the internal largest block was small but a usable PSRAM block remained; AprilTag, QR, display, and heap-backed UMM temporary allocations now unwind through balanced normal and exceptional paths.
 
 ### Removed
+
+- Removed the duplicate Python EV-MUX client, obsolete v3 stress/runtime tools, separate Agent smoke/recovery runners and their implementation-specific tests. Firmware HIL now uses the same Device Core hardware entry point while preserving camera, LCD and native C contract checks.
 
 - Removed generic `vfs.VfsFat` support from ESP32 firmware now that board Flash and SD FAT volumes are owned by ESP-IDF; `vfs.VfsLfs2` remains available for independent block devices.
 

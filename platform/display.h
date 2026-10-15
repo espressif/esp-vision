@@ -39,6 +39,9 @@ uint32_t esp_vision_display_get_backlight(void);
 esp_err_t esp_vision_display_set_backlight(uint32_t backlight);
 esp_err_t esp_vision_display_clear(bool display_off);
 esp_err_t esp_vision_display_write(const image_t *img, const esp_vision_display_draw_config_t *config);
+// Borrow the last RGB565 frame submitted to the panel. Call on the VM task;
+// the view expires on the next display write, clear or deinit. No panel readback.
+esp_err_t esp_vision_display_get_frame(image_t *frame);
 
 #ifdef __cplusplus
 }

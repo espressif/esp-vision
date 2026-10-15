@@ -70,5 +70,9 @@ versions_url = './_static/versions.js'
 html_static_path = ['../_static']
 html_logo = '../_static/ESP-VISION_logo.svg'
 
+# ESP-Docs' vendored blockdiag and seqdiag render overlapping edge labels
+# with supersampling enabled. Keep sequence labels readable at native scale.
+seqdiag_antialias = False
+
 # PDF output filename prefix; ESP-Docs appends language and version.
 pdf_file_prefix = u'esp-vision'

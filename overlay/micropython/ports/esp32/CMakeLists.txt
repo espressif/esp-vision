@@ -44,7 +44,7 @@ endif()
 
 # ESP-VISION mounts FAT volumes through ESP-IDF and exposes them to
 # MicroPython through a native VFS bridge.
-list(APPEND SDKCONFIG_DEFAULTS boards/sdkconfig.esp_vision_storage)
+list(APPEND SDKCONFIG_DEFAULTS boards/sdkconfig.esp_vision_storage boards/sdkconfig.esp_vision_network)
 
 # Set the frozen manifest file. Note if MICROPY_FROZEN_MANIFEST is set from the cmake
 # command line, then it will override the default and any manifest set by the board.
@@ -72,6 +72,58 @@ idf_build_set_property(DEPENDENCIES_LOCK ${LOCKFILE_PATH})
 
 # Define the project and the public name embedded in the ESP-IDF app descriptor.
 project(esp-vision)
+
+# mDNS 1.1 includes Ethernet headers only for its predefined Ethernet netif,
+# but some event branches test CONFIG_ETH_ENABLED alone. Build a scoped copy
+# with matching guards when ESP-VISION advertises only its STA TCP listener.
+if(TARGET idf::espressif__mdns AND CONFIG_ETH_ENABLED AND NOT CONFIG_MDNS_PREDEF_NETIF_ETH)
+    idf_component_get_property(esp_vision_mdns_lib espressif__mdns COMPONENT_LIB)
+    idf_component_get_property(esp_vision_mdns_dir espressif__mdns COMPONENT_DIR)
+    set(esp_vision_mdns_original "${esp_vision_mdns_dir}/mdns.c")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${esp_vision_mdns_original}")
+    file(READ "${esp_vision_mdns_original}" esp_vision_mdns_source)
+    string(REPLACE "#if CONFIG_ETH_ENABLED\n" "#if CONFIG_ETH_ENABLED && CONFIG_MDNS_PREDEF_NETIF_ETH\n"
+        esp_vision_mdns_source "${esp_vision_mdns_source}")
+    set(esp_vision_mdns_copy "${CMAKE_BINARY_DIR}/esp_vision_mdns_sta.c")
+    file(WRITE "${esp_vision_mdns_copy}" "${esp_vision_mdns_source}")
+    get_target_property(esp_vision_mdns_sources ${esp_vision_mdns_lib} SOURCES)
+    set(esp_vision_mdns_scoped_sources)
+    foreach(esp_vision_mdns_file IN LISTS esp_vision_mdns_sources)
+        if(esp_vision_mdns_file STREQUAL esp_vision_mdns_original)
+            list(APPEND esp_vision_mdns_scoped_sources "${esp_vision_mdns_copy}")
+        else()
+            list(APPEND esp_vision_mdns_scoped_sources "${esp_vision_mdns_file}")
+        endif()
+    endforeach()
+    set_property(TARGET ${esp_vision_mdns_lib} PROPERTY SOURCES "${esp_vision_mdns_scoped_sources}")
+    target_include_directories(${esp_vision_mdns_lib} PRIVATE "${esp_vision_mdns_dir}")
+endif()
+
+# ESP-IDF limits DHCP hostnames to 32 bytes, shorter than a DNS label.
+# Compile a scoped source copy so DHCP, mDNS and EV-MUX share the full identity.
+if(TARGET idf::esp_netif AND CONFIG_ESP_NETIF_TCPIP_LWIP)
+    idf_component_get_property(esp_vision_netif_lib esp_netif COMPONENT_LIB)
+    idf_component_get_property(esp_vision_netif_dir esp_netif COMPONENT_DIR)
+    set(esp_vision_netif_original "${esp_vision_netif_dir}/lwip/esp_netif_lwip.c")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${esp_vision_netif_original}")
+    file(READ "${esp_vision_netif_original}" esp_vision_netif_source)
+    string(REGEX REPLACE "#define[ \t]+ESP_NETIF_HOSTNAME_MAX_SIZE[ \t]+32" "#define ESP_NETIF_HOSTNAME_MAX_SIZE 63"
+        esp_vision_netif_source "${esp_vision_netif_source}")
+    # Preserve the object basename used by esp_netif's IRAM linker fragment.
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/esp_vision_netif")
+    set(esp_vision_netif_copy "${CMAKE_BINARY_DIR}/esp_vision_netif/esp_netif_lwip.c")
+    file(WRITE "${esp_vision_netif_copy}" "${esp_vision_netif_source}")
+    get_target_property(esp_vision_netif_sources ${esp_vision_netif_lib} SOURCES)
+    set(esp_vision_netif_scoped_sources)
+    foreach(esp_vision_netif_file IN LISTS esp_vision_netif_sources)
+        if(esp_vision_netif_file STREQUAL esp_vision_netif_original)
+            list(APPEND esp_vision_netif_scoped_sources "${esp_vision_netif_copy}")
+        else()
+            list(APPEND esp_vision_netif_scoped_sources "${esp_vision_netif_file}")
+        endif()
+    endforeach()
+    set_property(TARGET ${esp_vision_netif_lib} PROPERTY SOURCES "${esp_vision_netif_scoped_sources}")
+endif()
 
 # Keep warnings enabled for ESP-VISION while silencing known warnings emitted
 # by the current managed component releases.

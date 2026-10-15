@@ -34,17 +34,21 @@
 #include <string.h>
 
 #include "py/objlist.h"
+#include "py/mperrno.h"
 #include "py/runtime.h"
 #include "py/mphal.h"
 #include "extmod/modnetwork.h"
 #include "modnetwork.h"
 
 #include "esp_wifi.h"
-#include "esp_log.h"
-#include "esp_psram.h"
+#include "network_service.h"
+#include "py/nlr.h"
 
 #ifndef NO_QSTR
 #include "mdns.h"
+#include "network_discovery.h"
+#include "esp_log.h"
+#include "device_identity.h"
 #endif
 
 #if MICROPY_PY_NETWORK_WLAN
@@ -58,26 +62,7 @@ typedef base_if_obj_t wlan_if_obj_t;
 static wlan_if_obj_t wlan_sta_obj;
 static wlan_if_obj_t wlan_ap_obj;
 
-// Set to "true" if esp_wifi_start() was called
-static bool wifi_started = false;
-
-// Set to "true" if the STA interface is requested to be connected by the
-// user, used for automatic reassociation.
-static bool wifi_sta_connect_requested = false;
-
-// Set to "true" if the STA interface is connected to wifi and has IP address.
-static bool wifi_sta_connected = false;
-
-// Store the current status. 0 means None here, safe to do so as first enum value is WIFI_REASON_UNSPECIFIED=1.
-static uint8_t wifi_sta_disconn_reason = 0;
-
-#if MICROPY_HW_ENABLE_MDNS_QUERIES || MICROPY_HW_ENABLE_MDNS_RESPONDER
-// Whether mDNS has been initialised or not
-static bool mdns_initialised = false;
-#endif
-
 static uint8_t conf_wifi_sta_reconnects = 0;
-static uint8_t wifi_sta_reconnects;
 
 // The rules for this default are defined in the documentation of esp_wifi_set_protocol()
 // rather than in code, so we have to recreate them here.
@@ -88,121 +73,16 @@ static uint8_t wifi_sta_reconnects;
 #define WIFI_PROTOCOL_DEFAULT (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N)
 #endif
 
-// This function is called by the system-event task and so runs in a different
-// thread to the main MicroPython task.  It must not raise any Python exceptions.
-static void network_wlan_wifi_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-    switch (event_id) {
-        case WIFI_EVENT_STA_START:
-            ESP_LOGI("wifi", "STA_START");
-            wlan_sta_obj.active = true;
-            wifi_sta_reconnects = 0;
-            break;
-
-        case WIFI_EVENT_STA_STOP:
-            wlan_sta_obj.active = false;
-            break;
-
-        case WIFI_EVENT_STA_CONNECTED:
-            ESP_LOGI("network", "CONNECTED");
-            break;
-
-        case WIFI_EVENT_STA_DISCONNECTED: {
-            // This is a workaround as ESP32 WiFi libs don't currently
-            // auto-reassociate.
-
-            wifi_event_sta_disconnected_t *disconn = event_data;
-            char *message = "";
-            wifi_sta_disconn_reason = disconn->reason;
-            switch (disconn->reason) {
-                case WIFI_REASON_BEACON_TIMEOUT:
-                    // AP has dropped out; try to reconnect.
-                    message = "beacon timeout";
-                    break;
-                case WIFI_REASON_NO_AP_FOUND:
-                    // AP may not exist, or it may have momentarily dropped out; try to reconnect.
-                    message = "no AP found";
-                    break;
-                case WIFI_REASON_NO_AP_FOUND_IN_RSSI_THRESHOLD:
-                    // No AP with RSSI within given threshold exists, or it may have momentarily dropped out; try to reconnect.
-                    message = "no AP with RSSI within threshold found";
-                    break;
-                case WIFI_REASON_NO_AP_FOUND_IN_AUTHMODE_THRESHOLD:
-                    // No AP with authmode within given threshold exists, or it may have momentarily dropped out; try to reconnect.
-                    message = "no AP with authmode within threshold found";
-                    break;
-                case WIFI_REASON_NO_AP_FOUND_W_COMPATIBLE_SECURITY:
-                    // No AP with compatible security exists, or it may have momentarily dropped out; try to reconnect.
-                    message = "no AP with compatible security found";
-                    break;
-                case WIFI_REASON_AUTH_FAIL:
-                    // Password may be wrong, or it just failed to connect; try to reconnect.
-                    message = "authentication failed";
-                    break;
-                default:
-                    // Let other errors through and try to reconnect.
-                    break;
-            }
-            ESP_LOGI("wifi", "STA_DISCONNECTED, reason:%d:%s", disconn->reason, message);
-
-            wifi_sta_connected = false;
-            if (wifi_sta_connect_requested) {
-                wifi_mode_t mode;
-                if (esp_wifi_get_mode(&mode) != ESP_OK) {
-                    break;
-                }
-                if (!(mode & WIFI_MODE_STA)) {
-                    break;
-                }
-                if (conf_wifi_sta_reconnects) {
-                    ESP_LOGI("wifi", "reconnect counter=%d, max=%d",
-                        wifi_sta_reconnects, conf_wifi_sta_reconnects);
-                    if (++wifi_sta_reconnects >= conf_wifi_sta_reconnects) {
-                        break;
-                    }
-                }
-                esp_err_t e = esp_wifi_connect();
-                if (e != ESP_OK) {
-                    ESP_LOGI("wifi", "error attempting to reconnect: 0x%04x", e);
-                }
-            }
-            break;
-        }
-
-        case WIFI_EVENT_AP_START:
-            wlan_ap_obj.active = true;
-            break;
-
-        case WIFI_EVENT_AP_STOP:
-            wlan_ap_obj.active = false;
-            break;
-
-        default:
-            break;
+#if MICROPY_HW_ENABLE_MDNS_QUERIES || MICROPY_HW_ENABLE_MDNS_RESPONDER
+static void network_wlan_ip_ready(const esp_vision_network_snapshot_t *snapshot, void *context) {
+    (void)snapshot;
+    (void)context;
+    esp_err_t err = esp_vision_discovery_ensure();
+    if (err != ESP_OK) {
+        ESP_LOGW("network", "mDNS unavailable: %s", esp_err_to_name(err));
     }
 }
-
-static void network_wlan_ip_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-    switch (event_id) {
-        case IP_EVENT_STA_GOT_IP:
-            ESP_LOGI("network", "GOT_IP");
-            wifi_sta_connected = true;
-            wifi_sta_disconn_reason = 0; // Success so clear error. (in case of new error will be replaced anyway)
-            #if MICROPY_HW_ENABLE_MDNS_QUERIES || MICROPY_HW_ENABLE_MDNS_RESPONDER
-            if (!mdns_initialised) {
-                mdns_init();
-                #if MICROPY_HW_ENABLE_MDNS_RESPONDER
-                mdns_hostname_set(mod_network_hostname_data);
-                mdns_instance_name_set(mod_network_hostname_data);
-                #endif
-                mdns_initialised = true;
-            }
-            #endif
-            break;
-
-        default:
-            break;
-    }
-}
+#endif
 
 static void require_if(mp_obj_t wlan_if, int if_no) {
     wlan_if_obj_t *self = MP_OBJ_TO_PTR(wlan_if);
@@ -212,46 +92,18 @@ static void require_if(mp_obj_t wlan_if, int if_no) {
 }
 
 void esp_initialise_wifi(void) {
-    static int wifi_initialized = 0;
-    if (!wifi_initialized) {
-        esp_exceptions(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, network_wlan_wifi_event_handler, NULL, NULL));
-        esp_exceptions(esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID, network_wlan_ip_event_handler, NULL, NULL));
-
-        wlan_sta_obj.base.type = &esp_network_wlan_type;
-        wlan_sta_obj.if_id = ESP_IF_WIFI_STA;
-        wlan_sta_obj.netif = esp_netif_create_default_wifi_sta();
-        wlan_sta_obj.active = false;
-
-        wlan_ap_obj.base.type = &esp_network_wlan_type;
-        wlan_ap_obj.if_id = ESP_IF_WIFI_AP;
-        wlan_ap_obj.netif = esp_netif_create_default_wifi_ap();
-        wlan_ap_obj.active = false;
-
-        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-        #if CONFIG_SPIRAM_IGNORE_NOTFOUND
-        if (!esp_psram_is_initialized()) {
-            // If PSRAM failed to initialize, disable "Wi-Fi Cache TX Buffers"
-            // (default SPIRAM config ESP32_WIFI_CACHE_TX_BUFFER_NUM==32, this is 54,400 bytes of heap)
-            cfg.cache_tx_buf_num = 0;
-            cfg.feature_caps &= ~CONFIG_FEATURE_CACHE_TX_BUF_BIT;
-
-            // Set some other options back to the non-SPIRAM default values
-            // to save more RAM.
-            //
-            // These can be determined from ESP-IDF components/esp_wifi/Kconfig and the
-            // WIFI_INIT_CONFIG_DEFAULT macro
-            cfg.tx_buf_type = 1; // Dynamic, this "magic number" is defined in IDF KConfig
-            cfg.static_tx_buf_num = 0; // Probably don't need, due to tx_buf_type
-            cfg.dynamic_tx_buf_num = 32; // ESP-IDF default value (maximum)
-        }
-        #endif
-        ESP_LOGD("modnetwork", "Initializing WiFi");
-        esp_exceptions(esp_wifi_init(&cfg));
-        esp_exceptions(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-
-        ESP_LOGD("modnetwork", "Initialized");
-        wifi_initialized = 1;
-    }
+    esp_exceptions(esp_vision_network_init());
+    wlan_sta_obj.base.type = &esp_network_wlan_type;
+    wlan_sta_obj.if_id = ESP_IF_WIFI_STA;
+    wlan_sta_obj.netif = esp_vision_network_sta_netif();
+    wlan_sta_obj.active = esp_vision_network_python_sta_active();
+    wlan_ap_obj.base.type = &esp_network_wlan_type;
+    wlan_ap_obj.if_id = ESP_IF_WIFI_AP;
+    wlan_ap_obj.netif = esp_vision_network_ap_netif();
+    wlan_ap_obj.active = esp_vision_network_python_ap_active();
+#if MICROPY_HW_ENABLE_MDNS_QUERIES || MICROPY_HW_ENABLE_MDNS_RESPONDER
+    esp_vision_network_set_ip_ready_callback(network_wlan_ip_ready, NULL);
+#endif
 }
 
 static mp_obj_t network_wlan_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args) {
@@ -271,35 +123,55 @@ static mp_obj_t network_wlan_make_new(const mp_obj_type_t *type, size_t n_args, 
 
 static mp_obj_t network_wlan_active(size_t n_args, const mp_obj_t *args) {
     wlan_if_obj_t *self = MP_OBJ_TO_PTR(args[0]);
-
-    wifi_mode_t mode;
-    if (!wifi_started) {
-        mode = WIFI_MODE_NULL;
-    } else {
-        esp_exceptions(esp_wifi_get_mode(&mode));
-    }
-
-    int bit = (self->if_id == ESP_IF_WIFI_STA) ? WIFI_MODE_STA : WIFI_MODE_AP;
+    bool is_sta = self->if_id == ESP_IF_WIFI_STA;
+    int bit = is_sta ? WIFI_MODE_STA : WIFI_MODE_AP;
+    wifi_mode_t mode = WIFI_MODE_NULL;
 
     if (n_args > 1) {
+        if (esp_vision_network_python_mutation_begin() != ESP_OK) {
+            mp_raise_OSError(MP_EBUSY);
+        }
         bool active = mp_obj_is_true(args[1]);
-        mode = active ? (mode | bit) : (mode & ~bit);
+        esp_err_t err = esp_wifi_get_mode(&mode);
+        if (err == ESP_ERR_WIFI_NOT_STARTED) {
+            mode = WIFI_MODE_NULL;
+            err = ESP_OK;
+        }
+        if (err != ESP_OK) {
+            esp_vision_network_python_mutation_cancel();
+            esp_exceptions(err);
+        }
+        mode = active ? (wifi_mode_t)(mode | bit) : (wifi_mode_t)(mode & ~bit);
         if (mode == WIFI_MODE_NULL) {
-            if (wifi_started) {
-                esp_exceptions(esp_wifi_stop());
-                wifi_started = false;
+            if (esp_vision_network_python_sta_active() || esp_vision_network_python_ap_active()) {
+                err = esp_wifi_stop();
             }
         } else {
-            esp_exceptions(esp_wifi_set_mode(mode));
-            if (!wifi_started) {
-                esp_exceptions(esp_wifi_start());
-                wifi_started = true;
+            err = esp_wifi_set_mode(mode);
+            if (err == ESP_OK) {
+                err = esp_wifi_start();
+                if (err == ESP_ERR_WIFI_NOT_STOPPED) {
+                    err = ESP_OK;
+                }
             }
         }
-
-        // Wait for the interface to be in the correct state.
-        while (self->active != active) {
-            MICROPY_EVENT_POLL_HOOK;
+        if (err != ESP_OK) {
+            esp_vision_network_python_mutation_end();
+            esp_exceptions(err);
+        }
+        if (is_sta) {
+            esp_vision_network_python_set_sta_active(active);
+        } else {
+            esp_vision_network_python_set_ap_active(active);
+        }
+        esp_vision_network_python_mutation_end();
+        self->active = active;
+    } else {
+        esp_err_t err = esp_wifi_get_mode(&mode);
+        if (err == ESP_ERR_WIFI_NOT_STARTED) {
+            mode = WIFI_MODE_NULL;
+        } else if (err != ESP_OK) {
+            esp_exceptions(err);
         }
     }
 
@@ -315,13 +187,10 @@ static mp_obj_t network_wlan_connect(size_t n_args, const mp_obj_t *pos_args, mp
         { MP_QSTR_bssid, MP_ARG_KW_ONLY | MP_ARG_OBJ, {.u_obj = mp_const_none} },
     };
 
-    // parse args
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all(n_args - 1, pos_args + 1, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
     wifi_config_t wifi_sta_config = {0};
-
-    // configure any parameters that are given
     if (n_args > 1) {
         size_t len;
         const char *p;
@@ -341,25 +210,47 @@ static mp_obj_t network_wlan_connect(size_t n_args, const mp_obj_t *pos_args, mp
             wifi_sta_config.sta.bssid_set = 1;
             memcpy(wifi_sta_config.sta.bssid, p, sizeof(wifi_sta_config.sta.bssid));
         }
-        esp_exceptions(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_sta_config));
     }
 
-    esp_exceptions(esp_netif_set_hostname(wlan_sta_obj.netif, mod_network_hostname_data));
-
-    wifi_sta_reconnects = 0;
-    // connect to the WiFi AP
-    MP_THREAD_GIL_EXIT();
-    esp_exceptions(esp_wifi_connect());
-    MP_THREAD_GIL_ENTER();
-    wifi_sta_connect_requested = true;
-
+    if (esp_vision_network_python_mutation_begin() != ESP_OK) {
+        mp_raise_OSError(MP_EBUSY);
+    }
+    esp_err_t err = ESP_OK;
+    if (n_args > 1) {
+        err = esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_sta_config);
+    }
+    memset(&wifi_sta_config, 0, sizeof(wifi_sta_config));
+    if (err == ESP_OK) {
+        err = esp_netif_set_hostname(wlan_sta_obj.netif, esp_vision_hostname());
+    }
+    if (err == ESP_OK) {
+        MP_THREAD_GIL_EXIT();
+        err = esp_wifi_connect();
+        MP_THREAD_GIL_ENTER();
+    }
+    if (err != ESP_OK) {
+        esp_vision_network_python_mutation_end();
+        esp_exceptions(err);
+    }
+    esp_vision_network_python_set_connect_requested(true);
+    esp_vision_network_python_runtime_changed();
+    esp_vision_network_python_mutation_end();
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_KW(network_wlan_connect_obj, 1, network_wlan_connect);
 
 static mp_obj_t network_wlan_disconnect(mp_obj_t self_in) {
-    wifi_sta_connect_requested = false;
-    esp_exceptions(esp_wifi_disconnect());
+    (void)self_in;
+    if (esp_vision_network_python_mutation_begin() != ESP_OK) {
+        mp_raise_OSError(MP_EBUSY);
+    }
+    esp_vision_network_python_set_connect_requested(false);
+    esp_err_t err = esp_wifi_disconnect();
+    if (err != ESP_OK) {
+        esp_vision_network_python_mutation_end();
+        esp_exceptions(err);
+    }
+    esp_vision_network_python_mutation_end();
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(network_wlan_disconnect_obj, network_wlan_disconnect);
@@ -368,35 +259,37 @@ static mp_obj_t network_wlan_status(size_t n_args, const mp_obj_t *args) {
     wlan_if_obj_t *self = MP_OBJ_TO_PTR(args[0]);
     if (n_args == 1) {
         if (self->if_id == ESP_IF_WIFI_STA) {
+            esp_vision_network_snapshot_t network;
+            esp_vision_network_snapshot(&network);
             // Case of no arg is only for the STA interface
-            if (wifi_sta_connected) {
+            if (network.sta_connected) {
                 // Happy path, connected with IP
                 return MP_OBJ_NEW_SMALL_INT(STAT_GOT_IP);
-            } else if (wifi_sta_disconn_reason == WIFI_REASON_NO_AP_FOUND) {
+            } else if (network.sta_disconnect_reason == WIFI_REASON_NO_AP_FOUND) {
                 return MP_OBJ_NEW_SMALL_INT(WIFI_REASON_NO_AP_FOUND);
-            } else if (wifi_sta_disconn_reason == WIFI_REASON_NO_AP_FOUND_IN_RSSI_THRESHOLD) {
+            } else if (network.sta_disconnect_reason == WIFI_REASON_NO_AP_FOUND_IN_RSSI_THRESHOLD) {
                 return MP_OBJ_NEW_SMALL_INT(WIFI_REASON_NO_AP_FOUND_IN_RSSI_THRESHOLD);
-            } else if (wifi_sta_disconn_reason == WIFI_REASON_NO_AP_FOUND_IN_AUTHMODE_THRESHOLD) {
+            } else if (network.sta_disconnect_reason == WIFI_REASON_NO_AP_FOUND_IN_AUTHMODE_THRESHOLD) {
                 return MP_OBJ_NEW_SMALL_INT(WIFI_REASON_NO_AP_FOUND_IN_AUTHMODE_THRESHOLD);
-            } else if (wifi_sta_disconn_reason == WIFI_REASON_NO_AP_FOUND_W_COMPATIBLE_SECURITY) {
+            } else if (network.sta_disconnect_reason == WIFI_REASON_NO_AP_FOUND_W_COMPATIBLE_SECURITY) {
                 return MP_OBJ_NEW_SMALL_INT(WIFI_REASON_NO_AP_FOUND_W_COMPATIBLE_SECURITY);
-            } else if ((wifi_sta_disconn_reason == WIFI_REASON_AUTH_FAIL) || (wifi_sta_disconn_reason == WIFI_REASON_CONNECTION_FAIL)) {
+            } else if ((network.sta_disconnect_reason == WIFI_REASON_AUTH_FAIL) || (network.sta_disconnect_reason == WIFI_REASON_CONNECTION_FAIL)) {
                 // wrong password
                 return MP_OBJ_NEW_SMALL_INT(WIFI_REASON_AUTH_FAIL);
-            } else if (wifi_sta_disconn_reason == WIFI_REASON_ASSOC_LEAVE) {
+            } else if (network.sta_disconnect_reason == WIFI_REASON_ASSOC_LEAVE) {
                 // After wlan.disconnect()
                 return MP_OBJ_NEW_SMALL_INT(STAT_IDLE);
-            } else if (wifi_sta_connect_requested
+            } else if (network.sta_connect_requested
                        && (conf_wifi_sta_reconnects == 0
-                           || wifi_sta_reconnects < conf_wifi_sta_reconnects)) {
+                           || network.sta_reconnect_count < conf_wifi_sta_reconnects)) {
                 // No connection or error, but is requested = Still connecting
                 return MP_OBJ_NEW_SMALL_INT(STAT_CONNECTING);
-            } else if (wifi_sta_disconn_reason == 0) {
+            } else if (network.sta_disconnect_reason == 0) {
                 // No activity, No error = Idle
                 return MP_OBJ_NEW_SMALL_INT(STAT_IDLE);
             } else {
                 // Simply pass the error through from ESP-identifier
-                return MP_OBJ_NEW_SMALL_INT(wifi_sta_disconn_reason);
+                return MP_OBJ_NEW_SMALL_INT(network.sta_disconnect_reason);
             }
         }
         return mp_const_none;
@@ -480,7 +373,7 @@ static MP_DEFINE_CONST_FUN_OBJ_1(network_wlan_scan_obj, network_wlan_scan);
 static mp_obj_t network_wlan_isconnected(mp_obj_t self_in) {
     wlan_if_obj_t *self = MP_OBJ_TO_PTR(self_in);
     if (self->if_id == ESP_IF_WIFI_STA) {
-        return mp_obj_new_bool(wifi_sta_connected);
+        return mp_obj_new_bool(esp_vision_network_python_sta_connected());
     } else {
         wifi_sta_list_t sta;
         esp_wifi_ap_get_sta_list(&sta);
@@ -489,7 +382,7 @@ static mp_obj_t network_wlan_isconnected(mp_obj_t self_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(network_wlan_isconnected_obj, network_wlan_isconnected);
 
-static mp_obj_t network_wlan_config(size_t n_args, const mp_obj_t *args, mp_map_t *kwargs) {
+static mp_obj_t network_wlan_config_inner(size_t n_args, const mp_obj_t *args, mp_map_t *kwargs) {
     if (n_args != 1 && kwargs->used != 0) {
         mp_raise_TypeError(MP_ERROR_TEXT("either pos or kw args are allowed"));
     }
@@ -606,6 +499,7 @@ static mp_obj_t network_wlan_config(size_t n_args, const mp_obj_t *args, mp_map_
                         // parameter reconnects == -1 means to retry forever.
                         // here means conf_wifi_sta_reconnects == 0 to retry forever.
                         conf_wifi_sta_reconnects = (reconnects == -1) ? 0 : reconnects + 1;
+                        esp_vision_network_python_set_reconnect_limit(conf_wifi_sta_reconnects);
                         break;
                     }
                     case MP_QSTR_txpower: {
@@ -738,6 +632,31 @@ static mp_obj_t network_wlan_config(size_t n_args, const mp_obj_t *args, mp_map_
 
 unknown:
     mp_raise_ValueError(MP_ERROR_TEXT("unknown config param"));
+}
+
+static mp_obj_t network_wlan_config(size_t n_args, const mp_obj_t *args, mp_map_t *kwargs) {
+    if (kwargs->used == 0) {
+        return network_wlan_config_inner(n_args, args, kwargs);
+    }
+    if (esp_vision_network_python_mutation_begin() != ESP_OK) {
+        mp_raise_OSError(MP_EBUSY);
+    }
+    nlr_buf_t nlr;
+    if (nlr_push(&nlr) == 0) {
+        mp_obj_t result = network_wlan_config_inner(n_args, args, kwargs);
+        nlr_pop();
+        wlan_if_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+        if (self->if_id == ESP_IF_WIFI_STA) {
+            esp_vision_network_python_runtime_changed();
+            esp_vision_network_python_set_reconnect_limit(conf_wifi_sta_reconnects);
+        }
+        esp_vision_network_python_mutation_end();
+        return result;
+    }
+    mp_obj_t exception = nlr.ret_val;
+    nlr_pop();
+    esp_vision_network_python_mutation_end();
+    nlr_raise(exception);
 }
 MP_DEFINE_CONST_FUN_OBJ_KW(network_wlan_config_obj, 1, network_wlan_config);
 

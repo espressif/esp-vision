@@ -29,6 +29,14 @@ ESP-VISION is a Low-Code Edge AI & Computer Vision Framework for Espressif SoCs.
 - [中文](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/)
 - [English](https://docs.espressif.com/projects/esp-vision/en/latest/)
 
+## EV-MUX: Host Communication
+
+EV-MUX v4 provides IDEs, host tools and independent Agent adapters with discovery, control, framed Python interaction and JPEG preview. Board-enabled `usj`, `usb`, `uart` and `tcp` links share one owner session, which owns both user/debug streams.
+
+The [Communication System and EV-MUX chapter](docs/en/communication/index.rst) is the detailed reference for [console/log architecture](docs/en/communication/architecture.rst), [interfaces and board configuration](docs/en/communication/interfaces.rst), [ownership and recovery](docs/en/communication/sessions.rst), [wire protocol](docs/en/communication/wire-protocol.rst), files, preview, Wi-Fi provisioning and acceptance.
+
+v4 still uses `EVMUX/1` framing. Hosts must implement explicit acquisition and keepalive; `route.bind`/`route.auto` are unsupported. Runtime `capabilities` determines available interfaces. TCP has no authentication or encryption in this implementation.
+
 ## Architecture
 
 <picture>
@@ -38,6 +46,8 @@ ESP-VISION is a Low-Code Edge AI & Computer Vision Framework for Espressif SoCs.
 </picture>
 
 IDE, Agent, CLI and custom tools share Device Core; EV-MUX connects that host SDK to device firmware. See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html) for the role of each layer.
+
+The [license inventory](docs/en/license/index.rst) records upstream components and adaptations, including the MIT-licensed MicroPython execution and thread overlays used for EV-MUX session isolation.
 
 ## Quickstart
 

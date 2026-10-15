@@ -203,6 +203,7 @@
 #define MICROPY_PY_NETWORK_HOSTNAME_DEFAULT "mpy-esp32s31"
 #endif
 #endif
+#define MICROPY_PY_NETWORK_HOSTNAME_MAX_LEN (63)
 #define MICROPY_PY_NETWORK_INCLUDEFILE      "ports/esp32/modnetwork.h"
 #define MICROPY_PY_NETWORK_MODULE_GLOBALS_INCLUDEFILE "ports/esp32/modnetwork_globals.h"
 #ifndef MICROPY_PY_NETWORK_WLAN

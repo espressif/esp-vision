@@ -246,7 +246,7 @@ device.capture(request)
    console.log(frame.metadata.width, frame.metadata.height, frame.data.length)
    const blob = new Blob([frame.data], { type: frame.mimeType })
 
-摄像头抓图在 VM 中初始化/使用摄像头；LCD 抓图要求 LCD 已初始化，只读取最后提交的软件 RGB565 帧，不启动摄像头或重新绘制屏幕。不支持硬件返回 NOT_SUPPORTED，LCD 未初始化返回 DISPLAY_NOT_READY。软件抓图不是物理面板回读。按需缓存、DMA 完成同步与 preview 交付见 `preview-debug <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/communication/preview-debug.html>`_。
+摄像头抓图在 VM 中初始化/使用摄像头；LCD 抓图要求 LCD 已初始化，只读取最后提交的软件 RGB565 帧，不启动摄像头或重新绘制屏幕。不支持硬件返回 NOT_SUPPORTED，LCD 未初始化返回 DISPLAY_NOT_READY。软件抓图不是物理面板回读。按需缓存、DMA 完成同步与 preview 交付见 :doc:`preview-debug <../communication/preview-debug>`。
 
 device.on(event, handler)
 --------------------------------------------------

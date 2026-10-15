@@ -246,7 +246,7 @@ device.capture(request)
    console.log(frame.metadata.width, frame.metadata.height, frame.data.length)
    const blob = new Blob([frame.data], { type: frame.mimeType })
 
-Camera capture initializes/uses the camera in the VM. Screen capture requires an initialized LCD and reads its last software-submitted RGB565 frame without starting a camera or redrawing the screen. Unsupported hardware reports NOT_SUPPORTED; uninitialized LCD reports DISPLAY_NOT_READY. Screenshots do not read back the physical panel. See `preview-debug <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/communication/preview-debug.html>`_ for lazy frame storage, DMA completion and preview delivery.
+Camera capture initializes/uses the camera in the VM. Screen capture requires an initialized LCD and reads its last software-submitted RGB565 frame without starting a camera or redrawing the screen. Unsupported hardware reports NOT_SUPPORTED; uninitialized LCD reports DISPLAY_NOT_READY. Screenshots do not read back the physical panel. See :doc:`preview-debug <../communication/preview-debug>` for lazy frame storage, DMA completion and preview delivery.
 
 device.on(event, handler)
 --------------------------------------------------

@@ -11,6 +11,7 @@
 #include <stdint.h>
 
 #include "esp_err.h"
+#include "ev_transport.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,7 +19,7 @@ extern "C" {
 
 typedef enum {
     EV_CONTROL_INGRESS_USJ = 0,
-    EV_CONTROL_INGRESS_CDC,
+    EV_CONTROL_INGRESS_USB,
     EV_CONTROL_INGRESS_UART,
     EV_CONTROL_INGRESS_MAX,
 } ev_control_ingress_t;
@@ -26,6 +27,15 @@ typedef enum {
 void ev_control_transport_init0(void);
 void ev_control_transport_start(void);
 esp_err_t ev_control_transport_send_hello(void);
+esp_err_t ev_control_transport_rx(const ev_link_ref_t *link,
+                                  const uint8_t *bytes,
+                                  size_t length);
+
+// Called by platform/main.c around each VM lifetime. Begin rejects/clears
+// queued VM work and REPL input and advances vmEpoch without resetting a
+// partially received physical frame; ready reopens admission and emits hello.
+void ev_control_transport_vm_reset_begin(void);
+void ev_control_transport_vm_ready(void);
 
 // VM-task entry points (mp_hal_stdin_rx_chr / mp_hal_stdio_poll only).
 // Frame reception, parsing and route maintenance run on the dedicated

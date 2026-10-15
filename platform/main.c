@@ -38,6 +38,8 @@
 #include "esp_memory_utils.h"
 #include "esp_psram.h"
 #include "esp_system.h"
+#include "device_identity.h"
+#include "network_discovery.h"
 #include "esp_task.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -60,6 +62,7 @@
 
 #include "modmachine.h"
 #if MICROPY_PY_NETWORK
+#include "extmod/modnetwork.h"
 #include "modnetwork.h"
 #endif
 #include "modesp32.h"
@@ -71,6 +74,12 @@
 #include "debug.h"
 #include "display.h"
 #include "ev_stdio.h"
+#include "ev_control_transport.h"
+#include "ev_launcher_state.h"
+#include "ev_channel.h"
+#include "ev_session.h"
+#include "ev_tcp.h"
+#include "network_service.h"
 #include "fb_alloc.h"
 #include "preview.h"
 #include "lcd_touch.h"
@@ -114,6 +123,7 @@ static time_t platform_mbedtls_time(time_t *timer)
 void mp_task(void *pvParameter)
 {
     volatile uint32_t sp = (uint32_t)esp_cpu_get_sp();
+    esp_err_t ev_mux_init_err = ESP_FAIL;
 
     #if MICROPY_PY_THREAD
     mp_thread_init(pxTaskGetStackStart(NULL), MICROPY_TASK_STACK_SIZE / sizeof(uintptr_t));
@@ -137,8 +147,23 @@ void mp_task(void *pvParameter)
     #endif
 
     esp_err_t err = esp_event_loop_create_default();
-    if (err != ESP_OK) {
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         ESP_LOGE("esp_init", "can't create event loop: 0x%x\n", err);
+    }
+
+    if (!esp_vision_identity_init()) {
+        ESP_LOGE("esp_init", "device identity unavailable");
+    }
+    #if MICROPY_PY_NETWORK
+    snprintf(mod_network_hostname_data, MICROPY_PY_NETWORK_HOSTNAME_MAX_LEN + 1, "%s", esp_vision_hostname());
+    #endif
+    esp_vision_discovery_init();
+
+    // Wi-Fi and its persistent configuration belong to the platform. The
+    // worker survives VM resets and starts without waiting for connectivity.
+    err = esp_vision_network_start();
+    if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) {
+        ESP_LOGE("esp_init", "can't start background network: %s", esp_err_to_name(err));
     }
 
     err = esp_vision_storage_init();
@@ -152,6 +177,17 @@ void mp_task(void *pvParameter)
         esp_restart();
     }
 
+    if (ev_transport_init0() != ESP_OK) {
+        ESP_LOGE("esp_init", "can't initialize EV-MUX endpoints");
+        esp_restart();
+    }
+    ev_channel_init0();
+    if (ev_session_init0() != ESP_OK) {
+        ESP_LOGE("esp_init", "can't initialize EV-MUX session manager");
+        esp_restart();
+    }
+    esp_vision_launcher_state_init0();
+
 soft_reset:
     mp_cstack_init_with_top((void *)sp, MICROPY_TASK_STACK_SIZE);
     gc_init(mp_task_heap, mp_task_heap + MICROPY_GC_INITIAL_HEAP_SIZE);
@@ -162,8 +198,18 @@ soft_reset:
     // busy; no second USB driver or descriptor owner is involved.
     mp_usbd_init();
     #endif
-    ev_stdio_init0();
-    ev_stdio_start_transport();
+    ev_mux_init_err = ev_stdio_init0();
+    if (ev_mux_init_err == ESP_OK) {
+        ev_stdio_start_transport();
+        err = ev_tcp_init0();
+        if (err != ESP_OK) {
+            ESP_LOGE("esp_init", "can't start EV-MUX TCP transport: %s", esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGE("esp_init",
+                 "EV-MUX unavailable for this VM lifetime (%s); raw console remains active; retrying after soft reset",
+                 esp_err_to_name(ev_mux_init_err));
+    }
     esp_vision_storage_mount_micropython();
     esp_vision_camera_init0();
     esp_vision_lcd_touch_deinit();
@@ -181,6 +227,10 @@ soft_reset:
     machine_i2s_init0();
     #endif
 
+    if (ev_mux_init_err == ESP_OK) {
+        ev_control_transport_vm_ready();
+    }
+
     pyexec_frozen_module("_boot.py", false);
     pyexec_frozen_module("py_inisetup.py", false);
     int ret = pyexec_file_if_exists("boot.py");
@@ -189,7 +239,9 @@ soft_reset:
         goto soft_reset_exit;
     }
     if (pyexec_mode_kind == PYEXEC_MODE_FRIENDLY_REPL && ret != 0) {
+        esp_vision_launcher_main_entry_begin();
         int ret = pyexec_file_if_exists("main.py");
+        esp_vision_launcher_main_entry_end();
         if (ret & PYEXEC_FORCED_EXIT) {
             goto soft_reset_exit;
         }
@@ -210,9 +262,13 @@ soft_reset:
     }
 
 soft_reset_exit:
+    // Stop admission before camera/VFS/GC state is destroyed. Background
+    // transport and network tasks keep their own buffers and lifetimes.
+    ev_stdio_vm_reset_begin();
     esp_vision_lcd_touch_deinit();
     esp_vision_display_deinit();
     esp_vision_preview_deinit();
+    esp_vision_camera_release_snapshot_buffer();
     esp_vision_camera_deinit();
     fb_alloc_init0();
 
@@ -269,9 +325,16 @@ soft_reset_exit:
 void boardctrl_startup(void)
 {
     esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        nvs_flash_erase();
-        nvs_flash_init();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        // NVS also holds the storage-writer handoff/quarantine record. Never
+        // erase it here to recover a generic NVS initialization error: doing
+        // so could silently reopen a volume after an interrupted handoff.
+        ESP_LOGE("boardctrl", "NVS unavailable; preserving storage writer state: 0x%x", ret);
+    }
+
+    ret = esp_vision_msc_writer_init();
+    if (ret != ESP_OK && ret != ESP_ERR_NOT_SUPPORTED) {
+        ESP_LOGE("boardctrl", "storage writer gate unavailable; volumes remain fail-closed: 0x%x", ret);
     }
 
     // esp_flash_t is an opaque type on IDF 6.0, so query the size into a local.

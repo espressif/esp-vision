@@ -32,6 +32,10 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - ``lib/micropython``
      - Python 运行时与 ESP32 port 基线
      - MIT
+   * - MicroPython 执行与线程适配
+     - ``overlay/micropython/shared/runtime/pyexec.c``、``overlay/micropython/ports/esp32/mpthreadport.c``
+     - 基于固定上游文件捕获和继承会话来源，保留原版权和许可证头
+     - MIT
    * - `micropython-ulab <https://github.com/v923z/micropython-ulab>`__ 6.12
      - ``lib/ulab``
      - 数组与数值计算

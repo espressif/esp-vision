@@ -151,6 +151,9 @@ pack_launchpad:
     # IDF release.
     - python -m pip install --upgrade "esptool>=5.3" rtoml pyyaml
   script:
+    # Also emits application-only bins and firmware/<board>/<tag>.json with
+    # hashes, actual partition bounds and supported silicon revision ranges.
+    # The existing additive uploader publishes them beside config.toml.
     - python tools/ci/launchpad/generate_launchpad.py "$CI_COMMIT_TAG"
     # Publish the MCP API pack alongside config.toml by dropping it into the same
     # binaries/ tree the AE ae_upload_dl job copies to dl.espressif.com. Lands at

@@ -169,6 +169,18 @@ check_readme_links:
           mv "$log" "$log.txt"
         done
       fi
+    - |
+      if [ "$BOARD" = "ESP32_P4X_EYE" ]; then
+        for app_elf in "build/$BOARD"/idf*/*.elf; do
+          [ -f "$app_elf" ] || continue
+          board_build="${app_elf%/*}"
+          mkdir -p "$board_build/debug"
+          for diagnostic in "$app_elf" "$board_build"/*.map "$board_build/sdkconfig"; do
+            [ -f "$diagnostic" ] || continue
+            cp "$diagnostic" "$board_build/debug/"
+          done
+        done
+      fi
   artifacts:
     when: always
     expire_in: 1 week
@@ -181,6 +193,10 @@ check_readme_links:
       # the rename). flash_args below remains the authority for which image is
       # consumed by the release packer.
       - build/$BOARD/idf*/*.bin
+      # P4-EYE boot failures need symbols from the same CI image. Keep the
+      # ELF, linker map, and effective configuration without requiring a
+      # separate local firmware build.
+      - build/$BOARD/idf*/debug/
       # flash_args lists the {offset, file} pairs consumed by `esptool merge-bin`
       # in the tag-release pack_launchpad job (see .gitlab/ci/deploy.yml). These
       # boards use a single factory app with no OTA, so flash_args references

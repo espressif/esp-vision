@@ -18,12 +18,15 @@
 #include "esp_log.h"
 #include "esp_vfs_fat.h"
 #include "extmod/vfs.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/portmacro.h"
 #include "py/mperrno.h"
 #include "py/mpthread.h"
 #include "py/nlr.h"
 #include "py/objstr.h"
 #include "py/runtime.h"
 #include "py/stream.h"
+#include "storage_writer.h"
 
 #define ESP_VISION_STORAGE_FULL_PATH_MAX (MICROPY_ALLOC_PATH_MAX + sizeof(ESP_VISION_STORAGE_SDCARD_PATH))
 
@@ -40,15 +43,19 @@ typedef struct {
     mp_fun_1_t finaliser;
     DIR *dir;
     bool is_str;
+    esp_vision_storage_volume_t volume;
 } esp_vision_storage_dir_iter_t;
 
 typedef struct {
     mp_obj_base_t base;
     int fd;
+    esp_vision_storage_volume_t volume;
 } esp_vision_storage_file_obj_t;
 
 static const char *TAG = "esp_vision_storage_vfs";
 static bool s_initial_vm_mount_done;
+static portMUX_TYPE s_vfs_handle_mux = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t s_vfs_open_handles[ESP_VISION_STORAGE_VOLUME_COUNT];
 extern const mp_obj_type_t esp_vision_storage_vfs_type;
 extern const mp_obj_type_t esp_vision_storage_fileio_type;
 extern const mp_obj_type_t esp_vision_storage_textio_type;
@@ -58,6 +65,58 @@ static void esp_vision_storage_file_check_open(esp_vision_storage_file_obj_t *se
     if (self->fd < 0) {
         mp_raise_ValueError(MP_ERROR_TEXT("I/O operation on closed file"));
     }
+}
+
+static esp_vision_storage_volume_t esp_vision_storage_volume_for_path(const char *path)
+{
+    const size_t sd_len = strlen(ESP_VISION_STORAGE_SDCARD_PATH);
+    if (path != NULL && strncmp(path, ESP_VISION_STORAGE_SDCARD_PATH, sd_len) == 0 &&
+            (path[sd_len] == '\0' || path[sd_len] == '/')) {
+        return ESP_VISION_STORAGE_VOLUME_SD;
+    }
+    return ESP_VISION_STORAGE_VOLUME_FLASH;
+}
+
+static void esp_vision_storage_vfs_begin(esp_vision_storage_volume_t volume, bool writing)
+{
+    if (!esp_vision_msc_writer_vfs_begin(volume, writing)) {
+        mp_raise_OSError(MP_EROFS);
+    }
+}
+
+static void esp_vision_storage_vfs_handle_open(esp_vision_storage_volume_t volume)
+{
+    if ((unsigned int)volume >= ESP_VISION_STORAGE_VOLUME_COUNT) {
+        return;
+    }
+    portENTER_CRITICAL(&s_vfs_handle_mux);
+    if (s_vfs_open_handles[volume] != UINT32_MAX) {
+        s_vfs_open_handles[volume]++;
+    }
+    portEXIT_CRITICAL(&s_vfs_handle_mux);
+}
+
+static void esp_vision_storage_vfs_handle_close(esp_vision_storage_volume_t volume)
+{
+    if ((unsigned int)volume >= ESP_VISION_STORAGE_VOLUME_COUNT) {
+        return;
+    }
+    portENTER_CRITICAL(&s_vfs_handle_mux);
+    if (s_vfs_open_handles[volume] > 0) {
+        s_vfs_open_handles[volume]--;
+    }
+    portEXIT_CRITICAL(&s_vfs_handle_mux);
+}
+
+uint32_t esp_vision_storage_vfs_open_handle_count(esp_vision_storage_volume_t volume)
+{
+    if ((unsigned int)volume >= ESP_VISION_STORAGE_VOLUME_COUNT) {
+        return UINT32_MAX;
+    }
+    portENTER_CRITICAL(&s_vfs_handle_mux);
+    uint32_t result = s_vfs_open_handles[volume];
+    portEXIT_CRITICAL(&s_vfs_handle_mux);
+    return result;
 }
 
 static int esp_vision_storage_retry_close(int fd)
@@ -106,6 +165,9 @@ static mp_obj_t esp_vision_storage_file_open(const char *path, mp_obj_t mode_in)
     esp_vision_storage_file_obj_t *self = mp_obj_malloc_with_finaliser(
                                               esp_vision_storage_file_obj_t, type);
     self->fd = -1;
+    self->volume = esp_vision_storage_volume_for_path(path);
+    bool writes = (flags & O_ACCMODE) != O_RDONLY || (flags & (O_CREAT | O_TRUNC | O_APPEND)) != 0;
+    esp_vision_storage_vfs_begin(self->volume, writes);
 
     int fd;
     for (;;) {
@@ -117,12 +179,31 @@ static mp_obj_t esp_vision_storage_file_open(const char *path, mp_obj_t mode_in)
             break;
         }
         if (saved_errno == EINTR) {
+            if (!esp_vision_msc_writer_vfs_finish(self->volume)) {
+                mp_raise_OSError(MP_EIO);
+            }
             mp_handle_pending(MP_HANDLE_PENDING_CALLBACKS_AND_EXCEPTIONS);
+            esp_vision_storage_vfs_begin(self->volume, writes);
             continue;
+        }
+        if (!esp_vision_msc_writer_vfs_finish(self->volume)) {
+            mp_raise_OSError(MP_EIO);
         }
         mp_raise_OSError(saved_errno);
     }
     self->fd = fd;
+    esp_vision_storage_vfs_handle_open(self->volume);
+    if (!esp_vision_msc_writer_vfs_finish(self->volume)) {
+        int close_result = esp_vision_storage_retry_close(self->fd);
+        self->fd = -1;
+        /* A failed close leaves descriptor state uncertain. Keep the open-
+         * handle count as a drain barrier; vfs_finish already quarantined the
+         * volume, so no writer handoff can mistake this for a clean close. */
+        if (close_result == 0) {
+            esp_vision_storage_vfs_handle_close(self->volume);
+        }
+        mp_raise_OSError(MP_EIO);
+    }
     return MP_OBJ_FROM_PTR(self);
 }
 
@@ -221,9 +302,12 @@ static mp_uint_t esp_vision_storage_file_ioctl(mp_obj_t self_in,
     case MP_STREAM_CLOSE:
         if (self->fd >= 0) {
             MP_THREAD_GIL_EXIT();
-            esp_vision_storage_retry_close(self->fd);
+            int close_result = esp_vision_storage_retry_close(self->fd);
             MP_THREAD_GIL_ENTER();
             self->fd = -1;
+            if (close_result == 0) {
+                esp_vision_storage_vfs_handle_close(self->volume);
+            }
         }
         return 0;
     case MP_STREAM_GET_FILENO:
@@ -440,9 +524,16 @@ static mp_obj_t esp_vision_storage_vfs_chdir(mp_obj_t self_in, mp_obj_t path_in)
     char full_path[ESP_VISION_STORAGE_FULL_PATH_MAX];
     esp_vision_storage_make_path(self, path_in, internal_path, full_path);
 
+    esp_vision_storage_volume_t volume = esp_vision_storage_volume_for_path(full_path);
+    esp_vision_storage_vfs_begin(volume, false);
     struct stat stat_buffer;
-    if (stat(full_path, &stat_buffer) != 0) {
-        mp_raise_OSError(errno);
+    int result = stat(full_path, &stat_buffer);
+    int saved_errno = result < 0 ? errno : 0;
+    if (!esp_vision_msc_writer_vfs_finish(volume)) {
+        mp_raise_OSError(MP_EIO);
+    }
+    if (result != 0) {
+        mp_raise_OSError(saved_errno);
     }
     if (!S_ISDIR(stat_buffer.st_mode)) {
         mp_raise_OSError(MP_ENOTDIR);
@@ -464,9 +555,12 @@ static mp_obj_t esp_vision_storage_dir_iter_close(mp_obj_t self_in)
     esp_vision_storage_dir_iter_t *self = MP_OBJ_TO_PTR(self_in);
     if (self->dir != NULL) {
         MP_THREAD_GIL_EXIT();
-        closedir(self->dir);
+        int close_result = closedir(self->dir);
         MP_THREAD_GIL_ENTER();
         self->dir = NULL;
+        if (close_result == 0) {
+            esp_vision_storage_vfs_handle_close(self->volume);
+        }
     }
     return mp_const_none;
 }
@@ -532,13 +626,28 @@ static mp_obj_t esp_vision_storage_vfs_ilistdir(mp_obj_t self_in, mp_obj_t path_
     iter->finaliser = esp_vision_storage_dir_iter_close;
     iter->dir = NULL;
     iter->is_str = mp_obj_get_type(path_in) == &mp_type_str;
+    iter->volume = esp_vision_storage_volume_for_path(full_path);
 
+    esp_vision_storage_vfs_begin(iter->volume, false);
     MP_THREAD_GIL_EXIT();
     iter->dir = opendir(full_path);
     int saved_errno = errno;
     MP_THREAD_GIL_ENTER();
     if (iter->dir == NULL) {
+        if (!esp_vision_msc_writer_vfs_finish(iter->volume)) {
+            mp_raise_OSError(MP_EIO);
+        }
         mp_raise_OSError(saved_errno);
+    }
+    esp_vision_storage_vfs_handle_open(iter->volume);
+    if (!esp_vision_msc_writer_vfs_finish(iter->volume)) {
+        int close_result = closedir(iter->dir);
+        iter->dir = NULL;
+        /* Do not report a drained VFS handle if closedir failed. */
+        if (close_result == 0) {
+            esp_vision_storage_vfs_handle_close(iter->volume);
+        }
+        mp_raise_OSError(MP_EIO);
     }
     return MP_OBJ_FROM_PTR(iter);
 }
@@ -551,11 +660,16 @@ static mp_obj_t esp_vision_storage_vfs_path_call(esp_vision_storage_vfs_obj_t *s
     char internal_path[MICROPY_ALLOC_PATH_MAX + 1];
     char full_path[ESP_VISION_STORAGE_FULL_PATH_MAX];
     esp_vision_storage_make_path(self, path_in, internal_path, full_path);
+    esp_vision_storage_volume_t volume = esp_vision_storage_volume_for_path(full_path);
+    esp_vision_storage_vfs_begin(volume, true);
 
     MP_THREAD_GIL_EXIT();
     int result = function(full_path);
     int saved_errno = errno;
     MP_THREAD_GIL_ENTER();
+    if (!esp_vision_msc_writer_vfs_finish(volume)) {
+        mp_raise_OSError(MP_EIO);
+    }
     if (result != 0) {
         mp_raise_OSError(saved_errno);
     }
@@ -604,6 +718,15 @@ static mp_obj_t esp_vision_storage_vfs_rename(mp_obj_t self_in,
     char new_full[ESP_VISION_STORAGE_FULL_PATH_MAX];
     esp_vision_storage_make_path(self, old_path_in, old_internal, old_full);
     esp_vision_storage_make_path(self, new_path_in, new_internal, new_full);
+    esp_vision_storage_volume_t old_volume = esp_vision_storage_volume_for_path(old_full);
+    esp_vision_storage_volume_t new_volume = esp_vision_storage_volume_for_path(new_full);
+    esp_vision_storage_vfs_begin(old_volume, true);
+    if (new_volume != old_volume && !esp_vision_msc_writer_vfs_begin(new_volume, true)) {
+        if (!esp_vision_msc_writer_vfs_finish(old_volume)) {
+            mp_raise_OSError(MP_EIO);
+        }
+        mp_raise_OSError(MP_EROFS);
+    }
 
     MP_THREAD_GIL_EXIT();
     int result;
@@ -636,6 +759,11 @@ static mp_obj_t esp_vision_storage_vfs_rename(mp_obj_t self_in,
         }
     }
     MP_THREAD_GIL_ENTER();
+    bool new_finished = new_volume == old_volume || esp_vision_msc_writer_vfs_finish(new_volume);
+    bool old_finished = esp_vision_msc_writer_vfs_finish(old_volume);
+    if (!new_finished || !old_finished) {
+        mp_raise_OSError(MP_EIO);
+    }
     if (result != 0) {
         mp_raise_OSError(saved_errno);
     }
@@ -650,9 +778,16 @@ static mp_obj_t esp_vision_storage_vfs_stat(mp_obj_t self_in, mp_obj_t path_in)
     char full_path[ESP_VISION_STORAGE_FULL_PATH_MAX];
     esp_vision_storage_make_path(self, path_in, internal_path, full_path);
 
+    esp_vision_storage_volume_t volume = esp_vision_storage_volume_for_path(full_path);
+    esp_vision_storage_vfs_begin(volume, false);
     struct stat stat_buffer;
-    if (stat(full_path, &stat_buffer) != 0) {
-        mp_raise_OSError(errno);
+    int result = stat(full_path, &stat_buffer);
+    int saved_errno = result < 0 ? errno : 0;
+    if (!esp_vision_msc_writer_vfs_finish(volume)) {
+        mp_raise_OSError(MP_EIO);
+    }
+    if (result != 0) {
+        mp_raise_OSError(saved_errno);
     }
 
     mp_obj_tuple_t *tuple = MP_OBJ_TO_PTR(mp_obj_new_tuple(10, NULL));
@@ -675,9 +810,14 @@ static mp_obj_t esp_vision_storage_vfs_statvfs(mp_obj_t self_in, mp_obj_t path_i
     esp_vision_storage_vfs_obj_t *self = MP_OBJ_TO_PTR(self_in);
     (void)path_in;
 
+    esp_vision_storage_volume_t volume = esp_vision_storage_volume_for_path(self->base_path);
+    esp_vision_storage_vfs_begin(volume, false);
     uint64_t total_bytes;
     uint64_t free_bytes;
     esp_err_t ret = esp_vfs_fat_info(self->base_path, &total_bytes, &free_bytes);
+    if (!esp_vision_msc_writer_vfs_finish(volume)) {
+        mp_raise_OSError(MP_EIO);
+    }
     if (ret != ESP_OK) {
         mp_raise_OSError(MP_EIO);
     }
@@ -704,8 +844,16 @@ static mp_import_stat_t esp_vision_storage_vfs_import_stat(void *self_in, const 
     char full_path[ESP_VISION_STORAGE_FULL_PATH_MAX];
     esp_vision_storage_make_path_raw(self, path, strlen(path), internal_path, full_path);
 
+    esp_vision_storage_volume_t volume = esp_vision_storage_volume_for_path(full_path);
+    if (!esp_vision_msc_writer_vfs_begin(volume, false)) {
+        return MP_IMPORT_STAT_NO_EXIST;
+    }
     struct stat stat_buffer;
-    if (stat(full_path, &stat_buffer) != 0) {
+    int result = stat(full_path, &stat_buffer);
+    if (!esp_vision_msc_writer_vfs_finish(volume)) {
+        return MP_IMPORT_STAT_NO_EXIST;
+    }
+    if (result != 0) {
         return MP_IMPORT_STAT_NO_EXIST;
     }
     if (S_ISDIR(stat_buffer.st_mode)) {

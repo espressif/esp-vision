@@ -1,0 +1,88 @@
+{
+  "metadata": [
+    {
+      "name": "nested_shadow_only",
+      "valid": false,
+      "json": "{\"outer\":{\"channel\":\"user.rpc\",\"type\":\"req\",\"seq\":1,\"method\":\"hello\"}}"
+    },
+    {
+      "name": "nested_shadow_ignored",
+      "valid": true,
+      "json": "{\"channel\":\"user.rpc\",\"type\":\"req\",\"seq\":7,\"method\":\"hello\",\"extra\":{\"channel\":false,\"seq\":\"bad\"}}"
+    },
+    {
+      "name": "duplicate_channel",
+      "valid": false,
+      "json": "{\"channel\":\"user.rpc\",\"channel\":false,\"type\":\"req\",\"seq\":1,\"method\":\"hello\"}"
+    },
+    {
+      "name": "duplicate_escaped_channel",
+      "valid": false,
+      "json": "{\"channel\":\"user.rpc\",\"ch\\u0061nnel\":\"debug.rpc\",\"type\":\"req\",\"seq\":1,\"method\":\"hello\"}"
+    },
+    {
+      "name": "duplicate_seq_with_wrong_type",
+      "valid": false,
+      "json": "{\"channel\":\"user.rpc\",\"type\":\"req\",\"seq\":1,\"seq\":\"bad\",\"method\":\"hello\"}"
+    },
+    {
+      "name": "trailing_text",
+      "valid": false,
+      "json": "{\"channel\":\"user.rpc\",\"type\":\"req\",\"seq\":1,\"method\":\"hello\"} trailing"
+    },
+    {
+      "name": "escaped_known_names_and_values",
+      "valid": true,
+      "json": "{\"ch\\u0061nnel\":\"user.rpc\",\"type\":\"req\",\"seq\":4294967295,\"method\":\"hell\\u006f\",\"vmEpoch\":4294967295}"
+    },
+    {
+      "name": "seq_overflow",
+      "valid": false,
+      "json": "{\"channel\":\"user.rpc\",\"type\":\"req\",\"seq\":4294967296,\"method\":\"hello\"}"
+    }
+  ],
+  "hello": [
+    {
+      "name": "empty_discovery_object",
+      "valid": true,
+      "json": "{}"
+    },
+    {
+      "name": "discovery_wrong_known_types",
+      "valid": false,
+      "json": "{\"acquire\":false,\"evMuxVersion\":\"4\",\"clientNonce\":7}"
+    },
+    {
+      "name": "duplicate_acquire",
+      "valid": false,
+      "json": "{\"acquire\":false,\"\\u0061cquire\":true}"
+    },
+    {
+      "name": "escaped_field_name_and_value",
+      "valid": true,
+      "json": "{\"ac\\u0071uire\":false,\"evMuxVersion\":4,\"clientNonce\":\"0123456789abcdef0123456789abcdef\"}"
+    },
+    {
+      "name": "trailing_text",
+      "valid": false,
+      "json": "{}garbage"
+    },
+    {
+      "name": "malformed_json",
+      "valid": false,
+      "json": "{\"acquire\":false,}"
+    }
+  ],
+  "rpcPayload": [
+    {
+      "name": "valid_payload_without_raw_nul",
+      "valid": true,
+      "json": "7b7d"
+    },
+    {
+      "name": "raw_nul_before_trailing_json",
+      "valid": false,
+      "json": "7b7d007b7d"
+    }
+  ]
+}

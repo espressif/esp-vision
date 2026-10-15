@@ -35,4 +35,8 @@ void usb_serial_jtag_tx_strn(const char *str, size_t len);
 // when no terminal is attached).
 size_t usb_serial_jtag_tx_strn_count(const char *str, size_t len);
 
+// One bounded FIFO write for the EV-MUX endpoint scheduler. Returns 0 when
+// the hardware FIFO cannot currently accept bytes; never waits for the host.
+size_t usb_serial_jtag_tx_some(const char *str, size_t len);
+
 #endif // MICROPY_INCLUDED_ESP32_USB_SERIAL_JTAG_H

@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "device_identity.h"
 #include "py/objlist.h"
 #include "py/runtime.h"
 #include "py/mphal.h"
@@ -140,15 +141,14 @@ MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_network_country_obj, 0, 1, network_count
 
 mp_obj_t mod_network_hostname(size_t n_args, const mp_obj_t *args) {
     if (n_args == 0) {
-        return mp_obj_new_str_from_cstr(mod_network_hostname_data);
+        return mp_obj_new_str_from_cstr(esp_vision_hostname());
     } else {
         size_t len;
         const char *str = mp_obj_str_get_data(args[0], &len);
-        if (len > MICROPY_PY_NETWORK_HOSTNAME_MAX_LEN) {
-            mp_raise_ValueError(NULL);
+        const char *hostname = esp_vision_hostname();
+        if (len != strlen(hostname) || memcmp(str, hostname, len) != 0) {
+            mp_raise_ValueError(MP_ERROR_TEXT("hostname is defined by device identity"));
         }
-        memcpy(mod_network_hostname_data, str, len);
-        mod_network_hostname_data[len] = 0;
         return mp_const_none;
     }
 }

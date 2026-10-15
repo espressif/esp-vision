@@ -1,0 +1,11 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+#pragma once
+
+typedef int esp_err_t;
+
+#define ESP_OK (0)
+#define ESP_FAIL (-1)

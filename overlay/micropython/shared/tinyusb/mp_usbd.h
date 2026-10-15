@@ -78,8 +78,27 @@ static inline void mp_usbd_init_tud(void) {
 }
 
 // Serialize tud_task execution across tasks (recursive mutex, see mp_usbd.c).
+// Initialize it on the main task before TinyUSB or the EV transport starts.
+void mp_usbd_lock_init(void);
 void mp_usbd_lock(void);
 void mp_usbd_unlock(void);
+
+#if MICROPY_HW_USB_CDC
+// EV-MUX CDC state helpers. The state/read operations serialize with TinyUSB
+// callbacks and use USB configuration state, independent of the host's DTR bit.
+void mp_usbd_cdc_transport_endpoint_state(bool *present,
+                                          bool *mounted,
+                                          bool *ready);
+void mp_usbd_cdc_transport_rx_state(bool filter_generation,
+                                    bool *mounted,
+                                    uint32_t *generation,
+                                    bool *generation_valid);
+size_t mp_usbd_cdc_transport_rx_read(uint32_t expected_generation,
+                                     void *buffer,
+                                     size_t capacity);
+bool mp_usbd_cdc_transport_rx_restart(uint32_t *generation_out);
+void mp_usbd_cdc_transport_clear_rx_if_unmounted(void);
+#endif
 
 // Run the TinyUSB device task
 void mp_usbd_task(void);
@@ -113,6 +132,7 @@ void mp_usbd_task_callback(mp_sched_node_t *node);
 static inline void mp_usbd_init(void) {
     // Without runtime USB support, this can be a thin wrapper wrapper around tusb_init()
     // which is called in the below helper function.
+    mp_usbd_lock_init();
     MICROPY_HW_TINYUSB_LL_INIT();
     mp_usbd_init_tud();
 }

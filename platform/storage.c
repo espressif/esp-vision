@@ -5,6 +5,7 @@
  */
 
 #include "storage.h"
+#include "storage_safety.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -64,6 +65,7 @@ static sdmmc_card_t *s_sdcard;
 static SemaphoreHandle_t s_sdcard_mutex;
 static BYTE s_sdcard_pdrv = FF_DRV_NOT_USED;
 static uint8_t s_sdcard_sector_cache[ESP_VISION_STORAGE_BLOCK_SIZE] __attribute__((aligned(4)));
+static esp_err_t esp_vision_storage_mount_sdcard(void);
 #endif
 
 static bool esp_vision_storage_flash_range_valid(uint32_t address, size_t len)
@@ -149,7 +151,14 @@ esp_err_t esp_vision_storage_flash_write(uint32_t address, const void *buffer, s
 
 esp_err_t esp_vision_storage_flash_sync(void)
 {
-    return s_flash_partition == NULL ? ESP_ERR_INVALID_STATE : ESP_OK;
+    if (s_flash_partition == NULL || s_flash_mutex == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (xSemaphoreTake(s_flash_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+    xSemaphoreGive(s_flash_mutex);
+    return ESP_OK;
 }
 
 uint32_t esp_vision_storage_flash_block_count(void)
@@ -160,6 +169,11 @@ uint32_t esp_vision_storage_flash_block_count(void)
 bool esp_vision_storage_flash_is_mounted(void)
 {
     return s_flash_mounted;
+}
+
+bool esp_vision_storage_flash_is_present(void)
+{
+    return s_flash_partition != NULL;
 }
 
 bool esp_vision_storage_sdcard_is_mounted(void)
@@ -445,9 +459,48 @@ esp_err_t esp_vision_storage_sdcard_write(uint64_t address, const void *buffer, 
 
 esp_err_t esp_vision_storage_sdcard_sync(void)
 {
-    return esp_vision_storage_sdcard_block_count() == 0
-           ? ESP_ERR_INVALID_STATE
-           : ESP_OK;
+#if MICROPY_HW_ENABLE_SDCARD && SOC_SDMMC_HOST_SUPPORTED
+    if (esp_vision_storage_sdcard_block_count() == 0 ||
+            esp_vision_storage_sdcard_lock() != ESP_OK) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    esp_err_t ret = sdmmc_get_status(s_sdcard);
+    esp_vision_storage_sdcard_unlock();
+    return ret;
+#else
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+esp_err_t esp_vision_storage_refresh_volume(esp_vision_storage_volume_t volume)
+{
+    if (volume == ESP_VISION_STORAGE_VOLUME_FLASH) {
+        if (!s_flash_mounted || s_flash_fs == NULL || s_flash_drive[0] == '\0') {
+            return ESP_ERR_INVALID_STATE;
+        }
+        FRESULT result = f_mount(NULL, s_flash_drive, 0);
+        if (result != FR_OK) {
+            return ESP_FAIL;
+        }
+        result = f_mount(s_flash_fs, s_flash_drive, 1);
+        return result == FR_OK ? ESP_OK : ESP_FAIL;
+    }
+#if MICROPY_HW_ENABLE_SDCARD && SOC_SDMMC_HOST_SUPPORTED
+    if (volume == ESP_VISION_STORAGE_VOLUME_SD) {
+        if (!s_sdcard_mounted || s_sdcard == NULL || esp_vision_storage_sdcard_sync() != ESP_OK) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        esp_err_t ret = esp_vfs_fat_sdcard_unmount(ESP_VISION_SDCARD_MOUNT_PATH, s_sdcard);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+        s_sdcard = NULL;
+        s_sdcard_mounted = false;
+        s_sdcard_pdrv = FF_DRV_NOT_USED;
+        return esp_vision_storage_mount_sdcard();
+    }
+#endif
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 static DSTATUS esp_vision_storage_disk_initialize(BYTE pdrv)
@@ -525,12 +578,39 @@ static void esp_vision_storage_unregister_flash(void)
     }
 }
 
+static bool esp_vision_storage_flash_partition_read(void *context,
+                                                    size_t offset,
+                                                    uint8_t *buffer,
+                                                    size_t length)
+{
+    const esp_partition_t *partition = context;
+    if (partition == NULL || offset > UINT32_MAX) {
+        return false;
+    }
+    return esp_partition_read(partition, (uint32_t)offset, buffer, length) == ESP_OK;
+}
+
+// A factory-created FFAT partition may be initialized only when its complete
+// contents are still erased. FR_NO_FILESYSTEM alone is not proof of a blank
+// volume: partially corrupted FAT metadata can produce the same result.
+static bool esp_vision_storage_flash_partition_erased(void)
+{
+    if (s_flash_partition == NULL || s_flash_partition->size > UINT32_MAX) {
+        return false;
+    }
+    return esp_vision_storage_partition_erased(s_flash_partition->size,
+                                               s_flash_erase_cache,
+                                               sizeof(s_flash_erase_cache),
+                                               esp_vision_storage_flash_partition_read,
+                                               (void *)s_flash_partition);
+}
+
 static esp_err_t esp_vision_storage_register_flash_vfs(void)
 {
     s_flash_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
                                                  ESP_PARTITION_SUBTYPE_ANY,
                                                  "ffat");
-    bool allow_format = s_flash_partition != NULL;
+    bool factory_ffat_partition = s_flash_partition != NULL;
     if (s_flash_partition == NULL) {
         s_flash_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
                                                      ESP_PARTITION_SUBTYPE_ANY,
@@ -574,8 +654,13 @@ static esp_err_t esp_vision_storage_register_flash_vfs(void)
     }
 
     FRESULT result = f_mount(s_flash_fs, s_flash_drive, 1);
-    if ((result == FR_NO_FILESYSTEM || result == FR_INT_ERR) && allow_format) {
-        ESP_LOGW(TAG, "formatting unmountable ffat partition");
+    bool erased_factory_ffat = result == FR_NO_FILESYSTEM && factory_ffat_partition &&
+                               esp_vision_storage_flash_partition_erased();
+    if (esp_vision_storage_should_format_factory_ffat(result,
+                                                      FR_NO_FILESYSTEM,
+                                                      factory_ffat_partition,
+                                                      erased_factory_ffat)) {
+        ESP_LOGW(TAG, "initializing erased factory ffat partition");
         const MKFS_PARM options = {
             .fmt = FM_FAT | FM_SFD,
             .n_fat = 2,
@@ -587,6 +672,8 @@ static esp_err_t esp_vision_storage_register_flash_vfs(void)
         if (result == FR_OK) {
             result = f_mount(s_flash_fs, s_flash_drive, 1);
         }
+    } else if (result == FR_NO_FILESYSTEM || result == FR_INT_ERR) {
+        ESP_LOGE(TAG, "refusing to format non-blank or damaged Flash filesystem: %d", result);
     }
 
     if (result != FR_OK) {

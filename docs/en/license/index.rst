@@ -32,6 +32,10 @@ The following table lists the direct dependencies most relevant to redistributio
      - ``lib/micropython``
      - Python runtime and ESP32 port baseline
      - MIT
+   * - MicroPython execution and thread adaptations
+     - ``overlay/micropython/shared/runtime/pyexec.c``, ``overlay/micropython/ports/esp32/mpthreadport.c``
+     - Session origin capture and inheritance based on the pinned upstream files; original copyright and license headers retained
+     - MIT
    * - `micropython-ulab <https://github.com/v923z/micropython-ulab>`__ 6.12
      - ``lib/ulab``
      - Array and numerical computing
