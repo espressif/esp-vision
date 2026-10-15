@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="docs/_static/ESP-VISION_logo.svg" alt="ESP-VISION logo" width="100%" height="240">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/_static/ESP-VISION_logo_dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/_static/ESP-VISION_logo.svg">
+    <img src="docs/_static/ESP-VISION_logo_adaptive.svg" alt="ESP-VISION logo" width="960">
+  </picture>
 </p>
 
 # ESP-VISION
@@ -25,7 +29,11 @@ ESP-VISION 是面向乐鑫 SoC 的低代码端侧 AI 与计算机视觉框架，
 
 ## 方案架构
 
-![ESP-VISION 分层架构](docs/_static/esp-vision-architecture.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/_static/esp-vision-architecture.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/_static/esp-vision-architecture-light.svg">
+  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION 分层架构" width="960" height="730">
+</picture>
 
 各层的职责说明见 [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)。
 

@@ -19,6 +19,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Added theme-aware logos and architecture diagrams to both English and Chinese READMEs, with self-contained adaptive SVG fallbacks for GitLab renderers that strip picture sources, responsive 960-pixel logo sizing, and image backgrounds that keep text readable when site and browser themes differ.
+
 - Fixed NanoTrack model compatibility and ESP32-P4 inference crashes.
 - Fixed Windows QSTR preprocessing with ESP-IDF 6.1 by evaluating CMake generator expressions in compiler response files, including Mbed TLS header paths, and omitting empty include and definition entries.
 - Fixed the hardware-in-the-loop device checks intermittently failing with `ValueError: not enough values to unpack` by parsing a device answer only once its whole line has arrived.

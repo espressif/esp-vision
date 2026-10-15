@@ -1,0 +1,230 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="730" viewBox="0 0 960 730" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .theme-0 { fill: #0d1117; }
+      .theme-2 { fill: #eef2f6; }
+      .theme-3 { fill: #9aa7b4; }
+      .theme-5 { fill: #231d0d; stroke: #d4a72c; }
+      .theme-6 { fill: #f5e2a8; }
+      .theme-7 { fill: #33290f; stroke: #ffd43b; }
+      .theme-8 { fill: #fbeec0; }
+      .theme-9 { fill: #cdb670; }
+      .theme-10 { fill: #2a220f; stroke: #d4a72c; }
+      .theme-11 { fill: #fbeec0; }
+      .theme-12 { fill: #cdb670; }
+      .theme-14 { fill: #161b22; stroke: #3d444d; }
+      .theme-15 { fill: #dce3ea; }
+      .theme-16 { fill: #dce3ea; }
+      .theme-18 { fill: #13233a; stroke: #4b8bbe; }
+      .theme-19 { fill: #8ec2ee; }
+      .theme-20 { fill: #d6e7f7; }
+      .theme-21 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-23 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-25 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-27 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-29 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-31 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-33 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-36 { fill: #0e2a23; stroke: #2ea58a; }
+      .theme-37 { fill: #7fd4ba; }
+      .theme-38 { fill: #d4efe5; }
+      .theme-39 { fill: #143c31; stroke: #3cbf9f; }
+      .theme-41 { fill: #143c31; stroke: #3cbf9f; }
+      .theme-43 { fill: #143c31; stroke: #3cbf9f; }
+      .theme-45 { fill: #143c31; stroke: #3cbf9f; }
+      .theme-47 { fill: #143c31; stroke: #3cbf9f; }
+      .theme-49 { fill: #143c31; stroke: #3cbf9f; }
+      .theme-52 { fill: #221634; stroke: #9b6dd6; }
+      .theme-53 { fill: #c5a8ec; }
+      .theme-54 { fill: #e9def8; }
+      .theme-55 { fill: #2f1e4a; stroke: #ab82e0; }
+      .theme-57 { fill: #2f1e4a; stroke: #ab82e0; }
+      .theme-59 { fill: #2f1e4a; stroke: #ab82e0; }
+      .theme-61 { fill: #2f1e4a; stroke: #ab82e0; }
+      .theme-64 { fill: #13233a; stroke: #4b8bbe; }
+      .theme-65 { fill: #8ec2ee; }
+      .theme-66 { fill: #d6e7f7; }
+      .theme-67 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-69 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-71 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-74 { fill: #2d1712; stroke: #e0735a; }
+      .theme-75 { fill: #f0a892; }
+      .theme-76 { fill: #f8e2da; }
+      .theme-77 { fill: #40211a; stroke: #ec8a6e; }
+      .theme-79 { fill: #40211a; stroke: #ec8a6e; }
+      .theme-81 { fill: #40211a; stroke: #ec8a6e; }
+      .theme-83 { fill: #40211a; stroke: #ec8a6e; }
+      .theme-85 { fill: #40211a; stroke: #ec8a6e; }
+      .theme-87 { fill: #40211a; stroke: #ec8a6e; }
+      .theme-90 { fill: #2d1216; stroke: #d4485a; }
+      .theme-91 { fill: #ef9aa6; }
+      .theme-92 { fill: #f8dde1; }
+      .theme-93 { fill: #3f1a20; stroke: #e0606f; }
+      .theme-95 { fill: #3f1a20; stroke: #e0606f; }
+      .theme-97 { fill: #3f1a20; stroke: #e0606f; }
+      .theme-100 { fill: #260f13; stroke: #b03a48; }
+      .theme-101 { fill: #efb3bc; }
+      .theme-102 { fill: #efb3bc; }
+      .theme-103 { fill: #38151b; stroke: #d4596a; }
+      .theme-104 { fill: #fae3e7; }
+      .theme-105 { fill: #38151b; stroke: #d4596a; }
+      .theme-106 { fill: #fae3e7; }
+      .theme-107 { fill: #dba0a9; }
+      .theme-108 { fill: #38151b; stroke: #d4596a; }
+      .theme-109 { fill: #fae3e7; }
+      .theme-110 { fill: #dba0a9; }
+    }
+  </style>
+  <!-- background -->
+  <rect class="theme-0" width="960" height="730" fill="#ffffff"/>
+
+  <!-- ===== top bar ===== -->
+  <g>
+    <text class="theme-2" x="22" y="35" font-size="18" font-weight="700" fill="#1f2328">ESP-<tspan class="theme-3" fill="#59636e" font-weight="400">VISION</tspan></text>
+  </g>
+
+  <!-- ===== Application band : Python yellow ===== -->
+  <g>
+    <rect class="theme-5" x="16" y="60" width="928" height="96" rx="8" fill="#fffbea" stroke="#9a7209" stroke-width="1.5"/>
+    <text class="theme-6" x="116" y="113" font-size="15" font-weight="700" fill="#604600" text-anchor="middle">Application</text>
+
+    <rect class="theme-7" x="230" y="78" width="320" height="60" rx="6" fill="#fff3c4" stroke="#9a7209"/>
+    <text class="theme-8" x="390" y="103" font-size="13" font-weight="600" fill="#604600" text-anchor="middle">MicroPython App Scripts</text>
+    <text class="theme-9" x="390" y="122" font-size="11" fill="#705500" text-anchor="middle">example/ &#183; /lib &#183; frozen packages</text>
+
+    <rect class="theme-10" x="580" y="78" width="330" height="60" rx="6" fill="#fff7d6" stroke="#9a7209" stroke-dasharray="5 4"/>
+    <text class="theme-11" x="745" y="103" font-size="13" font-weight="600" fill="#604600" text-anchor="middle">VSCode Host Tool / Web IDE</text>
+    <text class="theme-12" x="745" y="122" font-size="11" fill="#705500" text-anchor="middle">(separate repository)</text>
+  </g>
+
+  <!-- ===== Service & Framework band : neutral shell ===== -->
+  <g>
+    <rect class="theme-14" x="16" y="172" width="928" height="430" rx="8" fill="#f6f8fa" stroke="#b7c0ca" stroke-width="1.5"/>
+    <text class="theme-15" x="116" y="378" font-size="15" font-weight="700" fill="#303842" text-anchor="middle">Service &amp;</text>
+    <text class="theme-16" x="116" y="398" font-size="15" font-weight="700" fill="#303842" text-anchor="middle">Framework</text>
+
+    <!-- Python API Bindings : Python blue -->
+    <g>
+      <rect class="theme-18" x="230" y="190" width="698" height="84" rx="6" fill="#edf5ff" stroke="#3975a8" stroke-dasharray="5 4"/>
+      <text class="theme-19" x="579" y="210" font-size="12.5" font-weight="600" fill="#24577f" text-anchor="middle">Python API Bindings (modules/)</text>
+      <g class="theme-20" font-size="12" fill="#234f73" text-anchor="middle">
+        <rect class="theme-21" x="265" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <text x="305" y="245">sensor</text>
+        <rect class="theme-23" x="355" y="224" width="120" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <text x="415" y="245">image / ImageIO</text>
+        <rect class="theme-25" x="485" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <text x="525" y="245">display</text>
+        <rect class="theme-27" x="575" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <text x="610" y="245">espdl</text>
+        <rect class="theme-29" x="655" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <text x="695" y="245">tflite</text>
+        <rect class="theme-31" x="745" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <text x="780" y="245">h264</text>
+        <rect class="theme-33" x="825" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <text x="860" y="245">rtsp</text>
+      </g>
+    </g>
+
+    <!-- Vision Library (imlib) : emerald -->
+    <g>
+      <rect class="theme-36" x="230" y="290" width="300" height="150" rx="6" fill="#edf9f3" stroke="#28866d" stroke-dasharray="5 4"/>
+      <text class="theme-37" x="380" y="310" font-size="12.5" font-weight="600" fill="#18624b" text-anchor="middle">Vision Library (imlib)</text>
+      <g class="theme-38" font-size="11.5" fill="#18533f" text-anchor="middle">
+        <rect class="theme-39" x="237" y="322" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <text x="306" y="341">Drawing / Filters</text>
+        <rect class="theme-41" x="385" y="322" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <text x="454" y="341">Color Tracking</text>
+        <rect class="theme-43" x="237" y="360" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <text x="306" y="379">Feature Detection</text>
+        <rect class="theme-45" x="385" y="360" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <text x="454" y="379">QR Code</text>
+        <rect class="theme-47" x="237" y="398" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <text x="306" y="417">Barcode (ZXing)</text>
+        <rect class="theme-49" x="385" y="398" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d"/>
+        <text x="454" y="417">AprilTag</text>
+      </g>
+    </g>
+
+    <!-- AI Inference : violet -->
+    <g>
+      <rect class="theme-52" x="542" y="290" width="190" height="150" rx="6" fill="#f6f0fc" stroke="#8655b5" stroke-dasharray="5 4"/>
+      <text class="theme-53" x="637" y="310" font-size="12.5" font-weight="600" fill="#653b90" text-anchor="middle">AI Inference</text>
+      <g class="theme-54" font-size="10.8" fill="#56317d" text-anchor="middle">
+        <rect class="theme-55" x="552" y="322" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf"/>
+        <text x="637" y="338">ESP-DL Runtime</text>
+        <rect class="theme-57" x="552" y="352" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf"/>
+        <text x="637" y="368">TFLite Micro</text>
+        <rect class="theme-59" x="552" y="382" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf"/>
+        <text x="637" y="398">.espdl / .tflite Models</text>
+        <rect class="theme-61" x="552" y="412" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf"/>
+        <text x="637" y="428">Detect / Classify / Pose</text>
+      </g>
+    </g>
+
+    <!-- Runtime : Python blue -->
+    <g>
+      <rect class="theme-64" x="744" y="290" width="184" height="150" rx="6" fill="#edf5ff" stroke="#3975a8" stroke-dasharray="5 4"/>
+      <text class="theme-65" x="836" y="310" font-size="12.5" font-weight="600" fill="#24577f" text-anchor="middle">Runtime</text>
+      <g class="theme-66" font-size="11.5" fill="#234f73" text-anchor="middle">
+        <rect class="theme-67" x="754" y="322" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <text x="836" y="341">MicroPython v1.28.0</text>
+        <rect class="theme-69" x="754" y="360" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <text x="836" y="379">ESP-VISION Overlay</text>
+        <rect class="theme-71" x="754" y="398" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3"/>
+        <text x="836" y="417">ulab</text>
+      </g>
+    </g>
+
+    <!-- Platform Services : Espressif coral -->
+    <g>
+      <rect class="theme-74" x="230" y="456" width="420" height="130" rx="6" fill="#fff3ed" stroke="#be6047" stroke-dasharray="5 4"/>
+      <text class="theme-75" x="440" y="476" font-size="12.5" font-weight="600" fill="#923b24" text-anchor="middle">Platform Services (platform/)</text>
+      <g class="theme-76" font-size="11.5" fill="#80371f" text-anchor="middle">
+        <rect class="theme-77" x="238" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <text x="302" y="507">Preview (USB CDC)</text>
+        <rect class="theme-79" x="376" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <text x="440" y="507">JPEG Codec</text>
+        <rect class="theme-81" x="514" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <text x="578" y="507">Display Layer</text>
+        <rect class="theme-83" x="238" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <text x="302" y="545">SD Card</text>
+        <rect class="theme-85" x="376" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <text x="440" y="545">USB MSC</text>
+        <rect class="theme-87" x="514" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047"/>
+        <text x="578" y="545">Boot / Soft-reset</text>
+      </g>
+    </g>
+
+    <!-- Board Backends : Espressif red -->
+    <g>
+      <rect class="theme-90" x="666" y="456" width="262" height="130" rx="6" fill="#fff0f2" stroke="#b54255" stroke-dasharray="5 4"/>
+      <text class="theme-91" x="797" y="476" font-size="12.5" font-weight="600" fill="#943044" text-anchor="middle">Board Backends (boards/)</text>
+      <g class="theme-92" font-size="11.5" fill="#82283b" text-anchor="middle">
+        <rect class="theme-93" x="676" y="488" width="242" height="30" rx="5" fill="#fbdde3" stroke="#bd5264"/>
+        <text x="797" y="507" font-size="11">Camera (V4L2 + PPA / esp32-camera)</text>
+        <rect class="theme-95" x="676" y="526" width="116" height="30" rx="5" fill="#fbdde3" stroke="#bd5264"/>
+        <text x="734" y="545">Display</text>
+        <rect class="theme-97" x="802" y="526" width="116" height="30" rx="5" fill="#fbdde3" stroke="#bd5264"/>
+        <text x="860" y="545">SD Card</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ===== Environment & Dependency band : Espressif red ===== -->
+  <g>
+    <rect class="theme-100" x="16" y="614" width="928" height="96" rx="8" fill="#fff0f3" stroke="#ac3c50" stroke-width="1.5"/>
+    <text class="theme-101" x="116" y="657" font-size="15" font-weight="700" fill="#8d2d40" text-anchor="middle">Environment &amp;</text>
+    <text class="theme-102" x="116" y="677" font-size="15" font-weight="700" fill="#8d2d40" text-anchor="middle">Dependency</text>
+
+    <rect class="theme-103" x="230" y="634" width="200" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60"/>
+    <text class="theme-104" x="330" y="667" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle">ESP-IDF</text>
+
+    <rect class="theme-105" x="440" y="634" width="300" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60"/>
+    <text class="theme-106" x="590" y="657" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle">ESP Component Registry</text>
+    <text class="theme-107" x="590" y="676" font-size="10.5" fill="#943448" text-anchor="middle">esp_video &#183; esp32-camera &#183; ESP-DL &#183; esp-tflite-micro</text>
+
+    <rect class="theme-108" x="750" y="634" width="178" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60"/>
+    <text class="theme-109" x="839" y="657" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle">ESP32 SoCs</text>
+    <text class="theme-110" x="839" y="676" font-size="10.5" fill="#943448" text-anchor="middle">P4 &#183; S3 &#183; S31</text>
+  </g>
+</svg>
