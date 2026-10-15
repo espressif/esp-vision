@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="docs/_static/ESP-VISION_logo.svg" alt="ESP-VISION logo" width="100%" height="240">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/_static/ESP-VISION_logo_dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/_static/ESP-VISION_logo.svg">
+    <img src="docs/_static/ESP-VISION_logo_adaptive.svg" alt="ESP-VISION logo" width="960">
+  </picture>
 </p>
 
 # ESP-VISION
@@ -25,7 +29,11 @@ ESP-VISION is a Low-Code Edge AI & Computer Vision Framework for Espressif SoCs.
 
 ## Architecture
 
-![ESP-VISION layered architecture](docs/_static/esp-vision-architecture.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/_static/esp-vision-architecture.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/_static/esp-vision-architecture-light.svg">
+  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION layered architecture" width="960" height="730">
+</picture>
 
 See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html) for the role of each layer.
 
