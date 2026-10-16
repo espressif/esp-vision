@@ -89,7 +89,9 @@ extern void mp_usbd_cdc_transport_clear_rx_if_unmounted(void);
 #define EV_CONTROL_FILE_READ_MAX (384)
 #define EV_CONTROL_VM_QUEUE_LEN (2)
 #define EV_CONTROL_REPL_INPUT_MAX (EV_CONTROL_REPL_RX_MAX - 1)
-#define EV_CONTROL_TRANSPORT_TASK_STACK_SIZE (8 * 1024)
+// Control dispatch nests JSON parsing, network request hashing and IDF crypto
+// calls. Both IDF 5.5 and 6.1 overflow an 8 KiB stack on network.configure.
+#define EV_CONTROL_TRANSPORT_TASK_STACK_SIZE (16 * 1024)
 #define EV_CONTROL_TRANSPORT_TASK_PRIORITY (ESP_TASK_PRIO_MIN + 2)
 #define EV_CONTROL_TRANSPORT_PUMP_MS (2)
 #define EV_CONTROL_RX_CHUNK_MAX (256)
