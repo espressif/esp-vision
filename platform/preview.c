@@ -50,7 +50,6 @@ void esp_vision_preview_init0(void)
     esp_vision_preview_deinit();
     s_preview_seq = 0;
     s_last_usj_flush_ms = 0;
-    ev_channel_init0();
 }
 
 static esp_err_t esp_vision_preview_write_frame(const image_t *img, const uint8_t *jpeg_buf, size_t jpeg_size)
@@ -94,9 +93,10 @@ esp_err_t esp_vision_preview_flush(const image_t *img)
         }
         s_last_usj_flush_ms = now_ms;
     }
-    // Skip the encode when the sink is congested: the frame would be dropped
-    // whole at write time anyway.
-    if (ev_mux_stream_congested(EV_STREAM_USER)) {
+    // No owner, no available bounded pool, or a congested sink means this
+    // frame cannot be queued; avoid spending time encoding a JPEG that would
+    // be dropped before its first byte is sent.
+    if (!ev_mux_preview_available(EV_STREAM_USER)) {
         ev_mux_record_tx_drop();
         return ESP_OK;
     }
@@ -109,7 +109,8 @@ esp_err_t esp_vision_preview_flush(const image_t *img)
                         "failed to encode jpeg");
 
     ret = esp_vision_preview_write_frame(img, jpeg_buf, jpeg_size);
-    if ((ret == ESP_ERR_INVALID_STATE) || (ret == ESP_ERR_TIMEOUT)) {
+    if ((ret == ESP_ERR_INVALID_STATE) || (ret == ESP_ERR_TIMEOUT) ||
+            (ret == ESP_ERR_INVALID_SIZE) || (ret == ESP_ERR_NO_MEM)) {
         return ESP_OK;
     }
     return ret;

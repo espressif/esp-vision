@@ -168,4 +168,23 @@ size_t usb_serial_jtag_tx_strn_count(const char *str, size_t len) {
     return total;
 }
 
+// EV-MUX uses this one-chunk operation so a stalled host cannot hold the
+// shared transport worker inside the legacy write-all loop. The caller keeps
+// the unsent suffix and retries after yielding.
+size_t usb_serial_jtag_tx_some(const char *str, size_t len) {
+    if ((str == NULL) || (len == 0) || !usb_serial_jtag_ll_txfifo_writable()) {
+        return 0;
+    }
+    if (len > USB_SERIAL_JTAG_PACKET_SZ_BYTES) {
+        len = USB_SERIAL_JTAG_PACKET_SZ_BYTES;
+    }
+    terminal_connected = true;
+    size_t written = usb_serial_jtag_ll_write_txfifo((const uint8_t *)str, len);
+    if (written != 0) {
+        usb_serial_jtag_ll_txfifo_flush();
+        usb_serial_jtag_ll_ena_intr_mask(USB_SERIAL_JTAG_INTR_SERIAL_IN_EMPTY);
+    }
+    return written;
+}
+
 #endif // MICROPY_HW_ESP_USB_SERIAL_JTAG

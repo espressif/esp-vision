@@ -3,16 +3,16 @@ Integrating the Device Core npm Package
 
 :link_to_translation:`zh_CN:[中文]`
 
-For the SDK overview and complete API index, see `device-core/index <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/index.html>`_; application parameters/results/events are in `device-core/api <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/api.html>`_ and all advanced exports in `device-core/advanced <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/advanced.html>`_. This page retains runnable integration examples.
+For the SDK overview and complete API index, see :doc:`device-core/index <index>`; application parameters/results/events are in :doc:`device-core/api <api>` and all advanced exports in :doc:`device-core/advanced <advanced>`. This page retains runnable integration examples.
 
-This page targets host developers connecting an IDE, Agent, CLI or custom host application to a device. ``@esp-vision/device-core`` is the shared UI-independent library. Hosts supply physical byte connections without copying the reference Python client or implementing another protocol stack. See `communication/wire-protocol <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/communication/wire-protocol.html>`_ for framing and `communication/interfaces <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/communication/interfaces.html>`_ for physical interfaces.
+This page targets host developers connecting an IDE, Agent, CLI or custom host application to a device. ``@esp-vision/device-core`` is the shared UI-independent library. Hosts supply physical byte connections without copying the reference Python client or implementing another protocol stack. See :doc:`communication/wire-protocol <../communication/wire-protocol>` for framing and :doc:`communication/interfaces <../communication/interfaces>` for physical interfaces.
 
 Source, versions and installation
 ---------------------------------
 
 Device Core is maintained in ``host/device-core/`` in the ESP-VISION firmware repository. ``host/`` contains code running on the host, not firmware modules. IDE and Agent are npm consumers; Agent MCP mappings, model providers and plugins remain in their independent project. Protocol changes should align firmware, Core, documentation and tests in one MR.
 
-The package has its own version, independent of firmware and IDE versions. The initial public target is ``@esp-vision/device-core@0.1.0``, supporting EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Registry installation is available only after publication succeeds; a dry run or an open MR does not publish a package.
+The package has its own version, independent of firmware and IDE versions. The published ``@esp-vision/device-core@0.1.0`` release supports EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Install this version directly from the public npm registry; a dry run or an open MR alone does not establish publication of future versions.
 
 .. code-block:: console
 
@@ -136,7 +136,7 @@ Call ``connectSerial()`` from a user click; ``requestPort`` requires a secure co
      }
    }
 
-Browser networking uses a binary WebSocket bridge with the same transport contract and ``role: 'tcp'``. Adapters must check WebSocket OPEN, bound ``bufferedAmount`` and report disconnection; calling ``send`` does not prove device receipt. UIs should subscribe to ``state`` and handle unexpected closure. See `communication/host-integration <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/communication/host-integration.html>`_ for bridging.
+Browser networking uses a binary WebSocket bridge with the same transport contract and ``role: 'tcp'``. Adapters must check WebSocket OPEN, bound ``bufferedAmount`` and report disconnection; calling ``send`` does not prove device receipt. UIs should subscribe to ``state`` and handle unexpected closure. See :doc:`communication/host-integration <../communication/host-integration>` for bridging.
 
 Files and interactive Python
 ----------------------------
@@ -159,7 +159,7 @@ These operations assume a connected ``device``. Receive output through ``device.
 
 ``python.execute`` accepts exactly one of ``source`` and ``path``. ``completion: 'wait'`` awaits the result; ``'start'`` returns a handle with a ``done`` Promise. Upload success and startup do not prove execution completion. Infinite programs need ``control({ action: 'stop' })``, continued receive processing and an execution result; a stop ACK does not prove resource cleanup.
 
-``files.list/read/write/remove/mkdir`` are the sole application file API. ``files.write`` accepts strings or ``Uint8Array``; it currently uses ``script.write`` chunked Base64/JSON RPC. This API migration does not implement high-throughput raw binary transfer. Reads and directory operations currently use framed REPL. The filesystem must be mounted and writable with temporary-file space. Terminal input, automated scripts and filesystem helpers share one interpreter. Core rejects conflicting automated operations with ``DEVICE_BUSY``; applications must not inject terminal input into a REPL held by an automated operation. See `communication/python-files <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/communication/python-files.html>`_ for details.
+``files.list/read/write/remove/mkdir`` are the sole application file API. ``files.write`` accepts strings or ``Uint8Array``; it currently uses ``script.write`` chunked Base64/JSON RPC. This API migration does not implement high-throughput raw binary transfer. Reads and directory operations currently use framed REPL. The filesystem must be mounted and writable with temporary-file space. Terminal input, automated scripts and filesystem helpers share one interpreter. Core rejects conflicting automated operations with ``DEVICE_BUSY``; applications must not inject terminal input into a REPL held by an automated operation. See :doc:`communication/python-files <../communication/python-files>` for details.
 
 Wi-Fi configuration and status
 ------------------------------
@@ -219,7 +219,7 @@ Preview, logs and capture
 
 ``imageView`` and ``systemLog`` are host UI objects. ``on`` returns an unsubscribe function. Image events and capture results contain raw JPEG bytes; UIs do not parse EV-MUX again. Core checks session and epoch before dispatch. Device programs trigger preview using ``img.flush()`` and frames may be dropped under congestion. Camera capture needs an executable VM.
 
-``capture({ source: 'screen', format: 'jpeg' })`` calls dedicated ``debug.capture_screen`` and returns JPEG encoded from the last submitted LCD RGB565 frame. It runs in the VM task without camera calls or screen changes. An absent LCD returns ``NOT_SUPPORTED``; an uninitialized display or absent valid frame returns ``DISPLAY_NOT_READY``. It never falls back to the camera. Core reports unsupported capability on older firmware. High-throughput raw binary upload remains unimplemented. Hardware testing uses ``npm run test:hardware`` with ``--screen-output`` to display a pattern and save a screenshot; see `communication/validation <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/communication/validation.html>`_.
+``capture({ source: 'screen', format: 'jpeg' })`` calls dedicated ``debug.capture_screen`` and returns JPEG encoded from the last submitted LCD RGB565 frame. It runs in the VM task without camera calls or screen changes. An absent LCD returns ``NOT_SUPPORTED``; an uninitialized display or absent valid frame returns ``DISPLAY_NOT_READY``. It never falls back to the camera. Core reports unsupported capability on older firmware. High-throughput raw binary upload remains unimplemented. Hardware testing uses ``npm run test:hardware`` with ``--screen-output`` to display a pattern and save a screenshot; see :doc:`communication/validation <../communication/validation>`.
 
 Reset, flashing and publication
 -------------------------------
@@ -232,11 +232,11 @@ Reset, flashing and publication
 
 Core coordinates a new ready epoch and REPL barrier for soft reset. Inspect current state after timeout/cancellation rather than replaying business operations. Hard reset and downloader entry invalidate the link; an acknowledged request does not prove the rebooted device is online.
 
-ROM flashing remains a separate lifecycle under ``@esp-vision/device-core/firmware``. Hosts inject a ROM loader, approved images, chip/partition constraints and reset policy. Core ships no images and does not carry ROM download commands over EV-MUX. ``control({ action: 'bootloader' })`` only requests downloader entry; it does not flash. See `communication/interfaces <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/communication/interfaces.html>`_ for physical handoff.
+ROM flashing remains a separate lifecycle under ``@esp-vision/device-core/firmware``. Hosts inject a ROM loader, approved images, chip/partition constraints and reset policy. Core ships no images and does not carry ROM download commands over EV-MUX. ``control({ action: 'bootloader' })`` only requests downloader entry; it does not flash. See :doc:`communication/interfaces <../communication/interfaces>` for physical handoff.
 
-Package source, protocol tests and release automation are maintained together under ``host/device-core/``. IDE and Agent consume pinned published npm versions without long-lived source copies. SDK-only changes run JS tests, schema/package checks and publication dry runs without a firmware build matrix. Package releases are independent of firmware versions; publication jobs and ``npm view`` establish registry availability. Version/capability negotiation and hardware validation still determine actual compatibility; see `communication/validation <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/communication/validation.html>`_ for acceptance evidence.
+Package source, protocol tests and release automation are maintained together under ``host/device-core/``. IDE and Agent consume pinned published npm versions without long-lived source copies. SDK-only changes run JS tests, schema/package checks and publication dry runs without a firmware build matrix. Package releases are independent of firmware versions; publication jobs and ``npm view`` establish registry availability. Version/capability negotiation and hardware validation still determine actual compatibility; see :doc:`communication/validation <../communication/validation>` for acceptance evidence.
 
 Firmware update application entry
 ------------------------------------------
 
-Use ``device.firmware.check({ catalog })`` and ``device.firmware.update({ release, openLoader, ... })`` for the application workflow. See :doc:`api` for complete catalog, cancellation and reset contracts. Direct FirmwareFlashSession remains available to loader adapters.
+Use ``device.firmware.check()`` to fetch the official release feed and per-version metadata automatically; ``catalog`` is an optional override for custom sources. Use ``device.firmware.update({ release, openLoader, ... })`` to install a selected compatible release. The packaged CLI supplies its Node ROM adapter internally; CLI users do not configure a loader script. JavaScript hosts provide ``openLoader`` for their own serial/Web Serial environment. See :doc:`api` for complete catalog, cancellation and reset contracts. Direct FirmwareFlashSession remains available to loader adapters.

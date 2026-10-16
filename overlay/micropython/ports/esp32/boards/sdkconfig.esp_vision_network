@@ -1,0 +1,8 @@
+# EV-MUX TCP binds the STA address; do not advertise it on AP/Ethernet netifs.
+CONFIG_MDNS_PREDEF_NETIF_STA=y
+CONFIG_MDNS_PREDEF_NETIF_AP=n
+CONFIG_MDNS_PREDEF_NETIF_ETH=n
+CONFIG_MDNS_MAX_INTERFACES=1
+
+# Reserve DHCP option space for a full 63-byte hostname plus other options.
+CONFIG_LWIP_DHCP_OPTIONS_LEN=255

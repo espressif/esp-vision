@@ -9,12 +9,15 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "esp_err.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void ev_stdio_init0(void);
+esp_err_t ev_stdio_init0(void);
 void ev_stdio_start_transport(void);
+void ev_stdio_vm_reset_begin(void);
 void ev_stdio_set_mux_enabled(bool enabled);
 bool ev_stdio_mux_enabled(void);
 

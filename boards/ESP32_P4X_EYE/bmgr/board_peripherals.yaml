@@ -20,7 +20,9 @@ peripherals:
         spi_port: SPI2_HOST
         mosi_io_num: 16
         sclk_io_num: 17
-        max_transfer_sz: 19200
+        # Two queued transfers need bounce buffers on IDF versions without
+        # direct PSRAM DMA. Bound internal RAM use while Wi-Fi/TCP are active.
+        max_transfer_sz: 4800
 
   - name: ledc_backlight
     type: ledc

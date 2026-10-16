@@ -12,3 +12,6 @@
 
 esp_err_t esp_vision_usb_auto_download_init(void);
 void esp_vision_usb_auto_download_line_state(bool dtr, bool rts);
+
+// Shared synchronous restart path for Python and deferred USB requests.
+void esp_vision_restart(bool download_mode);

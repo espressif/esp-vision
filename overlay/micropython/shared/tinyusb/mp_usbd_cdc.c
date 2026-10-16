@@ -36,6 +36,7 @@
 #include "freertos/task.h"
 
 #include "ev_stdio.h"
+#include "ev_cdc_rx.h"
 #include "usb_auto_download.h"
 
 // EV-MUX congestion counters (debug.info "transport.stats"), indexed by
@@ -48,6 +49,79 @@ extern ringbuf_t cdc_stdin_ringbuf;
 
 static uint8_t cdc_itf_pending; // keep track of cdc interfaces which need attention to poll
 static int8_t cdc_connected_flush_delay = 0;
+static uint32_t cdc_rx_generation_tags[EV_CDC_RX_RING_CAPACITY];
+static ev_cdc_rx_state_t cdc_rx_state = {
+    .generation = 1,
+    .mounted = false,
+    .mount_seen = false,
+    .dtr = false,
+    .valid = true,
+};
+
+static void mp_usbd_cdc_transport_ring_clear(void) {
+    cdc_stdin_ringbuf.iget = cdc_stdin_ringbuf.iput = 0;
+}
+
+static void mp_usbd_cdc_transport_flush_fifo(void *context) {
+    uint8_t itf = (uint8_t)(uintptr_t)context;
+    if (itf < 8) {
+        cdc_itf_pending &= (uint8_t)~(1u << itf);
+        // TinyUSB implements this as a constant-time FIFO clear and OUT
+        // endpoint rearm. It is safe here because all callbacks run under the
+        // serialized TinyUSB task lock.
+        if (tusb_inited()) {
+            tud_cdc_n_read_flush(itf);
+        }
+    }
+}
+
+static void mp_usbd_cdc_transport_flush_rx(void *context) {
+    mp_usbd_cdc_transport_ring_clear();
+    mp_usbd_cdc_transport_flush_fifo(context);
+}
+
+static void mp_usbd_cdc_transport_sync_bus(bool mounted) {
+    (void)ev_cdc_rx_bus_state(&cdc_rx_state, mounted,
+                              mp_usbd_cdc_transport_flush_rx, (void *)(uintptr_t)0);
+}
+
+static bool mp_usbd_cdc_transport_rx_storage_valid(void) {
+    if (cdc_stdin_ringbuf.size != EV_CDC_RX_RING_CAPACITY) {
+        cdc_rx_state.valid = false;
+        return false;
+    }
+    return cdc_rx_state.valid;
+}
+
+// TinyUSB invokes these callbacks from its serialized task. A successful
+// configuration mount is a new physical RX generation even when a bus reset
+// skipped tud_umount_cb(); it runs before the host can send the next bulk packet.
+void tud_mount_cb(void) {
+    (void)ev_cdc_rx_bus_mount(&cdc_rx_state,
+                              mp_usbd_cdc_transport_flush_rx, (void *)(uintptr_t)0);
+}
+
+void tud_umount_cb(void) {
+    (void)ev_cdc_rx_bus_unmount(&cdc_rx_state,
+                                mp_usbd_cdc_transport_flush_rx, (void *)(uintptr_t)0);
+}
+
+void mp_usbd_cdc_transport_endpoint_state(bool *present,
+                                          bool *mounted,
+                                          bool *ready) {
+    mp_usbd_lock();
+    bool initialized = tusb_inited();
+    if (present != NULL) {
+        *present = initialized && tud_connected();
+    }
+    if (mounted != NULL) {
+        *mounted = initialized && tud_mounted();
+    }
+    if (ready != NULL) {
+        *ready = initialized && tud_cdc_ready();
+    }
+    mp_usbd_unlock();
+}
 
 uintptr_t mp_usbd_cdc_poll_interfaces(uintptr_t poll_flags) {
     uintptr_t ret = 0;
@@ -105,26 +179,148 @@ void mp_usbd_cdc_transport_pump(void) {
     mp_usbd_unlock();
 }
 
+// Compatibility helper for callers that need a full reset. Link open must use
+// generation filtering instead so a first packet received in the same USB pump
+// is retained.
+void mp_usbd_cdc_transport_clear_rx(void) {
+    mp_usbd_lock();
+    mp_usbd_cdc_transport_ring_clear();
+    mp_usbd_cdc_transport_flush_fifo((void *)(uintptr_t)0);
+    mp_usbd_unlock();
+}
+
+void mp_usbd_cdc_transport_rx_state(bool filter_generation,
+                                    bool *mounted_out,
+                                    uint32_t *generation,
+                                    bool *generation_valid) {
+    mp_usbd_lock();
+    bool mounted = tusb_inited() && tud_mounted();
+    mp_usbd_cdc_transport_sync_bus(mounted);
+    bool valid = mp_usbd_cdc_transport_rx_storage_valid();
+    if (filter_generation && mounted && valid) {
+        (void)ev_cdc_rx_ring_filter(cdc_stdin_ringbuf.buf,
+                                    cdc_rx_generation_tags,
+                                    cdc_stdin_ringbuf.size,
+                                    &cdc_stdin_ringbuf.iget,
+                                    &cdc_stdin_ringbuf.iput,
+                                    true,
+                                    cdc_rx_state.generation);
+    } else if (!mounted || !valid) {
+        mp_usbd_cdc_transport_ring_clear();
+    }
+    if (mounted_out != NULL) {
+        *mounted_out = mounted && valid;
+    }
+    if (generation != NULL) {
+        *generation = cdc_rx_state.generation;
+    }
+    if (generation_valid != NULL) {
+        *generation_valid = valid;
+    }
+    mp_usbd_unlock();
+}
+
+size_t mp_usbd_cdc_transport_rx_read(uint32_t expected_generation,
+                                     void *buffer,
+                                     size_t capacity) {
+    if ((buffer == NULL) || (capacity == 0)) {
+        return 0;
+    }
+    mp_usbd_lock();
+    bool mounted = tusb_inited() && tud_mounted();
+    mp_usbd_cdc_transport_sync_bus(mounted);
+    bool valid = mp_usbd_cdc_transport_rx_storage_valid();
+    if (!valid || !mounted) {
+        mp_usbd_cdc_transport_ring_clear();
+        mp_usbd_unlock();
+        return 0;
+    }
+
+    (void)ev_cdc_rx_ring_filter(cdc_stdin_ringbuf.buf,
+                                cdc_rx_generation_tags,
+                                cdc_stdin_ringbuf.size,
+                                &cdc_stdin_ringbuf.iget,
+                                &cdc_stdin_ringbuf.iput,
+                                true,
+                                cdc_rx_state.generation);
+    if (cdc_rx_state.generation != expected_generation) {
+        mp_usbd_unlock();
+        return 0;
+    }
+
+    size_t length = 0;
+    uint8_t *bytes = (uint8_t *)buffer;
+    while ((length < capacity) && (cdc_stdin_ringbuf.iget != cdc_stdin_ringbuf.iput)) {
+        bytes[length++] = (uint8_t)ringbuf_get(&cdc_stdin_ringbuf);
+    }
+    mp_usbd_unlock();
+    return length;
+}
+
+bool mp_usbd_cdc_transport_rx_restart(uint32_t *generation_out) {
+    mp_usbd_lock();
+    bool mounted = tusb_inited() && tud_mounted();
+    mp_usbd_cdc_transport_sync_bus(mounted);
+    bool valid = mounted && mp_usbd_cdc_transport_rx_storage_valid() &&
+                 ev_cdc_rx_restart(&cdc_rx_state,
+                                   mp_usbd_cdc_transport_flush_rx,
+                                   (void *)(uintptr_t)0);
+    if (valid) {
+        if (generation_out != NULL) {
+            *generation_out = cdc_rx_state.generation;
+        }
+    }
+    mp_usbd_unlock();
+    return valid;
+}
+
+void mp_usbd_cdc_transport_clear_rx_if_unmounted(void) {
+    mp_usbd_lock();
+    bool mounted = tusb_inited() && tud_mounted();
+    mp_usbd_cdc_transport_sync_bus(mounted);
+    if (!mounted || !mp_usbd_cdc_transport_rx_storage_valid()) {
+        mp_usbd_cdc_transport_flush_rx((void *)(uintptr_t)0);
+    }
+    mp_usbd_unlock();
+}
+
 void MICROPY_WRAP_TUD_CDC_RX_CB(tud_cdc_rx_cb)(uint8_t itf) {
     // consume pending USB data immediately to free usb buffer and keep the endpoint from stalling.
     // in case the ringbuffer is full, mark the CDC interface that need attention later on for polling
+    bool mounted = tud_mounted();
+    mp_usbd_cdc_transport_sync_bus(mounted);
     cdc_itf_pending &= ~(1 << itf);
+    bool storage_valid = mp_usbd_cdc_transport_rx_storage_valid();
     for (uint32_t bytes_avail = tud_cdc_n_available(itf); bytes_avail > 0; --bytes_avail) {
-        if (ringbuf_free(&cdc_stdin_ringbuf)) {
+        if (!mounted || !storage_valid) {
+            (void)tud_cdc_read_char();
+        } else if (ringbuf_free(&cdc_stdin_ringbuf)) {
             int data_char = tud_cdc_read_char();
             #if MICROPY_KBD_EXCEPTION
             // When EV-MUX owns the byte stream, 0x03 may be framed payload
             // (repl.signal); pass it through and let the parser deliver it.
             if ((data_char == mp_interrupt_char) && !ev_stdio_mux_enabled_flag) {
                 // Clear only the CDC input buffer.
-                cdc_stdin_ringbuf.iget = cdc_stdin_ringbuf.iput = 0;
+                mp_usbd_cdc_transport_ring_clear();
                 // and stop
                 mp_sched_keyboard_interrupt();
             } else {
-                ringbuf_put(&cdc_stdin_ringbuf, data_char);
+                (void)ev_cdc_rx_ring_put(cdc_stdin_ringbuf.buf,
+                                         cdc_rx_generation_tags,
+                                         cdc_stdin_ringbuf.size,
+                                         &cdc_stdin_ringbuf.iget,
+                                         &cdc_stdin_ringbuf.iput,
+                                         (uint8_t)data_char,
+                                         cdc_rx_state.generation);
             }
             #else
-            ringbuf_put(&cdc_stdin_ringbuf, data_char);
+            (void)ev_cdc_rx_ring_put(cdc_stdin_ringbuf.buf,
+                                     cdc_rx_generation_tags,
+                                     cdc_stdin_ringbuf.size,
+                                     &cdc_stdin_ringbuf.iget,
+                                     &cdc_stdin_ringbuf.iput,
+                                     (uint8_t)data_char,
+                                     cdc_rx_state.generation);
             #endif
         } else {
             ++ev_transport_rx_ring_full[1];
@@ -226,6 +422,30 @@ mp_uint_t mp_usbd_cdc_tx_strn_anytask(const char *str, mp_uint_t len) {
     return i;
 }
 
+// Single nonblocking CDC FIFO write for the EV-MUX endpoint scheduler. This
+// avoids the task-safe write-all helper's timeout loop monopolizing the TX
+// worker when a host stops reading.
+size_t mp_usbd_cdc_tx_some_anytask(const char *str, size_t len) {
+    if ((str == NULL) || (len == 0)) {
+        return 0;
+    }
+    mp_usbd_lock();
+    if (!tusb_inited() || !tud_cdc_ready()) {
+        mp_usbd_unlock();
+        return 0;
+    }
+    size_t available = tud_cdc_write_available();
+    if (len > available) {
+        len = available;
+    }
+    size_t written = (len != 0) ? tud_cdc_write(str, (uint32_t)len) : 0;
+    if (written != 0) {
+        tud_cdc_write_flush();
+    }
+    mp_usbd_unlock();
+    return written;
+}
+
 void MICROPY_WRAP_TUD_SOF_CB(tud_sof_cb)(uint32_t frame_count) {
     if (--cdc_connected_flush_delay < 0) {
         // Finished on-connection delay, disable SOF interrupt again.
@@ -252,14 +472,21 @@ static void usbd_cdc_run_bootloader_task(mp_sched_node_t *node) {
 
 void MICROPY_WRAP_TUD_CDC_LINE_STATE_CB(tud_cdc_line_state_cb)(uint8_t itf, bool dtr, bool rts) {
     #if MICROPY_HW_USB_CDC && !MICROPY_EXCLUDE_SHARED_TINYUSB_USBD_CDC
+    if ((itf == 0) && ev_cdc_rx_dtr_update(&cdc_rx_state, dtr) &&
+        !ev_stdio_mux_enabled()) {
+        // Preserve raw-REPL close behavior. DTR does not change framed RX
+        // generation, link readiness, or session ownership.
+        mp_usbd_cdc_transport_ring_clear();
+        mp_usbd_cdc_transport_flush_fifo((void *)(uintptr_t)itf);
+    }
+    #endif
+    #if MICROPY_HW_USB_CDC && !MICROPY_EXCLUDE_SHARED_TINYUSB_USBD_CDC
     if (dtr) {
         // A host application has started to open the cdc serial port.
         // Drop stale bytes retained in the tx fifo from a previous (possibly
         // torn) session — but only when EV-MUX is off. With the mux on, sink
-        // readiness is DTR-gated, so nothing can be staged in the fifo while
-        // no host is connected; clearing here would race the connect-edge
-        // hello / route.changed frames emitted by the transport task and
-        // sometimes erase them.
+        // writes are valid without DTR, so clearing here could erase queued
+        // protocol replies or events.
         if (!ev_stdio_mux_enabled()) {
             tud_cdc_write_clear();
         }

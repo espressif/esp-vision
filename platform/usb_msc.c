@@ -15,6 +15,7 @@
 #include "tusb.h"
 
 #include "storage.h"
+#include "storage_writer.h"
 
 #define ESP_VISION_MSC_FLASH_LUN (0)
 #if MICROPY_HW_ENABLE_SDCARD && SOC_SDMMC_HOST_SUPPORTED
@@ -24,8 +25,6 @@
 #else
 #define ESP_VISION_MSC_LUN_COUNT (1)
 #endif
-
-static bool s_msc_ejected[ESP_VISION_MSC_LUN_COUNT];
 
 static bool esp_vision_msc_lun_valid(uint8_t lun)
 {
@@ -47,7 +46,7 @@ static uint32_t esp_vision_msc_block_count(uint8_t lun)
 
 static bool esp_vision_msc_lun_ready(uint8_t lun)
 {
-    if (!esp_vision_msc_lun_valid(lun) || s_msc_ejected[lun]) {
+    if (!esp_vision_msc_lun_valid(lun) || !esp_vision_msc_writer_host_ready(lun)) {
         return false;
     }
     if (lun == ESP_VISION_MSC_FLASH_LUN) {
@@ -164,17 +163,7 @@ bool tud_msc_start_stop_cb(uint8_t lun, uint8_t power_condition, bool start, boo
     if (!esp_vision_msc_lun_valid(lun)) {
         return false;
     }
-    if (load_eject) {
-        if (!start) {
-            if (esp_vision_msc_sync(lun) != ESP_OK) {
-                return false;
-            }
-        }
-        s_msc_ejected[lun] = !start;
-    } else if (!start && esp_vision_msc_sync(lun) != ESP_OK) {
-        return false;
-    }
-    return true;
+    return esp_vision_msc_writer_host_start_stop(lun, start, load_eject);
 }
 
 bool tud_msc_is_writable_cb(uint8_t lun)
@@ -185,8 +174,12 @@ bool tud_msc_is_writable_cb(uint8_t lun)
 int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buffer, uint32_t bufsize)
 {
     uint64_t address = ((uint64_t)lba * ESP_VISION_STORAGE_BLOCK_SIZE) + offset;
-    if (!esp_vision_msc_lun_ready(lun) ||
-            esp_vision_msc_read(lun, address, buffer, bufsize) != ESP_OK) {
+    if (!esp_vision_msc_lun_ready(lun) || !esp_vision_msc_writer_host_io_begin(lun)) {
+        return -1;
+    }
+    esp_err_t ret = esp_vision_msc_read(lun, address, buffer, bufsize);
+    if (!esp_vision_msc_writer_host_io_finish(lun, false) || ret != ESP_OK) {
+        esp_vision_msc_writer_host_io_failed(lun);
         return -1;
     }
 
@@ -196,16 +189,26 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buff
 int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset, uint8_t *buffer, uint32_t bufsize)
 {
     uint64_t address = ((uint64_t)lba * ESP_VISION_STORAGE_BLOCK_SIZE) + offset;
-    return esp_vision_msc_lun_ready(lun) &&
-           esp_vision_msc_write(lun, address, buffer, bufsize) == ESP_OK
-           ? (int32_t)bufsize
-           : -1;
+    if (!esp_vision_msc_lun_ready(lun) || !esp_vision_msc_writer_host_io_begin(lun)) {
+        return -1;
+    }
+    esp_err_t ret = esp_vision_msc_write(lun, address, buffer, bufsize);
+    if (!esp_vision_msc_writer_host_io_finish(lun, ret == ESP_OK) || ret != ESP_OK) {
+        esp_vision_msc_writer_host_io_failed(lun);
+        return -1;
+    }
+    return (int32_t)bufsize;
 }
 
 void tud_msc_write10_complete_cb(uint8_t lun)
 {
     if (esp_vision_msc_lun_valid(lun)) {
-        (void)esp_vision_msc_sync(lun);
+        uint32_t sync_sequence = 0;
+        if (!esp_vision_msc_writer_host_write_sync_begin(lun, &sync_sequence) || sync_sequence == 0) {
+            return;
+        }
+        bool sync_succeeded = esp_vision_msc_sync(lun) == ESP_OK;
+        (void)esp_vision_msc_writer_host_write_complete(lun, sync_sequence, sync_succeeded);
     }
 }
 

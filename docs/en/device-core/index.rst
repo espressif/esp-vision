@@ -22,7 +22,7 @@ Installation and compatibility
    # Optional Node LAN discovery adapter:
    npm install multicast-dns
 
-The version above is the publication target; installation requires it to have been published. Node.js 22 is the host baseline. Browsers require a bundler/import map and a host-provided Web Serial or binary WebSocket transport. Only EV-MUX v4 is supported; a v3 device must update firmware. Package, firmware and IDE versions are independent.
+Version ``0.1.0`` is published on the public npm registry; the command above installs that exact SDK release. Node.js 22 is the host baseline. Browsers require a bundler/import map and a host-provided Web Serial or binary WebSocket transport. Only EV-MUX v4 is supported; a v3 device must update firmware. Package, firmware and IDE versions are independent.
 
 Architecture and starting point
 --------------------------------------------------------------
@@ -51,7 +51,7 @@ The root exports only ``createDevice``. It returns a device object; there is no 
      try { await device.disconnect() } finally { off() }
    }
 
-For complete runnable Node TCP and browser Web Serial adapters, see :doc:`integration`. For packet layouts, routing and ownership, see `index <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/communication/index.html>`_; hardware verification uses the shared entry point described in `validation <https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/communication/validation.html>`_.
+For complete runnable Node TCP and browser Web Serial adapters, see :doc:`integration`. For packet layouts, routing and ownership, see :doc:`index <../communication/index>`; hardware verification uses the shared entry point described in :doc:`validation <../communication/validation>`.
 
 Licensing
 ----------------------------------------

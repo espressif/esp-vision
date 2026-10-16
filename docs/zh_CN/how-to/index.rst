@@ -13,4 +13,5 @@
    add-model
    train-espdet-pico
    add-board
+   ev-mux-v4
    agent-code-generation

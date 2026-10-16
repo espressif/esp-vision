@@ -22,7 +22,7 @@ Device Core 主机 SDK
    # Optional Node LAN discovery adapter:
    npm install multicast-dns
 
-上面的版本是发布目标，须在 npm 发布成功后才能安装。Node 主机基线为 Node.js 22；浏览器需要打包器/import map，并由宿主提供 Web Serial 或二进制 WebSocket 字节连接。仅支持 EV-MUX v4，v3 设备必须升级固件。包版本、固件版本与 IDE 版本相互独立。
+``0.1.0`` 已发布到公开 npm registry；上述命令安装这一固定 SDK 版本。Node 主机基线为 Node.js 22；浏览器需要打包器/import map，并由宿主提供 Web Serial 或二进制 WebSocket 字节连接。仅支持 EV-MUX v4，v3 设备必须升级固件。包版本、固件版本与 IDE 版本相互独立。
 
 架构与使用入口
 --------------------------------
@@ -51,7 +51,7 @@ Device Core 主机 SDK
      try { await device.disconnect() } finally { off() }
    }
 
-可直接运行的 Node TCP 与浏览器 Web Serial 适配示例见 :doc:`integration`。帧格式、路由、所有权见 `index <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/communication/index.html>`_，统一真机测试入口见 `validation <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/communication/validation.html>`_。
+可直接运行的 Node TCP 与浏览器 Web Serial 适配示例见 :doc:`integration`。帧格式、路由、所有权见 :doc:`index <../communication/index>`，统一真机测试入口见 :doc:`validation <../communication/validation>`。
 
 许可证
 ----------------------------------------

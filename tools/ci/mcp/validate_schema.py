@@ -25,11 +25,20 @@ AGENT_GUIDE_REQUIRED_TEXT = (
     'MicroPython v1.28.0',
     'requirements.txt',
     'all-in-one',
-    'USB-Serial-JTAG',
-    'script.write',
-    'script.run',
-    'repl.stdout',
     'EVTEST:OK',
+)
+COMMUNICATION_PAGES = (
+    'architecture', 'interfaces', 'sessions', 'wire-protocol',
+    'python-files', 'preview-debug', 'host-integration', 'device-core', 'validation',
+)
+COMMUNICATION_GUIDE_ID = 'communication/validation'
+COMMUNICATION_GUIDE_REQUIRED_TEXT = (
+    'host/device-core',
+    'createDevice()',
+    'test:hardware',
+    '--checks',
+    '--screen-output',
+    'debug.capture_screen',
 )
 
 
@@ -102,9 +111,24 @@ def _semantic_checks(pack: dict) -> list:
             if required not in body:
                 errors.append('{} missing required guidance text: {!r}'.format(
                     AGENT_GUIDE_ID, required))
-        if len(guide.get('codeBlocks', [])) < 2:
-            errors.append('{} must include target and host code blocks'.format(
+        if not guide.get('codeBlocks'):
+            errors.append('{} must include a target code block'.format(
                 AGENT_GUIDE_ID))
+    for page in COMMUNICATION_PAGES:
+        doc_id = 'communication/{}'.format(page)
+        if not docs.get(doc_id, {}).get('bodyMd'):
+            errors.append('missing required communication doc: {}'.format(doc_id))
+    communication = docs.get(COMMUNICATION_GUIDE_ID)
+    if communication is not None:
+        body = communication.get('bodyMd', '')
+        for required in COMMUNICATION_GUIDE_REQUIRED_TEXT:
+            if required not in body:
+                errors.append('{} missing required communication text: {!r}'.format(
+                    COMMUNICATION_GUIDE_ID, required))
+        # codeBlocks contains device Python only; host CLI examples remain in bodyMd.
+        if '```console\n' not in body or 'npm --prefix host/device-core run test:hardware --' not in body:
+            errors.append('{} must include the shared Core hardware CLI example'.format(
+                COMMUNICATION_GUIDE_ID))
     return errors
 
 

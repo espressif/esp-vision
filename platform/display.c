@@ -40,6 +40,8 @@
 
 #ifdef ESP_VISION_USE_BOARD_MANAGER
 
+static bool s_board_display_uses_spi;
+
 #ifdef CONFIG_ESP_BOARD_DEV_LEDC_CTRL_SUPPORT
 static const char *TAG = "esp_vision_display";
 static bool s_board_backlight_initialized;
@@ -123,6 +125,15 @@ esp_err_t esp_vision_board_display_init_panel(uint32_t width,
         goto fail;
     }
     s_board_display_initialized = true;
+
+    dev_display_lcd_config_t *config = NULL;
+    ret = esp_board_manager_get_device_config(ESP_BOARD_DEVICE_NAME_DISPLAY_LCD,
+                                              (void **)&config);
+    if ((ret != ESP_OK) || (config == NULL) || (config->sub_type == NULL)) {
+        ret = (ret == ESP_OK) ? ESP_ERR_INVALID_STATE : ret;
+        goto fail;
+    }
+    s_board_display_uses_spi = strcmp(config->sub_type, ESP_BOARD_DEVICE_LCD_SUB_TYPE_SPI) == 0;
 
     dev_display_lcd_handles_t *display = NULL;
     ret = esp_board_manager_get_device_handle(ESP_BOARD_DEVICE_NAME_DISPLAY_LCD,
@@ -240,6 +251,27 @@ static esp_err_t esp_vision_display_panel_disp_on_off(bool on)
     return (ret == ESP_ERR_NOT_SUPPORTED) ? ESP_OK : ret;
 }
 
+static esp_err_t esp_vision_display_submit_frame(void)
+{
+    esp_err_t ret = esp_lcd_panel_draw_bitmap(s_display.panel_handle,
+                                              0, 0, s_display.width, s_display.height,
+                                              s_display.framebuffer);
+#ifdef ESP_VISION_USE_BOARD_MANAGER
+    bool drain_io = s_board_display_uses_spi;
+#else
+    bool drain_io = s_display.io_handle != NULL;
+#endif
+    if (drain_io && (s_display.io_handle != NULL)) {
+        // Color transfers borrow the buffer asynchronously. A command-less
+        // parameter transaction drains queued DMA before reuse or capture.
+        esp_err_t drain_ret = esp_lcd_panel_io_tx_param(s_display.io_handle, -1, NULL, 0);
+        if (ret == ESP_OK) {
+            ret = drain_ret;
+        }
+    }
+    return ret;
+}
+
 void esp_vision_display_init0(void)
 {
     esp_vision_display_deinit();
@@ -297,7 +329,11 @@ esp_err_t esp_vision_display_init(uint32_t width, uint32_t height, uint32_t back
     s_display.height = height;
     s_display.backlight = esp_vision_display_clamp_backlight(backlight);
     esp_vision_board_display_set_backlight(s_display.backlight);
-    return esp_vision_display_clear(false);
+    ret = esp_vision_display_clear(false);
+    if (ret != ESP_OK) {
+        esp_vision_display_deinit();
+    }
+    return ret;
 }
 
 void esp_vision_display_deinit(void)
@@ -317,6 +353,27 @@ void esp_vision_display_deinit(void)
 bool esp_vision_display_is_ready(void)
 {
     return s_display.ready;
+}
+
+esp_err_t esp_vision_display_get_frame(image_t *frame)
+{
+    if (frame == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if ((ESP_VISION_LCD_WIDTH == 0) || (ESP_VISION_LCD_HEIGHT == 0)) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    if (!s_display.ready || (s_display.framebuffer == NULL)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    *frame = (image_t) {
+        .w = (int)s_display.width,
+        .h = (int)s_display.height,
+        .pixfmt = PIXFORMAT_RGB565,
+        .size = s_display.framebuffer_size,
+        .data = (uint8_t *)s_display.framebuffer,
+    };
+    return ESP_OK;
 }
 
 uint32_t esp_vision_display_get_width(void)
@@ -361,12 +418,7 @@ esp_err_t esp_vision_display_clear(bool display_off)
     }
 
     memset(s_display.framebuffer, 0, s_display.framebuffer_size);
-    return esp_lcd_panel_draw_bitmap(s_display.panel_handle,
-                                     0,
-                                     0,
-                                     s_display.width,
-                                     s_display.height,
-                                     s_display.framebuffer);
+    return esp_vision_display_submit_frame();
 }
 
 static void esp_vision_display_get_fit_transform(const image_t *img,
@@ -441,10 +493,5 @@ esp_err_t esp_vision_display_write(const image_t *img, const esp_vision_display_
                      NULL,
                      NULL);
 
-    return esp_lcd_panel_draw_bitmap(s_display.panel_handle,
-                                     0,
-                                     0,
-                                     s_display.width,
-                                     s_display.height,
-                                     s_display.framebuffer);
+    return esp_vision_display_submit_frame();
 }

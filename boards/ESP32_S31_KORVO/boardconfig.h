@@ -107,4 +107,16 @@
 #define ESP_VISION_SDCARD_CTRL_PIN                  (39)
 #define ESP_VISION_SDCARD_CTRL_ACTIVE_LEVEL         (0)
 
+/* EV-MUX v4 physical defaults and background Wi-Fi/TCP policy.
+ * Native/Hosted WLAN is enabled separately in the port/IDF configuration.
+ * Factory credentials apply only when no saved NVS profile exists.
+ */
+#define ESP_VISION_ENABLE_BACKGROUND_NETWORK       (1)
+#define ESP_VISION_WIFI_DEFAULT_SSID                ""
+#define ESP_VISION_WIFI_DEFAULT_PASSWORD            ""
+#define ESP_VISION_TRANSPORT_DEFAULT_SINK          "usb"
+#define ESP_VISION_TRANSPORT_FALLBACK_SINK         "usb"
+#define ESP_VISION_ENABLE_TCP_TRANSPORT            (1)
+#define ESP_VISION_TCP_PORT                        (3232)
+
 #endif /* ESP_VISION_BOARD_CONFIG_H */

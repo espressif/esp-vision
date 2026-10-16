@@ -3,16 +3,16 @@ Device Core npm 包对接
 
 :link_to_translation:`en:[English]`
 
-完整的 SDK 介绍与 API 索引见 `device-core/index <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/index.html>`_，应用 API 参数、返回值和事件见 `device-core/api <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/api.html>`_，所有高级导出见 `device-core/advanced <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/advanced.html>`_。本页保留可直接运行的接入示例。
+完整的 SDK 介绍与 API 索引见 :doc:`device-core/index <index>`，应用 API 参数、返回值和事件见 :doc:`device-core/api <api>`，所有高级导出见 :doc:`device-core/advanced <advanced>`。本页保留可直接运行的接入示例。
 
-本页面向把设备接入 IDE、Agent、CLI 或自定义主机应用 的主机开发者。``@esp-vision/device-core`` 是无 UI 的共享通信包；主机只提供物理字节连接，不需要复制参考 Python 客户端或实现第二套协议。完整帧格式见 `communication/wire-protocol <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/communication/wire-protocol.html>`_，物理接口见 `communication/interfaces <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/communication/interfaces.html>`_。
+本页面向把设备接入 IDE、Agent、CLI 或自定义主机应用 的主机开发者。``@esp-vision/device-core`` 是无 UI 的共享通信包；主机只提供物理字节连接，不需要复制参考 Python 客户端或实现第二套协议。完整帧格式见 :doc:`communication/wire-protocol <../communication/wire-protocol>`，物理接口见 :doc:`communication/interfaces <../communication/interfaces>`。
 
 源码、版本与安装
 ----------------
 
 Device Core 源码在 ESP-VISION 固件仓库的 ``host/device-core/`` 维护。``host/`` 表示运行在主机的代码，不是固件模块；IDE 与 Agent 是 npm 包的消费者，Agent 的 MCP、模型提供方和插件仍在独立项目维护。协议变更应在同一个 MR 对齐固件、Core、文档与测试。
 
-包使用独立版本，不与固件版本或 IDE 版本绑定。首个公开发布目标为 ``@esp-vision/device-core@0.1.0``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。包发布成功之后才可从 registry 安装，dry run 或创建 MR 不等于发布。
+包使用独立版本，不与固件版本或 IDE 版本绑定。已发布的 ``@esp-vision/device-core@0.1.0`` 只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。该版本可直接从公开 npm registry 安装；后续版本仍以实际发布结果为准，dry run 或创建 MR 不等于发布。
 
 .. code-block:: console
 
@@ -136,7 +136,7 @@ Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析�
      }
    }
 
-浏览器网络模式通过二进制 WebSocket 桥接，仍使用相同的 transport 契约与 ``role: 'tcp'``。适配器须检查 WebSocket OPEN、限制 ``bufferedAmount`` 并在断线时报告失败；调用 ``send`` 不能证明设备已收到数据。UI 应订阅 ``state`` 并处理意外断线，桥接细节见 `communication/host-integration <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/communication/host-integration.html>`_。
+浏览器网络模式通过二进制 WebSocket 桥接，仍使用相同的 transport 契约与 ``role: 'tcp'``。适配器须检查 WebSocket OPEN、限制 ``bufferedAmount`` 并在断线时报告失败；调用 ``send`` 不能证明设备已收到数据。UI 应订阅 ``state`` 并处理意外断线，桥接细节见 :doc:`communication/host-integration <../communication/host-integration>`。
 
 文件与交互式 Python
 -------------------
@@ -159,7 +159,7 @@ Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析�
 
 ``python.execute`` 的 ``source`` 与 ``path`` 二选一；``completion: 'wait'`` 等待结果，``'start'`` 返回包含 ``done`` Promise 的启动句柄。启动返回或上传成功不能替代执行完成证据。无限运行需 ``control({ action: 'stop' })``，保持接收并等待执行结果；停止 ACK 不能替代资源清理完成。
 
-``files.list/read/write/remove/mkdir`` 是唯一应用文件入口。``files.write`` 接收字符串或 ``Uint8Array``，目前仍使用 ``script.write`` 的 Base64/JSON 分块 RPC；此 API 整理尚未实现高速原始二进制传输。读取和目录操作当前使用 framed REPL。文件系统必须已挂载、允许写入且有临时文件空间。终端输入、自动脚本和文件操作共用一个解释器；Core 对冲突的自动操作返回 ``DEVICE_BUSY``，应用不能同时向自动操作使用的 REPL 注入终端输入。详细边界见 `communication/python-files <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/communication/python-files.html>`_。
+``files.list/read/write/remove/mkdir`` 是唯一应用文件入口。``files.write`` 接收字符串或 ``Uint8Array``，目前仍使用 ``script.write`` 的 Base64/JSON 分块 RPC；此 API 整理尚未实现高速原始二进制传输。读取和目录操作当前使用 framed REPL。文件系统必须已挂载、允许写入且有临时文件空间。终端输入、自动脚本和文件操作共用一个解释器；Core 对冲突的自动操作返回 ``DEVICE_BUSY``，应用不能同时向自动操作使用的 REPL 注入终端输入。详细边界见 :doc:`communication/python-files <../communication/python-files>`。
 
 Wi-Fi 配置与状态
 ----------------
@@ -219,7 +219,7 @@ Node 安装可选 ``multicast-dns`` peer 后使用：
 
 ``imageView`` 与 ``systemLog`` 是宿主 UI 对象。``on`` 返回取消订阅函数，图像事件和抓帧结果都包含原始 JPEG 字节，不需要 UI 再解析 EV-MUX。Core 分发前核验会话及 epoch；preview 由设备程序 ``img.flush()`` 触发，拥塞时允许丢帧。摄像头抓帧需要可执行 VM。
 
-``capture({ source: 'screen', format: 'jpeg' })`` 调用专用 ``debug.capture_screen``，返回 LCD 最后提交的 RGB565 帧编码的 JPEG；它在 VM 任务中运行，不调用摄像头或改变屏幕。无 LCD 返回 ``NOT_SUPPORTED``，未初始化/无有效帧返回 ``DISPLAY_NOT_READY``；不会回退到摄像头。旧固件缺少该能力时由 Core 报告不支持。高速原始二进制上传仍未实现。真机测试通过 ``npm run test:hardware`` 的 ``--screen-output`` 显示测试图案并保存抓屏，见 `communication/validation <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/communication/validation.html>`_。
+``capture({ source: 'screen', format: 'jpeg' })`` 调用专用 ``debug.capture_screen``，返回 LCD 最后提交的 RGB565 帧编码的 JPEG；它在 VM 任务中运行，不调用摄像头或改变屏幕。无 LCD 返回 ``NOT_SUPPORTED``，未初始化/无有效帧返回 ``DISPLAY_NOT_READY``；不会回退到摄像头。旧固件缺少该能力时由 Core 报告不支持。高速原始二进制上传仍未实现。真机测试通过 ``npm run test:hardware`` 的 ``--screen-output`` 显示测试图案并保存抓屏，见 :doc:`communication/validation <../communication/validation>`。
 
 复位、烧写与发布
 ----------------
@@ -232,11 +232,11 @@ Node 安装可选 ``multicast-dns`` peer 后使用：
 
 软复位由 Core 协调新的 ready epoch 和 REPL 屏障；超时或取消后先检查状态，不自动重放原业务。硬复位和进入下载模式会使原有链路失效，成功应答不等于设备已重新上线。
 
-ROM 烧写仍使用独立子路径 ``@esp-vision/device-core/firmware``；宿主注入 ROM loader、已批准镜像、芯片/分区约束和复位策略。Core 不附带镜像，不在 EV-MUX 上执行 ROM 下载协议。``control({ action: 'bootloader' })`` 只请求进入下载模式，不进行烧写。物理交接见 `communication/interfaces <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/communication/interfaces.html>`_。
+ROM 烧写仍使用独立子路径 ``@esp-vision/device-core/firmware``；宿主注入 ROM loader、已批准镜像、芯片/分区约束和复位策略。Core 不附带镜像，不在 EV-MUX 上执行 ROM 下载协议。``control({ action: 'bootloader' })`` 只请求进入下载模式，不进行烧写。物理交接见 :doc:`communication/interfaces <../communication/interfaces>`。
 
-包的源码、协议测试与发布流程在 ``host/device-core/`` 同仓维护；IDE、Agent 固定依赖发布到 npm 的版本，不长期复制源码。仅修改 SDK 时运行 JS 测试、schema/package 检查与发布 dry run，不应触发固件编译矩阵。发布与固件版本独立，正式 registry 可用性以发布 job 和 ``npm view`` 为准。协议能力仍需由版本/能力协商与真机测试确认，验收见 `communication/validation <https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/communication/validation.html>`_。
+包的源码、协议测试与发布流程在 ``host/device-core/`` 同仓维护；IDE、Agent 固定依赖发布到 npm 的版本，不长期复制源码。仅修改 SDK 时运行 JS 测试、schema/package 检查与发布 dry run，不应触发固件编译矩阵。发布与固件版本独立，正式 registry 可用性以发布 job 和 ``npm view`` 为准。协议能力仍需由版本/能力协商与真机测试确认，验收见 :doc:`communication/validation <../communication/validation>`。
 
 应用层固件更新入口
 ------------------------------------------
 
-应用流程使用 ``device.firmware.check({ catalog })`` 与 ``device.firmware.update({ release, openLoader, ... })``。完整目录、取消与复位契约见 :doc:`api`，底层 loader 适配仍可直接使用 FirmwareFlashSession。
+应用调用 ``device.firmware.check()`` 自动获取官方发布目录及各版本元数据；``catalog`` 仅用于覆盖为自定义源。通过 ``device.firmware.update({ release, openLoader, ... })`` 安装选定的兼容版本。包内 CLI 已提供 Node ROM 适配器，命令行用户无需配置 loader 脚本；JavaScript 宿主通过 ``openLoader`` 适配其串口/Web Serial 环境。完整目录、取消与复位契约见 :doc:`api`，底层 loader 适配仍可直接使用 FirmwareFlashSession。

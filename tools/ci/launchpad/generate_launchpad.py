@@ -230,6 +230,8 @@ def merge_board(board: str, target: str, tag: str, build_dir: str) -> str:
         check=True,
     )
     shutil.move(os.path.join(build_dir, bin_name), os.path.join(OUTPUT_DIR, bin_name))
+    from firmware_metadata import publish_update
+    publish_update(board, target, tag, build_dir, OUTPUT_DIR)
     return bin_name
 
 

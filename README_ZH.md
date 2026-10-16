@@ -29,6 +29,14 @@ ESP-VISION 是面向乐鑫 SoC 的低代码端侧 AI 与计算机视觉框架，
 - [中文](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/)
 - [English](https://docs.espressif.com/projects/esp-vision/en/latest/)
 
+## EV-MUX：主机通信
+
+EV-MUX v4 为 IDE、主机工具及独立 Agent 适配器提供发现、控制、带帧格式的 Python 交互和 JPEG 预览。开发板启用的 `usj`、`usb`、`uart`、`tcp` 链路共用唯一 owner 会话，由该会话同时拥有 user/debug 两条 stream。
+
+[通信系统与 EV-MUX](docs/zh_CN/communication/index.rst) 是详细说明入口，涵盖 [console/日志架构](docs/zh_CN/communication/architecture.rst)、[接口与板级配置](docs/zh_CN/communication/interfaces.rst)、[所有权与恢复](docs/zh_CN/communication/sessions.rst)、[线上协议](docs/zh_CN/communication/wire-protocol.rst)、文件、预览、Wi-Fi 配置及验收。
+
+v4 继续使用 `EVMUX/1` 帧格式。主机必须显式接管并保活，不支持 `route.bind`/`route.auto`。可用接口以运行时 `capabilities` 为准；当前 TCP 实现不提供认证或加密。
+
 ## 方案架构
 
 <picture>
@@ -38,6 +46,8 @@ ESP-VISION 是面向乐鑫 SoC 的低代码端侧 AI 与计算机视觉框架，
 </picture>
 
 IDE、Agent、CLI 和自定义工具共用 Device Core，通过 EV-MUX 与设备固件通信。各层职责见 [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)。
+
+[许可证清单](docs/zh_CN/license/index.rst)记录了上游组件与适配文件，包括用于 EV-MUX 会话隔离、保留 MIT 许可证的 MicroPython 执行与线程 overlay。
 
 ## 快速开始
 

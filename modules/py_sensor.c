@@ -7,7 +7,6 @@
 #include <string.h>
 
 #include "esp_err.h"
-#include "esp_heap_caps.h"
 
 #include "py/mphal.h"
 #include "py/obj.h"
@@ -37,21 +36,9 @@
 #define SENSOR_PIXFORMAT_RGB565    PIXFORMAT_RGB565
 #endif
 
-static uint8_t *s_snapshot_buf = NULL;
-static size_t s_snapshot_buf_size = 0;
-
 static void sensor_raise_esp_err(esp_err_t err)
 {
     mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("camera error: %s"), esp_err_to_name(err));
-}
-
-static void sensor_release_snapshot_buf(void)
-{
-    if (s_snapshot_buf != NULL) {
-        heap_caps_free(s_snapshot_buf);
-        s_snapshot_buf = NULL;
-    }
-    s_snapshot_buf_size = 0;
 }
 
 static void sensor_ensure_camera_ready(void)
@@ -66,21 +53,11 @@ static void sensor_ensure_camera_ready(void)
 
 static uint8_t *sensor_get_snapshot_buf(size_t frame_size)
 {
-    if ((s_snapshot_buf != NULL) && (s_snapshot_buf_size >= frame_size)) {
-        return s_snapshot_buf;
-    }
-
-    sensor_release_snapshot_buf();
-    s_snapshot_buf = heap_caps_malloc(frame_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (s_snapshot_buf == NULL) {
-        s_snapshot_buf = heap_caps_malloc(frame_size, MALLOC_CAP_8BIT);
-    }
-    if (s_snapshot_buf == NULL) {
+    uint8_t *pixels = NULL;
+    if (esp_vision_camera_get_snapshot_buffer(frame_size, &pixels) != ESP_OK) {
         mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate snapshot buffer"));
     }
-
-    s_snapshot_buf_size = frame_size;
-    return s_snapshot_buf;
+    return pixels;
 }
 
 static void sensor_drop_frame(uint8_t *pixels, size_t frame_size)
@@ -93,7 +70,7 @@ static void sensor_drop_frame(uint8_t *pixels, size_t frame_size)
 
 static mp_obj_t sensor_reset(void)
 {
-    sensor_release_snapshot_buf();
+    esp_vision_camera_release_snapshot_buffer();
     esp_vision_camera_init0();
     esp_err_t ret = esp_vision_camera_init();
     if (ret != ESP_OK) {
@@ -111,7 +88,7 @@ static mp_obj_t sensor_shutdown(size_t n_args, const mp_obj_t *args)
     }
 
     if (enable) {
-        sensor_release_snapshot_buf();
+        esp_vision_camera_release_snapshot_buffer();
         esp_vision_camera_deinit();
     } else {
         sensor_ensure_camera_ready();
@@ -122,11 +99,14 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(sensor_shutdown_obj, 0, 1, sensor_shu
 
 static mp_obj_t sensor_set_pixformat(mp_obj_t pixformat_in)
 {
+    uint32_t previous = esp_vision_camera_get_pixformat();
     esp_err_t ret = esp_vision_camera_set_pixformat((uint32_t)mp_obj_get_int(pixformat_in));
     if (ret != ESP_OK) {
         sensor_raise_esp_err(ret);
     }
-    sensor_release_snapshot_buf();
+    if (esp_vision_camera_get_pixformat() != previous) {
+        esp_vision_camera_release_snapshot_buffer();
+    }
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(sensor_set_pixformat_obj, sensor_set_pixformat);
@@ -139,11 +119,16 @@ static MP_DEFINE_CONST_FUN_OBJ_0(sensor_get_pixformat_obj, sensor_get_pixformat)
 
 static mp_obj_t sensor_set_framesize(mp_obj_t framesize_in)
 {
+    uint32_t previous_width = esp_vision_camera_get_width();
+    uint32_t previous_height = esp_vision_camera_get_height();
     esp_err_t ret = esp_vision_camera_set_framesize((esp_vision_camera_framesize_t)mp_obj_get_int(framesize_in));
     if (ret != ESP_OK) {
         sensor_raise_esp_err(ret);
     }
-    sensor_release_snapshot_buf();
+    if ((esp_vision_camera_get_width() != previous_width) ||
+            (esp_vision_camera_get_height() != previous_height)) {
+        esp_vision_camera_release_snapshot_buffer();
+    }
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(sensor_set_framesize_obj, sensor_set_framesize);

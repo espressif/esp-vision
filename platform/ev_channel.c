@@ -7,285 +7,113 @@
 
 #include <string.h>
 
-#include "esp_timer.h"
+#include "boardconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "py/mpconfig.h"
 #include "py/mphal.h"
 
-#if MICROPY_HW_ESP_USB_SERIAL_JTAG
-#include "usb_serial_jtag.h"
+#ifndef ESP_VISION_TRANSPORT_DEFAULT_SINK
+#define ESP_VISION_TRANSPORT_DEFAULT_SINK "usj"
 #endif
-
-#if MICROPY_HW_ENABLE_UART_REPL
-#include "uart.h"
-#endif
-
-#if MICROPY_HW_USB_CDC
-#include "shared/tinyusb/mp_usbd_cdc.h"
-#include "tusb.h"
-
-// Implemented in the overlay shared/tinyusb/mp_usbd_cdc.c. Unlike
-// mp_usbd_cdc_tx_strn it never touches MicroPython scheduler/thread state,
-// so frame writes are safe from any task (VM task, transport task, log hooks).
-extern mp_uint_t mp_usbd_cdc_tx_strn_anytask(const char *str, mp_uint_t len);
-#endif
-
-#include "boardconfig.h"
-
-// Both streams prefer USJ and auto-follow CDC DTR when USB-OTG is available.
-// A board may override this when its physical USB topology requires a fixed
-// route.
-#ifndef ESP_VISION_AUTO_CDC_ROUTE
-#define ESP_VISION_AUTO_CDC_ROUTE (MICROPY_HW_USB_CDC)
+#ifndef ESP_VISION_TRANSPORT_FALLBACK_SINK
+#define ESP_VISION_TRANSPORT_FALLBACK_SINK ESP_VISION_TRANSPORT_DEFAULT_SINK
 #endif
 
 typedef struct {
     const char *id;
-    bool (*ready)(void);
+    bool ready;
     ssize_t (*write)(const void *buf, size_t len);
-} ev_sink_t;
+} ev_local_sink_t;
 
-typedef struct {
-    const ev_sink_t *sink;
-    bool auto_route;
-} ev_route_t;
-
-static ev_route_t s_routes[EV_STREAM_MAX];
+static ev_link_ref_t s_owner_link;
+static bool s_has_owner;
+static const char *s_no_owner_sink = ESP_VISION_TRANSPORT_DEFAULT_SINK;
 static bool s_initialized;
 static ev_channel_route_changed_cb_t s_route_changed_cb;
-
-// Route state is accessed from the VM task (frame writes, boot init), the
-// EV transport task (poll_auto, RPC dispatch), and any task emitting hooked
-// ESP_LOG output. All accessors take this recursive mutex.
-// Lock ordering: the route lock may be held while taking a per-sink frame
-// mutex (ev_mux.c), never the other way around.
 static StaticSemaphore_t s_route_lock_buf;
 static SemaphoreHandle_t s_route_lock;
 
-static void ev_route_lock(void)
+static ssize_t ev_console_write(const void *buf, size_t len)
 {
-    if (s_route_lock == NULL) {
-        s_route_lock = xSemaphoreCreateRecursiveMutexStatic(&s_route_lock_buf);
-    }
-    xSemaphoreTakeRecursive(s_route_lock, portMAX_DELAY);
+    return (ssize_t)mp_hal_stdout_tx_strn((const char *)buf, (mp_uint_t)len);
 }
 
-static void ev_route_unlock(void)
-{
-    xSemaphoreGiveRecursive(s_route_lock);
-}
-
-static bool ev_sink_usj_ready(void)
-{
-#if MICROPY_HW_ESP_USB_SERIAL_JTAG
-    return true;
-#else
-    return false;
-#endif
-}
-
-static ssize_t ev_sink_usj_write(const void *buf, size_t len)
-{
-#if MICROPY_HW_ESP_USB_SERIAL_JTAG
-    return (ssize_t)usb_serial_jtag_tx_strn_count(buf, len);
-#else
-    (void)buf;
-    (void)len;
-    return -1;
-#endif
-}
-
-static bool ev_sink_cdc_ready(void)
-{
-#if MICROPY_HW_USB_CDC
-    return tusb_inited() && tud_cdc_connected();
-#else
-    return false;
-#endif
-}
-
-static bool ev_sink_cdc_present(void)
-{
-#if MICROPY_HW_USB_CDC
-    // "present" = the OTG interface is enumerated to a host (cable plugged);
-    // "ready" additionally requires the host to hold the port open (DTR).
-    // Routing only ever uses ready; present is informational (capabilities,
-    // transport.state, and the IDE's "OTG available" hint).
-    return tusb_inited() && tud_connected();
-#else
-    return false;
-#endif
-}
-
-static ssize_t ev_sink_cdc_write(const void *buf, size_t len)
-{
-#if MICROPY_HW_USB_CDC
-    if (!ev_sink_cdc_ready()) {
-        return -1;
-    }
-    return (ssize_t)mp_usbd_cdc_tx_strn_anytask(buf, len);
-#else
-    (void)buf;
-    (void)len;
-    return -1;
-#endif
-}
-
-static bool ev_sink_uart_ready(void)
-{
-#if MICROPY_HW_ENABLE_UART_REPL
-    return true;
-#else
-    return false;
-#endif
-}
-
-static ssize_t ev_sink_uart_write(const void *buf, size_t len)
-{
-#if MICROPY_HW_ENABLE_UART_REPL
-    return (ssize_t)uart_stdout_tx_strn(buf, len);
-#else
-    (void)buf;
-    (void)len;
-    return -1;
-#endif
-}
-
-static bool ev_sink_console_ready(void)
-{
-    return true;
-}
-
-static ssize_t ev_sink_console_write(const void *buf, size_t len)
-{
-    return (ssize_t)mp_hal_stdout_tx_strn(buf, len);
-}
-
-static bool ev_sink_null_ready(void)
-{
-    return true;
-}
-
-static ssize_t ev_sink_null_write(const void *buf, size_t len)
+static ssize_t ev_null_write(const void *buf, size_t len)
 {
     (void)buf;
     return (ssize_t)len;
 }
 
-static const ev_sink_t s_sinks[] = {
-    { "usj", ev_sink_usj_ready, ev_sink_usj_write },
-    { "cdc", ev_sink_cdc_ready, ev_sink_cdc_write },
-    { "uart", ev_sink_uart_ready, ev_sink_uart_write },
-    { "console", ev_sink_console_ready, ev_sink_console_write },
-    { "null", ev_sink_null_ready, ev_sink_null_write },
+static const ev_local_sink_t s_local_sinks[] = {
+    { "console", true, ev_console_write },
+    { "null", true, ev_null_write },
 };
 
-static const ev_sink_t *ev_sink_find(const char *id)
+static void ev_route_lock(void)
+{
+    if (s_route_lock == NULL) {
+        s_route_lock = xSemaphoreCreateMutexStatic(&s_route_lock_buf);
+    }
+    if (s_route_lock != NULL) {
+        xSemaphoreTake(s_route_lock, portMAX_DELAY);
+    }
+}
+
+static void ev_route_unlock(void)
+{
+    if (s_route_lock != NULL) {
+        xSemaphoreGive(s_route_lock);
+    }
+}
+
+static void ev_channel_ensure_init(void)
+{
+    if (!__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE)) {
+        ev_channel_init0();
+    }
+}
+
+static const ev_local_sink_t *ev_local_sink_find(const char *id)
 {
     if (id == NULL) {
         return NULL;
     }
-    for (size_t i = 0; i < (sizeof(s_sinks) / sizeof(s_sinks[0])); ++i) {
-        if (strcmp(id, s_sinks[i].id) == 0) {
-            return &s_sinks[i];
+    for (size_t i = 0; i < sizeof(s_local_sinks) / sizeof(s_local_sinks[0]); ++i) {
+        if (strcmp(id, s_local_sinks[i].id) == 0) {
+            return &s_local_sinks[i];
         }
     }
     if (strcmp(id, "none") == 0) {
-        return ev_sink_find("null");
+        return &s_local_sinks[1];
     }
     return NULL;
 }
 
-static bool ev_sink_present(const ev_sink_t *sink)
+static bool ev_channel_no_owner_link(const char *sink_id, ev_link_ref_t *out_link)
 {
-    if (sink == NULL) {
-        return false;
-    }
-    if (strcmp(sink->id, "cdc") == 0) {
-        return ev_sink_cdc_present();
-    }
-    return sink->ready();
-}
-
-static const ev_sink_t *ev_default_sink(const char *id)
-{
-    const ev_sink_t *sink = ev_sink_find(id);
-    if ((sink != NULL) && sink->ready()) {
-        return sink;
-    }
-    sink = ev_sink_find("usj");
-    if ((sink != NULL) && sink->ready()) {
-        return sink;
-    }
-    sink = ev_sink_find("cdc");
-    if ((sink != NULL) && sink->ready()) {
-        return sink;
-    }
-    return ev_sink_find("console");
-}
-
-// Called with the route lock held. The callback may write frames (taking a
-// per-sink mutex); it must not take the route lock from a different task.
-static void ev_channel_notify_route_changed(ev_stream_t stream, const char *reason)
-{
-    if ((s_route_changed_cb != NULL) && (stream < EV_STREAM_MAX) && (s_routes[stream].sink != NULL)) {
-        s_route_changed_cb(stream, s_routes[stream].sink->id, s_routes[stream].auto_route, reason);
-    }
-}
-
-// The single routing rule of contract v3: when the host holds the USB-OTG
-// port open (DTR), both streams live on CDC; otherwise both live on USJ.
-// No activation RPC, no lease, no heartbeat — DTR alone decides.
-static void ev_channel_auto_route_stream(ev_stream_t stream, const ev_sink_t *cdc)
-{
-    if ((stream >= EV_STREAM_MAX) || !s_routes[stream].auto_route) {
-        return;
-    }
-
-    const ev_sink_t *next = ev_default_sink("usj");
-    const ev_sink_t *current = s_routes[stream].sink;
-    if ((cdc != NULL) && cdc->ready()) {
-        next = cdc;
-    }
-    if ((next != NULL) && (next != current)) {
-        s_routes[stream].sink = next;
-        const char *reason = (next == cdc) ? "cdc_connected" : "cdc_disconnected";
-        if ((current != NULL) && (strcmp(current->id, "null") == 0)) {
-            reason = "auto";
-        }
-        ev_channel_notify_route_changed(stream, reason);
-    }
+    ev_transport_id_t id;
+    return ev_transport_id_from_name(sink_id, &id) &&
+           ev_transport_link_ref(id, EV_TRANSPORT_PHYSICAL_SLOT, out_link);
 }
 
 void ev_channel_init0(void)
 {
     ev_route_lock();
-    s_routes[EV_STREAM_USER].sink = ev_default_sink("usj");
-    s_routes[EV_STREAM_USER].auto_route = ESP_VISION_AUTO_CDC_ROUTE;
-    s_routes[EV_STREAM_DEBUG].sink = ev_default_sink("usj");
-    s_routes[EV_STREAM_DEBUG].auto_route = ESP_VISION_AUTO_CDC_ROUTE;
-    s_initialized = true;
-    ev_route_unlock();
-}
-
-static void ev_channel_ensure_init(void)
-{
-    if (!s_initialized) {
-        ev_channel_init0();
+    if (!__atomic_load_n(&s_initialized, __ATOMIC_RELAXED)) {
+        // Channel ownership is platform/session state and survives VM resets.
+        // Repeated initialization must not detach a live session from its route.
+        memset(&s_owner_link, 0, sizeof(s_owner_link));
+        s_has_owner = false;
+        s_no_owner_sink = ESP_VISION_TRANSPORT_DEFAULT_SINK;
+        __atomic_store_n(&s_initialized, true, __ATOMIC_RELEASE);
     }
+    ev_route_unlock();
 }
 
 void ev_channel_poll_auto(void)
 {
-    ev_channel_ensure_init();
-    ev_route_lock();
-#if ESP_VISION_AUTO_CDC_ROUTE
-    const ev_sink_t *cdc = ev_sink_find("cdc");
-    ev_channel_auto_route_stream(EV_STREAM_USER, cdc);
-    ev_channel_auto_route_stream(EV_STREAM_DEBUG, cdc);
-#endif
-    ev_route_unlock();
+    // v4 has no DTR-triggered route stealing. Retained as a no-op for older
+    // internal callers while all route changes move through ev_session.
 }
 
 void ev_channel_set_route_changed_cb(ev_channel_route_changed_cb_t callback)
@@ -295,151 +123,190 @@ void ev_channel_set_route_changed_cb(ev_channel_route_changed_cb_t callback)
     ev_route_unlock();
 }
 
-esp_err_t ev_channel_bind(ev_stream_t stream, const char *sink_id)
+esp_err_t ev_channel_set_owner_link(const ev_link_ref_t *link_or_null)
 {
     ev_channel_ensure_init();
-    if (stream >= EV_STREAM_MAX) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    ev_route_lock();
-    const ev_sink_t *sink = ev_sink_find(sink_id);
-    if (sink == NULL) {
-        ev_route_unlock();
-        return ESP_ERR_NOT_FOUND;
-    }
-    if (!sink->ready() && (strcmp(sink->id, "null") != 0)) {
-        ev_route_unlock();
+    if ((link_or_null != NULL) && !ev_transport_link_is_current(link_or_null)) {
         return ESP_ERR_INVALID_STATE;
     }
-    s_routes[stream].sink = sink;
-    s_routes[stream].auto_route = false;
-    ev_channel_notify_route_changed(stream, "manual");
+    ev_route_lock();
+    s_has_owner = link_or_null != NULL;
+    if (s_has_owner) {
+        s_owner_link = *link_or_null;
+    } else {
+        memset(&s_owner_link, 0, sizeof(s_owner_link));
+        s_no_owner_sink = ESP_VISION_TRANSPORT_FALLBACK_SINK;
+    }
+    ev_link_ref_t target;
+    bool has_target = s_has_owner ? (target = s_owner_link, true) :
+                      ev_channel_no_owner_link(s_no_owner_sink, &target);
+    const char *target_name = has_target ? ev_transport_name(target.transport_id) :
+                              (s_has_owner ? "null" : s_no_owner_sink);
+    ev_channel_route_changed_cb_t callback = s_route_changed_cb;
+    bool has_owner = s_has_owner;
     ev_route_unlock();
+
+    // Legacy callback is retained for internal consumers. v4 session events
+    // are emitted by ev_session and carry the shared transition identifier.
+    if (callback != NULL) {
+        callback(EV_STREAM_USER, target_name, false, has_owner ? "session_acquired" : "session_released");
+        callback(EV_STREAM_DEBUG, target_name, false, has_owner ? "session_acquired" : "session_released");
+    }
     return ESP_OK;
+}
+
+bool ev_channel_target_link(ev_stream_t stream, ev_link_ref_t *out_link)
+{
+    if ((stream >= EV_STREAM_MAX) || (out_link == NULL)) {
+        return false;
+    }
+    ev_channel_ensure_init();
+    ev_route_lock();
+    bool has_owner = s_has_owner;
+    ev_link_ref_t owner = s_owner_link;
+    const char *no_owner_sink = s_no_owner_sink;
+    ev_route_unlock();
+    if (has_owner) {
+        if (ev_transport_link_is_current(&owner)) {
+            *out_link = owner;
+            return true;
+        }
+        return false;
+    }
+    return ev_channel_no_owner_link(no_owner_sink, out_link);
+}
+
+static bool ev_channel_sink_link(const char *sink_id, uint8_t slot, ev_link_ref_t *out_link)
+{
+    ev_transport_id_t id;
+    return ev_transport_id_from_name(sink_id, &id) && ev_transport_link_ref(id, slot, out_link);
+}
+
+esp_err_t ev_channel_bind(ev_stream_t stream, const char *sink_id)
+{
+    (void)stream;
+    (void)sink_id;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 esp_err_t ev_channel_bind_auto(ev_stream_t stream)
 {
-    ev_channel_ensure_init();
-    if (stream >= EV_STREAM_MAX) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    ev_route_lock();
-    s_routes[stream].sink = ev_default_sink("usj");
-    s_routes[stream].auto_route = ESP_VISION_AUTO_CDC_ROUTE;
-    ev_channel_notify_route_changed(stream, "auto");
-    ev_route_unlock();
-    return ESP_OK;
+    (void)stream;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 const char *ev_channel_get(ev_stream_t stream)
 {
+    if (stream >= EV_STREAM_MAX) {
+        return "null";
+    }
     ev_channel_ensure_init();
     ev_route_lock();
-    const char *id = "null";
-    if ((stream < EV_STREAM_MAX) && (s_routes[stream].sink != NULL)) {
-        id = s_routes[stream].sink->id;
-    }
+    const char *name = s_has_owner ? ev_transport_name(s_owner_link.transport_id) : s_no_owner_sink;
     ev_route_unlock();
-    return id;
+    return name;
 }
 
 bool ev_channel_is_auto(ev_stream_t stream)
 {
-    ev_channel_ensure_init();
-    ev_route_lock();
-    bool auto_route = (stream < EV_STREAM_MAX) && s_routes[stream].auto_route;
-    ev_route_unlock();
-    return auto_route;
+    (void)stream;
+    return false;
 }
 
 bool ev_channel_ready(ev_stream_t stream)
 {
-    ev_channel_ensure_init();
-    ev_route_lock();
-    ev_channel_poll_auto();
-    bool ready = (stream < EV_STREAM_MAX) &&
-                 (s_routes[stream].sink != NULL) &&
-                 s_routes[stream].sink->ready();
-    ev_route_unlock();
-    return ready;
+    ev_link_ref_t target;
+    if (!ev_channel_target_link(stream, &target)) {
+        return false;
+    }
+    ev_transport_endpoint_state_t state;
+    ev_transport_endpoint_state(target.transport_id, target.slot, &state);
+    return state.ready;
+}
+
+bool ev_channel_sink_supported(const char *sink_id)
+{
+    ev_transport_id_t id;
+    if (!ev_transport_id_from_name(sink_id, &id)) {
+        return ev_local_sink_find(sink_id) != NULL;
+    }
+    ev_transport_endpoint_state_t state;
+    ev_transport_endpoint_state(id, EV_TRANSPORT_PHYSICAL_SLOT, &state);
+    return state.supported;
 }
 
 bool ev_channel_sink_ready(const char *sink_id)
 {
-    ev_channel_ensure_init();
-    ev_route_lock();
-    const ev_sink_t *sink = ev_sink_find(sink_id);
-    bool ready = (sink != NULL) && sink->ready();
-    ev_route_unlock();
-    return ready;
+    ev_transport_id_t id;
+    if (ev_transport_id_from_name(sink_id, &id)) {
+        ev_transport_endpoint_state_t state;
+        ev_transport_endpoint_state(id, EV_TRANSPORT_PHYSICAL_SLOT, &state);
+        return state.ready;
+    }
+    const ev_local_sink_t *sink = ev_local_sink_find(sink_id);
+    return sink != NULL && sink->ready;
 }
 
 bool ev_channel_sink_present(const char *sink_id)
 {
-    ev_channel_ensure_init();
-    ev_route_lock();
-    const ev_sink_t *sink = ev_sink_find(sink_id);
-    bool present = ev_sink_present(sink);
-    ev_route_unlock();
-    return present;
+    ev_transport_id_t id;
+    if (!ev_transport_id_from_name(sink_id, &id)) {
+        return ev_local_sink_find(sink_id) != NULL;
+    }
+    ev_transport_endpoint_state_t state;
+    ev_transport_endpoint_state(id, EV_TRANSPORT_PHYSICAL_SLOT, &state);
+    return state.present_known && state.present;
 }
 
 const char *ev_channel_sink_state(const char *sink_id)
 {
-    ev_channel_ensure_init();
-    ev_route_lock();
-    const ev_sink_t *sink = ev_sink_find(sink_id);
-    const char *state = "unknown";
-    if (sink != NULL) {
-        if (sink->ready()) {
-            state = "active";
-        } else if (ev_sink_present(sink)) {
-            state = "present";
-        } else {
-            state = "idle";
-        }
+    ev_transport_id_t id;
+    if (!ev_transport_id_from_name(sink_id, &id)) {
+        return ev_local_sink_find(sink_id) != NULL ? "active" : "unknown";
     }
-    ev_route_unlock();
-    return state;
+    ev_transport_endpoint_state_t state;
+    ev_transport_endpoint_state(id, EV_TRANSPORT_PHYSICAL_SLOT, &state);
+    if (!state.supported) {
+        return "unsupported";
+    }
+    if (state.ready) {
+        return "active";
+    }
+    if (state.present_known && state.present) {
+        return "present";
+    }
+    return "idle";
 }
 
 ssize_t ev_channel_write(ev_stream_t stream, const void *buf, size_t len)
 {
-    ev_channel_ensure_init();
     if ((stream >= EV_STREAM_MAX) || (buf == NULL) || (len == 0)) {
         return 0;
     }
-    // Hold the route lock only to pick the sink; the write itself may block
-    // and must not stall route maintenance on other tasks.
-    ev_route_lock();
-    ev_channel_poll_auto();
-    const ev_sink_t *sink = s_routes[stream].sink;
-    bool ready = (sink != NULL) && sink->ready();
-    ev_route_unlock();
-    if (!ready) {
+    ev_link_ref_t target;
+    if (!ev_channel_target_link(stream, &target)) {
         return -1;
     }
-    return sink->write(buf, len);
+    ev_io_result_t result = ev_transport_write(&target, buf, len);
+    if (result.status == EV_IO_PROGRESS) {
+        return (ssize_t)result.transferred;
+    }
+    return result.status == EV_IO_WOULD_BLOCK ? 0 : -1;
 }
 
 ssize_t ev_channel_write_sink_if_present(const char *sink_id, const void *buf, size_t len)
 {
-    ev_channel_ensure_init();
     if ((sink_id == NULL) || (buf == NULL) || (len == 0)) {
         return 0;
     }
-    const ev_sink_t *sink = ev_sink_find(sink_id);
-    if ((sink == NULL) || !ev_sink_present(sink)) {
-        return -1;
+    ev_link_ref_t link;
+    if (ev_channel_sink_link(sink_id, EV_TRANSPORT_PHYSICAL_SLOT, &link)) {
+        ev_io_result_t result = ev_transport_write(&link, buf, len);
+        if (result.status == EV_IO_PROGRESS) {
+            return (ssize_t)result.transferred;
+        }
+        return result.status == EV_IO_WOULD_BLOCK ? 0 : -1;
     }
-#if MICROPY_HW_USB_CDC
-    if (strcmp(sink->id, "cdc") == 0) {
-        return (ssize_t)mp_usbd_cdc_tx_strn_anytask(buf, len);
-    }
-#endif
-    if (!sink->ready()) {
-        return -1;
-    }
-    return sink->write(buf, len);
+    const ev_local_sink_t *sink = ev_local_sink_find(sink_id);
+    return (sink != NULL && sink->ready) ? sink->write(buf, len) : -1;
 }

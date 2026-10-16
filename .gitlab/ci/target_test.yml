@@ -4,14 +4,15 @@
 # Hardware-in-the-loop tests: flash a firmware build onto the board attached to
 # the tagged runner and test it. See tools/ci/flash_and_test.py.
 #
-# Runner: docker executor, so the image must carry python3 and the runner must
+# Runner: docker executor. The image supplies Node 22; a local Python venv
+# supplies pyserial/esptool. The runner must
 # pass the board's serial device into the container. With more than one board
 # attached, pin ESPPORT per job; otherwise the port is auto-detected.
 
 .target_test_base:
   stage: target_test
   extends: .rules:test:target
-  image: $CI_PYTHON_IMAGE
+  image: node:22-bookworm
   variables:
     ESPBAUD: "460800"
   timeout: 20 minutes
@@ -21,11 +22,14 @@
       - runner_system_failure
       - stuck_or_timeout_failure
   before_script:
-    # Use what the runner has; the last form is the PEP 668 escape hatch.
-    - |
-      python3 -c "import serial, esptool" || \
-        python3 -m pip install --user --upgrade pyserial "esptool>=5.3" || \
-        python3 -m pip install --user --break-system-packages --upgrade pyserial "esptool>=5.3"
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/tmp" TMP="$CI_PROJECT_DIR/.cache/tmp" TEMP="$CI_PROJECT_DIR/.cache/tmp"
+    - mkdir -p "$TMPDIR"
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-venv
+    - python3 -m venv "$CI_PROJECT_DIR/.ci-python"
+    - export PATH="$CI_PROJECT_DIR/.ci-python/bin:$PATH"
+    - python3 -m pip install --disable-pip-version-check pyserial "esptool>=5.3"
+    - node --version
     - python3 -c "import esptool, serial; print('esptool', esptool.__version__, '/ pyserial', serial.__version__)"
   script:
     # Exists up front so a failure before the capture still uploads something.

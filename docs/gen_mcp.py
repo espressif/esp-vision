@@ -354,7 +354,8 @@ def extract_micropython() -> List[dict]:
 
 EXAMPLE_DIR = os.path.join(REPO_ROOT, 'example')
 PROSE_SECTIONS = ('introduction', 'get-started', 'concepts', 'how-to',
-                  'architecture', 'device-core', 'target-support', 'project-relationship')
+                  'architecture', 'communication', 'device-core', 'target-support',
+                  'project-relationship')
 _IMPORT_RE = re.compile(r'^\s*(?:import|from)\s+([A-Za-z_][\w]*)', re.M)
 
 
@@ -427,12 +428,35 @@ def _rst_prose(path: str) -> Tuple[str, str, List[str]]:
             indent = len(m.group(1))
             directive, arg = m.group(2), m.group(3)
             body, nxt = _block_body(lines, i + 1, indent)
-            if directive in ('code-block', 'code', 'sourcecode') and 'python' in arg:
+            if directive in ('code-block', 'code', 'sourcecode'):
                 code = _dedent(body)
                 if code:
-                    code_blocks.append(code)
-                    out.append('\n```python\n' + code + '\n```\n')
-            # other directives (blockdiag, list-table, only, seealso, ...) skipped
+                    if 'python' in arg:
+                        code_blocks.append(code)
+                    out.append('\n```' + arg + '\n' + code + '\n```\n')
+            elif directive == 'list-table':
+                rows = []
+                for line in body:
+                    cell = re.match(r'^\s*(\* -|-)\s+(.*)$', line)
+                    if cell:
+                        if cell.group(1) == '* -':
+                            rows.append([])
+                        if rows:
+                            rows[-1].append(_clean_inline(cell.group(2)))
+                    elif rows and rows[-1] and line.strip():
+                        rows[-1][-1] += ' ' + _clean_inline(line.strip())
+                if rows:
+                    if arg:
+                        out.append('\n' + _clean_inline(arg) + '\n')
+                    width = max(len(row) for row in rows)
+                    for row_index, row in enumerate(rows):
+                        cells = [cell.replace('|', '\\|') for cell in row]
+                        cells += [''] * (width - len(cells))
+                        out.append('| ' + ' | '.join(cells) + ' |')
+                        if row_index == 0:
+                            out.append('| ' + ' | '.join(['---'] * width) + ' |')
+                    out.append('')
+            # Diagram/toctree and other presentation directives are skipped.
             i = nxt
             continue
         if stripped.startswith('..'):  # comments / orphan directives

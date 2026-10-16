@@ -11,6 +11,7 @@
 #include <sys/types.h>
 
 #include "esp_err.h"
+#include "ev_transport.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,6 +31,9 @@ typedef void (*ev_channel_route_changed_cb_t)(ev_stream_t stream,
 void ev_channel_init0(void);
 void ev_channel_poll_auto(void);
 void ev_channel_set_route_changed_cb(ev_channel_route_changed_cb_t callback);
+esp_err_t ev_channel_set_owner_link(const ev_link_ref_t *link_or_null);
+bool ev_channel_target_link(ev_stream_t stream, ev_link_ref_t *out_link);
+bool ev_channel_sink_supported(const char *sink_id);
 
 esp_err_t ev_channel_bind(ev_stream_t stream, const char *sink_id);
 esp_err_t ev_channel_bind_auto(ev_stream_t stream);

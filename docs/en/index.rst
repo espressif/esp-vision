@@ -17,6 +17,7 @@ This guide is organized as follows.
    api-reference/index
    how-to/index
    architecture/index
+   communication/index
    device-core/index
    project-relationship/index
    license/index

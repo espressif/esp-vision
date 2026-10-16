@@ -13,4 +13,5 @@ Task-oriented guides for extending ESP-VISION.
    add-model
    train-espdet-pico
    add-board
+   ev-mux-v4
    agent-code-generation

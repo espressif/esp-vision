@@ -12,6 +12,7 @@
 #include <stdint.h>
 
 #include "esp_err.h"
+#include "storage_writer.h"
 
 #include "boardconfig.h"
 
@@ -34,6 +35,7 @@ esp_err_t esp_vision_storage_init(void);
 void esp_vision_storage_mount_micropython(void);
 
 bool esp_vision_storage_flash_is_mounted(void);
+bool esp_vision_storage_flash_is_present(void);
 bool esp_vision_storage_sdcard_is_mounted(void);
 
 /*
@@ -54,5 +56,9 @@ uint32_t esp_vision_storage_sdcard_block_count(void);
 esp_err_t esp_vision_storage_sdcard_read(uint64_t address, void *buffer, size_t len);
 esp_err_t esp_vision_storage_sdcard_write(uint64_t address, const void *buffer, size_t len);
 esp_err_t esp_vision_storage_sdcard_sync(void);
+/* Drop and recreate the MicroPython FAT view after an exclusive raw-block
+ * writer handoff. Caller must first prove no VFS handles are open. */
+esp_err_t esp_vision_storage_refresh_volume(esp_vision_storage_volume_t volume);
+uint32_t esp_vision_storage_vfs_open_handle_count(esp_vision_storage_volume_t volume);
 
 #endif /* ESP_VISION_PLATFORM_STORAGE_H */

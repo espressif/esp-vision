@@ -26,6 +26,7 @@ list(APPEND MICROPY_QSTRDEFS_PORT
 set(MICROPY_ESP32_MAIN_SOURCE "${ESP_VISION_ROOT}/platform/main.c")
 
 set(ESP_VISION_MODULE_SOURCES
+    ${ESP_VISION_ROOT}/modules/py_esp_vision_launcher.c
     ${ESP_VISION_ROOT}/modules/py_display.c
     ${ESP_VISION_ROOT}/modules/py_image.c
     ${ESP_VISION_ROOT}/modules/py_imageio.c
@@ -42,7 +43,7 @@ if((IDF_TARGET STREQUAL "esp32p4") OR (IDF_TARGET STREQUAL "esp32s3") OR (IDF_TA
     )
 endif()
 
-if(IDF_TARGET STREQUAL "esp32s3")
+if((IDF_TARGET STREQUAL "esp32s3") OR (IDF_TARGET STREQUAL "esp32p4"))
     list(APPEND ESP_VISION_MODULE_SOURCES
         ${ESP_VISION_ROOT}/platform/usb_auto_download.c
     )
@@ -171,19 +172,29 @@ add_library(usermod_esp_vision_platform INTERFACE)
 target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_MODULE_SOURCES}
     ${ESP_VISION_CAMERA_SOURCE}
+    ${ESP_VISION_ROOT}/platform/camera_framebuffer.c
     ${ESP_VISION_BOARD_MANAGER_SOURCES}
     ${ESP_VISION_ROOT}/platform/debug.c
     ${ESP_VISION_ROOT}/platform/display.c
     ${ESP_VISION_ROOT}/platform/ev_channel.c
     ${ESP_VISION_ROOT}/platform/ev_control_transport.c
+    ${ESP_VISION_ROOT}/platform/ev_launcher_state.c
     ${ESP_VISION_ROOT}/platform/ev_mux.c
+    ${ESP_VISION_ROOT}/platform/ev_session.c
     ${ESP_VISION_ROOT}/platform/ev_stdio.c
+    ${ESP_VISION_ROOT}/platform/ev_tcp.c
+    ${ESP_VISION_ROOT}/platform/ev_transport.c
+    ${ESP_VISION_ROOT}/platform/ev_vm_output.c
     ${ESP_VISION_ROOT}/platform/jpeg.c
+    ${ESP_VISION_ROOT}/platform/device_identity.c
+    ${ESP_VISION_ROOT}/platform/network_discovery.c
+    ${ESP_VISION_ROOT}/platform/network_service.c
     ${ESP_VISION_ROOT}/platform/preview.c
     ${ESP_VISION_ROOT}/platform/sdcard.c
     ${ESP_VISION_ROOT}/platform/storage.c
     ${ESP_VISION_ROOT}/platform/storage_vfs.c
     ${ESP_VISION_ROOT}/platform/lcd_touch.c
+    ${ESP_VISION_ROOT}/platform/storage_writer_msc.c
     ${ESP_VISION_ROOT}/platform/usb_msc.c
     ${ESP_VISION_BOARD_SOURCES}
 )

@@ -94,22 +94,36 @@ void uart_stdout_init(void) {
     uart_hal_ena_intr_mask(&repl_hal, UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT);
 }
 
-int uart_stdout_tx_strn(const char *str, size_t len) {
+int uart_stdout_tx_some(const char *str, size_t len) {
+    if ((str == NULL) || (len == 0)) {
+        return 0;
+    }
     uart_hal_context_t repl_hal = REPL_HAL_DEFN();
-    size_t remaining = len;
     uint32_t written = 0;
-    // TODO add a timeout
-    for (;;) {
-        uart_hal_write_txfifo(&repl_hal, (const void *)str, remaining, &written);
+    uart_hal_write_txfifo(&repl_hal, (const void *)str, len, &written);
+    return (int)written;
+}
 
-        if (written >= remaining) {
+int uart_stdout_tx_strn(const char *str, size_t len) {
+    size_t remaining = len;
+    TickType_t start_tick = xTaskGetTickCount();
+    TickType_t timeout_ticks = pdMS_TO_TICKS(10000);
+    if (timeout_ticks == 0) {
+        timeout_ticks = 1;
+    }
+    while (remaining != 0) {
+        int written = uart_stdout_tx_some(str, remaining);
+        if (written > 0) {
+            remaining -= (size_t)written;
+            str += written;
+            continue;
+        }
+        if ((TickType_t)(xTaskGetTickCount() - start_tick) >= timeout_ticks) {
             break;
         }
-        remaining -= written;
-        str += written;
         ulTaskNotifyTake(pdFALSE, 1);
     }
-    return len;
+    return (int)(len - remaining);
 }
 
 // all code executed in ISR must be in IRAM, and any const data must be in DRAM

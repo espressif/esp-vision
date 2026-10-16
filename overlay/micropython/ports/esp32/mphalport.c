@@ -48,6 +48,7 @@
 #include "usb_serial_jtag.h"
 #include "uart.h"
 #include "ev_control_transport.h"
+#include "ev_cdc_rx.h"
 #include "ev_stdio.h"
 
 #if MICROPY_PY_STRING_TX_GIL_THRESHOLD < 0
@@ -59,7 +60,7 @@ TaskHandle_t mp_main_task_handle;
 // EV-MUX frames are large (RPC + metadata), and hosts legitimately burst
 // several frames back-to-back; 260-byte rings silently dropped bursts (USJ
 // has no flow control at all). Keep generous ingress buffers.
-#define MP_STDIN_RINGBUF_SIZE (2048)
+#define MP_STDIN_RINGBUF_SIZE EV_CDC_RX_RING_CAPACITY
 static uint8_t stdin_ringbuf_array[MP_STDIN_RINGBUF_SIZE];
 ringbuf_t stdin_ringbuf = {stdin_ringbuf_array, sizeof(stdin_ringbuf_array), 0, 0};
 static uint8_t cdc_stdin_ringbuf_array[MP_STDIN_RINGBUF_SIZE];
@@ -193,8 +194,8 @@ int mp_hal_stdin_rx_chr(void) {
 }
 
 mp_uint_t mp_hal_stdout_tx_strn(const char *str, size_t len) {
-    if (ev_stdio_write_repl_stdout(str, len)) {
-        return len;
+    if (ev_stdio_mux_enabled()) {
+        return ev_stdio_write_repl_stdout(str, len) ? len : 0;
     }
 
     // Only release the GIL if many characters are being sent

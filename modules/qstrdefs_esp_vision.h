@@ -39,6 +39,10 @@ Q(y_rotation)
 Q(y_translation)
 Q(z_rotation)
 Q(z_translation)
+Q(esp_vision_launcher)
+Q(execute_active)
+Q(execute_trial)
+Q(_new_candidate_module)
 
 // image.find_barcodes() result object and barcode type constants
 Q(barcode)

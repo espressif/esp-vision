@@ -40,19 +40,25 @@
 
 // Guards every tud_task execution. Recursive because mp_usbd_task() is also
 // called while the lock is already held (e.g. from mp_usbd_cdc poll/pump).
-// Created on first use, which always happens on the main task before the EV
-// transport task starts pumping (pumping is gated on tusb_inited()).
+// Initialized by mp_usbd_init() before TinyUSB can schedule callbacks or the
+// EV transport task can start pumping. The static object survives VM soft resets.
 static StaticSemaphore_t s_mp_usbd_mutex_buf;
 static SemaphoreHandle_t s_mp_usbd_mutex;
 
-void mp_usbd_lock(void) {
+void mp_usbd_lock_init(void) {
     if (s_mp_usbd_mutex == NULL) {
         s_mp_usbd_mutex = xSemaphoreCreateRecursiveMutexStatic(&s_mp_usbd_mutex_buf);
     }
+    configASSERT(s_mp_usbd_mutex != NULL);
+}
+
+void mp_usbd_lock(void) {
+    configASSERT(s_mp_usbd_mutex != NULL);
     xSemaphoreTakeRecursive(s_mp_usbd_mutex, portMAX_DELAY);
 }
 
 void mp_usbd_unlock(void) {
+    configASSERT(s_mp_usbd_mutex != NULL);
     xSemaphoreGiveRecursive(s_mp_usbd_mutex);
 }
 
