@@ -19,10 +19,10 @@
 | Visibility | Public; installation needs no npm login |
 | Source location | `host/device-core` in the ESP-VISION firmware repository |
 
-The `/node` export and bundled checks were introduced in 0.1.1. This source prepares 0.2.0 with reliable binary uploads; confirm registry publication before installing it. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
+The `/node` byte transports and bundled checks require 0.1.1; complete installation and `/node` `openNodeRom` are introduced in 0.3.0. Check the registry for the published version. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
 
 ```sh
-npm install --save-exact @esp-vision/device-core@0.2.0 --registry=https://registry.npmjs.org/
+npm install --save-exact @esp-vision/device-core@0.3.0 --registry=https://registry.npmjs.org/
 ```
 
 EV-MUX v4 firmware is required. A v3 hello is rejected with `VERSION_MISMATCH`; applications should ask the user to update firmware. Core has no runtime dependency on the IDE, Agent, DOM or Node serial libraries. The host supplies the physical byte transport and discovery adapter; Core owns protocol parsing, session negotiation, REPL coordination and device operations.
@@ -31,7 +31,7 @@ EV-MUX v4 firmware is required. A v3 hello is rejected with `VERSION_MISMATCH`; 
 
 Read the Device Core guide in the **ESP-VISION Documentation Center**: [English](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/index.html) | [简体中文](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/index.html).
 
-- [All application APIs](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/api.html), including firmware version checks and updates.
+- [All application APIs](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/api.html), including firmware version checks, application updates and blank-device installation.
 - [Advanced exports](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/advanced.html) and [TCP/Web Serial integration](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/integration.html).
 
 Documentation source lives in this repository under `docs/en/device-core/` and `docs/zh_CN/device-core/` and changes alongside SDK APIs in the same MR. The documentation site renders the RST as HTML; it does not redirect readers to npm or require downloading documentation. The npm package contains the runtime library and this README, not a second RST documentation distribution. Use the documentation center's version selector when reading a published firmware/documentation version; `latest` follows the current development documentation. These new chapter links become available after the corresponding documentation is deployed.
@@ -41,7 +41,7 @@ Documentation source lives in this repository under `docs/en/device-core/` and `
 The npm package installs `esp-vision-device`. `inspect` combines passive wired/LAN enumeration and targeted queries. By default it lists USB serial candidates; `--all-ports` also includes native UART/Bluetooth ports. Explicit `--port` bypasses discovery filtering; `configure`, `control`, and `firmware check/update` cover management. See the [CLI guide](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/cli.html) ([中文](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/cli.html)).
 
 ```sh
-npm install -g @esp-vision/device-core@0.2.0
+npm install -g @esp-vision/device-core@0.3.0
 esp-vision-device inspect
 esp-vision-device inspect --all-ports
 esp-vision-device inspect --interface usj,usb --probe --json
@@ -49,7 +49,7 @@ esp-vision-device inspect --port COM3 --fields identity,capabilities
 esp-vision-device inspect --tcp 192.168.1.100:3232 --fields network,storage --json
 ```
 
-Wired access/enumeration requires Python with pyserial (`--python` overrides the interpreter); LAN discovery uses optional `multicast-dns`, normally installed by npm. Windows/Linux/macOS paths are accepted. Passive enumeration never opens a serial port; `--probe` and targeted queries acquire a session and may interrupt Python. Unidentified ports, ROM candidates and USB-to-UART adapters remain numbered and visible. Board names are unknown until firmware identification; USB descriptors are hints only. Firmware versions are fetched automatically from dl.espressif.com. Firmware flashing uses the built-in serial adapter with separately installed Python esptool>=5.3,<6; no user loader module is required. Historical releases without qualified update metadata remain listed but cannot be installed by this flow. Check the registry version before installing a newly prepared release.
+Wired access/enumeration requires Python with pyserial (`--python` overrides the interpreter); LAN discovery uses optional `multicast-dns`, normally installed by npm. Windows/Linux/macOS paths are accepted. Passive enumeration never opens a serial port; `--probe` and targeted queries acquire a session and may interrupt Python. Unidentified ports, ROM candidates and USB-to-UART adapters remain numbered and visible. Board names are unknown until firmware identification; USB descriptors are hints only. Firmware versions are fetched automatically from dl.espressif.com. Firmware flashing uses the built-in serial adapter with separately installed Python esptool>=5.3,<6; no user loader module is required. Use `firmware update --mode install --board BOARD --port PORT --version VERSION` for blank-device installation over a ROM-capable USJ/UART port. Install replaces data within the complete image range; default updates preserve the existing layout. Historical releases without qualified metadata remain listed but cannot be installed by this flow. Check the registry version before installing a newly prepared release.
 
 ## Public device API
 
@@ -65,7 +65,7 @@ Import `createDevice` from the package root. Application code uses one device in
 | Interactive Python | `python.input(data)` | Send terminal input without uploading a file |
 | Python execution | `python.execute({ source, path, completion })` | Execute source or a device-side script |
 | Files | `files.list/read/write/remove/mkdir(request)` | File and directory operations, with one object argument |
-| Firmware | `firmware.check(request)`, `firmware.update(request)` | List board firmware versions, select an exact version and perform verified ROM application updates |
+| Firmware | `firmware.check(request)`, `firmware.update(request)` | List board firmware versions, select an exact version and perform verified ROM application updates or explicit complete installation on blank devices |
 | Capture | `capture({ source, format, quality })` | Capture an image from a supported source |
 | Events | `on(event, handler)` | Subscribe; returns an unsubscribe function |
 
@@ -220,7 +220,7 @@ const image = await device.capture({ source: 'camera', format: 'jpeg', timeout: 
 
 Paths are absolute device paths. `files.list({ path: '/', recursive: false })` returns entries `{ name, path, type, size }`. `files.read({ path })` returns a `Uint8Array`; use `encoding: 'utf-8'` to return text, and `maxBytes` to bound a read. Writes default to `overwrite: true`; set it to `false` to require a new destination. Uploading and executing are separate operations; create an empty file with `files.write({ path, data: new Uint8Array() })` rather than a second touch API. Remove an empty directory with `files.remove({ path: '/models', type: 'directory' })`; there is no implicit recursive deletion. `files.mkdir({ path, recursive: true })` creates missing parents.
 
-**Binary uploads (SDK 0.2.0):** text, model and image uploads share reliable raw binary `file.write` frames with 16 KiB blocks, continuous native VFS writes and SHA-256 commit. Matching firmware must advertise `file.write.binary`; missing support rejects with a firmware-upgrade message, without a slow upload fallback. File progress is not a durable commit. FAT replacement preserves an old-file backup until ordinary publication succeeds, with rollback on ordinary rename failure; it is not a power-loss-atomic journal. The filesystem must be mounted and allow writing, with room for the temporary upload and any existing destination file. File reads and directory operations currently use the REPL.
+**Binary uploads (SDK 0.3.0):** text, model and image uploads share reliable raw binary `file.write` frames with 16 KiB blocks, continuous native VFS writes and SHA-256 commit. Matching firmware must advertise `file.write.binary`; missing support rejects with a firmware-upgrade message, without a slow upload fallback. File progress is not a durable commit. FAT replacement preserves an old-file backup until ordinary publication succeeds, with rollback on ordinary rename failure; it is not a power-loss-atomic journal. The filesystem must be mounted and allow writing, with room for the temporary upload and any existing destination file. File reads and directory operations currently use the REPL.
 
 `capture({ source: 'screen', format: 'jpeg' })` uses the dedicated `debug.capture_screen` RPC to encode the LCD's last submitted RGB565 framebuffer, including the display's scaling and letterboxing. It does not read the panel electronics or capture the camera. Camera capture uses `debug.capture_frame`. Both return binary JPEG responses correlated to the request; optional `quality` is an integer from 1 to 100. Missing firmware capabilities reject with `UNSUPPORTED_OPERATION`; an uninitialized display returns `DISPLAY_NOT_READY`, and a board without an LCD returns `NOT_SUPPORTED`. Preview is a separate real-time stream and may drop frames under congestion.
 

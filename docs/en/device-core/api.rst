@@ -3,7 +3,7 @@ Application API reference
 
 :link_to_translation:`zh_CN:[中文]`
 
-This page covers the complete object returned by ``createDevice`` in package 0.1.0. Unless stated otherwise, operations are asynchronous and reject on failure. Unknown request fields are rejected. Do not add an undocumented option such as ``timeout`` to every method: accepted keys are listed per method. Millisecond timeouts are positive finite numbers.
+This page covers the complete object returned by ``createDevice`` in package 0.3.0. Unless stated otherwise, operations are asynchronous and reject on failure. Unknown request fields are rejected. Do not add an undocumented option such as ``timeout`` to every method: accepted keys are listed per method. Millisecond timeouts are positive finite numbers.
 
 .. list-table::
    :header-rows: 1
@@ -28,7 +28,7 @@ This page covers the complete object returned by ``createDevice`` in package 0.1
    * - ``device.firmware.check(request)``
      - Check the recommended firmware for the board.
    * - ``device.firmware.update(request)``
-     - Download, qualify, flash and verify an application image.
+     - Download, qualify, flash and verify application or complete-install images.
    * - ``device.capture(request)``
      - Capture camera or LCD JPEG.
    * - ``device.on(event, handler)``
@@ -231,7 +231,7 @@ device.files.mkdir(request)
 
 Returns {ok:true}; recursive mode creates parents and accepts an existing directory, but not an existing file in its place.
 
-SDK 0.2.0 transports all file types through reliable raw binary ``file.write`` frames, including Python source and model files. Upload requires firmware feature ``file.write.binary`` and a valid ``limits.fileWriteChunkMax`` (4096..16384, aligned to 4096); missing support rejects with UNSUPPORTED_OPERATION and a firmware-upgrade message. There is no Base64/JSON or REPL upload fallback. list/read/remove/mkdir still use framed REPL; no separate public files.writeBinary method is needed. Progress reports confirmed bytes, not a durable commit. Only the final resolved result means length/hash verification and file publication completed. Cancellation or failure triggers best-effort abort; firmware also expires stale transfers and cleans up on session/VM changes. Existing target contents survive upload, hash and ordinary pre-publication failures. FAT replacement uses an old-file backup and rollback for ordinary rename failure; it is not a power-loss-atomic journal. See :doc:`../communication/python-files` for the wire contract. Application updates use ``device.firmware.update()`` and reuse the ROM implementation in the ``/firmware`` subpath.
+SDK 0.2.0 and later transport all file types through reliable raw binary ``file.write`` frames, including Python source and model files. Upload requires firmware feature ``file.write.binary`` and a valid ``limits.fileWriteChunkMax`` (4096..16384, aligned to 4096); missing support rejects with UNSUPPORTED_OPERATION and a firmware-upgrade message. There is no Base64/JSON or REPL upload fallback. list/read/remove/mkdir still use framed REPL; no separate public files.writeBinary method is needed. Progress reports confirmed bytes, not a durable commit. Only the final resolved result means length/hash verification and file publication completed. Cancellation or failure triggers best-effort abort; firmware also expires stale transfers and cleans up on session/VM changes. Existing target contents survive upload, hash and ordinary pre-publication failures. FAT replacement uses an old-file backup and rollback for ordinary rename failure; it is not a power-loss-atomic journal. See :doc:`../communication/python-files` for the wire contract. Application updates use ``device.firmware.update()`` and reuse the ROM implementation in the ``/firmware`` subpath.
 
 device.capture(request)
 ----------------------------------------------
@@ -311,7 +311,7 @@ All asynchronous callers must catch rejections; errors may include code, errno, 
 Firmware checks and updates
 ------------------------------------------
 
-``device.firmware.check({ catalog?, identity?, version?, fetch = globalThis.fetch, signal? })``
+``device.firmware.check({ catalog?, identity?, version?, mode = 'update', fetch = globalThis.fetch, signal? })``
 
 Returns ``{ available, currentVersion, release, releases }``. Uses the connected device identity; when disconnected, pass an inspected ``identity`` containing ``board`` and ``firmwareVersion``. Checking performs no connection acquisition, reset or writes. ``catalog`` is either an in-memory object or an absolute HTTPS JSON URL. Fetch errors reject; no matching board returns ``release: null, available: false``. Without catalog, Core reads the official dl.espressif.com ESP-VISION index and per-version update metadata; a custom catalog remains an advanced override. Unqualified historical entries remain visible but cannot be selected for installation.
 
@@ -319,11 +319,11 @@ Catalog shape: ``{ schemaVersion: 1, releases: [{ board, version, image }] }``. 
 
 Each ``image`` contains ``evMuxVersion: 4``, non-negative integer ``chipFamily``, ``offset`` plus either exact ``chipRevision`` or integer ``chipRevisionMin``/``chipRevisionMax`` bounds, positive integer ``bytes`` and ``partitionSize`` (bytes must fit), lowercase 64-character ``sha256``, and ``partitionTable: { offset, bytes, sha256 }``. When downloading rather than supplying bytes, add an absolute HTTPS ``url`` pointing directly to the application bin. A zip/artifact download is not a raw bin and is not extracted by Core. Board names must exactly match the firmware identity. Version labels refer to firmware, not SDK/IDE versions. SHA-256 detects mismatch against the selected feed; it does not authenticate a malicious feed.
 
-``device.firmware.update({ release, board?, data?, fetch = globalThis.fetch, openLoader, reset?, onProgress?, onPhase?, signal? })``
+``device.firmware.update({ release, board?, mode = 'update', data?, fetch = globalThis.fetch, openLoader, reset?, onProgress?, onPhase?, signal? })``
 
 ``release`` is a selected check result entry. A connected device must match its board; without a connection, explicitly pass the physically selected ``board``. ``data`` is a Uint8Array application bin; otherwise Core downloads ``release.image.url``. Core validates size/hash before releasing the EV-MUX connection, then calls host ``openLoader({ signal })`` to acquire the ROM download port. The host adapter handles serial/WebUSB selection and ROM entry; Core does not implement network OTA or invent a second download-mode wire command. Use a local download connection even when discovery/inspection used TCP.
 
-The loader contract is the existing :doc:`advanced` FirmwareFlashSession contract. Optional ``reset(loader)`` replaces its hard-reset policy; ``onProgress(percent)`` reports 0–100 including readback and ``onPhase(text)`` reports phases. Only the application partition is written: chip/revision, security mode and the existing partition table are checked before writing, then the whole application is read back and hashed. Partition mismatch rejects; this interface does not perform full-flash migration or erase NVS/user files.
+The loader contract is the existing :doc:`advanced` FirmwareFlashSession contract. Optional ``reset(loader)`` replaces its hard-reset policy; ``onProgress(percent)`` reports 0–100 including readback and ``onPhase(text)`` reports phases. In default update mode only the application partition is written: chip/revision, security mode and the existing partition table are checked before writing, then the whole application is read back and hashed. Partition mismatch rejects; default update mode does not replace the partition layout or erase NVS/user files. Explicit installation is described below.
 
 Returns ``{ verified: true, needsReset, version, board, reconnected: false }`` only after complete readback verification. ``needsReset: true`` means the host must ask for a physical reset. No automatic EV-MUX reconnection or running-version claim is made: reconnect and inspect the firmware version separately. Cancellation applies before download/write, including loader acquisition; after the flash write starts it is deliberately deferred so verification can finish. A failed update rejects and closes the acquired loader; rollback is not promised. Connection attempts, other device operations and concurrent updates are rejected with DEVICE_BUSY during an update. Unknown request fields reject. The device remains disconnected after handoff, including failures after that point.
 
@@ -342,6 +342,29 @@ Returns ``{ verified: true, needsReset, version, board, reconnected: false }`` o
      console.log(updated) // Reconnect/inspect separately; prompt if needsReset.
    }
 
+Complete installation on blank devices
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use the same two firmware methods with ``mode: 'install'``. No EV-MUX connection or running firmware is required. Choose the physical board explicitly, enter ROM download mode and select its ROM-capable USB-Serial-JTAG (USJ) or UART port. An application-provided USB-OTG CDC interface cannot be assumed on a blank board. The host still supplies the ROM adapter; CLI includes its Node/esptool adapter. This is local ROM flashing, not TCP OTA.
+
+Default ``mode: 'update'`` retains the application-only contract. Core never changes to install mode automatically after a layout mismatch. Explicit install writes a qualified merged image at address zero, including bootloader, partition table and application. Data in that image's written range, including any NVS/filesystem content, can be replaced; data preservation and rollback are not promised. There is no implicit whole-chip erase. An installation is not an application update and hosts must label that distinction before calling it.
+
+The existing schemaVersion 1 release entry gains optional ``install: { offset: 0, bytes, flashSize, sha256, url, chipRevisionMin, chipRevisionMax, bootloader: { offset, bytes, sha256 } }``. ``flashSize`` is the layout's required flash capacity in bytes. Bootloader revision bounds are intersected with the application's bounds by the release publisher. ``image`` remains the application descriptor; install validation checks that its application and partition-table hashes and the bootloader hash match their exact ranges inside the merged image. All ranges must fit, be ordered and not overlap. Future release pipelines generate this metadata from the existing full image and real IDF artifacts; historical images without approved installation metadata are never guessed compatible.
+
+``firmware.check({ mode: 'install', ... })`` selects the first qualified installation release, or an exact requested version. App-only releases remain visible in ``releases``; selecting one explicitly rejects with FIRMWARE_INSTALL_UNAVAILABLE. Unknown modes reject. ``firmware.update({ mode: 'install', ... })`` validates all image bytes before releasing a session or opening a ROM port, then checks the actual chip, silicon revision, secure-boot/encryption state and detected JEDEC flash capacity before writing. It skips the existing partition-table comparison because a blank device has none. It uses the same complete readback, reset policy, exclusivity, cancellation and result shape as application updates. Reconnect and inspect to confirm running firmware separately.
+
+.. code-block:: javascript
+
+   const device = createDevice() // No runtime transport or connect() required.
+   const selected = await device.firmware.check({
+     identity: { board: 'ESP32_P4X_EYE', firmwareVersion: 'unknown' },
+     mode: 'install', version: selectedFirmwareVersion,
+   })
+   await device.firmware.update({
+     release: selected.release, board: 'ESP32_P4X_EYE', mode: 'install',
+     openLoader: ({ signal }) => host.openRomLoader({ signal }),
+   })
+
 Selecting a firmware version
 ------------------------------------------
 
@@ -357,4 +380,14 @@ Selecting a firmware version
    await device.firmware.update({
      release: selected.release,
      openLoader: ({ signal }) => host.openRomLoader({ signal }),
+   })
+
+Node hosts can reuse the shipped ROM adapter directly:
+
+.. code-block:: javascript
+
+   import { openNodeRom } from '@esp-vision/device-core/node'
+   await device.firmware.update({
+     release: selected.release, board: 'ESP32_P4X_EYE', mode: 'install',
+     openLoader: ({ signal }) => openNodeRom({ port: selectedRomPort, signal }),
    })

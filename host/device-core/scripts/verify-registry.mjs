@@ -8,7 +8,7 @@ export async function verifyPublishedIntegrity(url, integrity, {
   wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
   report = message => console.log(message),
 } = {}) {
-  const attempts = 6
+  const attempts = 10
   for (let attempt = 0; attempt < attempts; attempt++) {
     let response, transient
     try {
@@ -29,7 +29,7 @@ export async function verifyPublishedIntegrity(url, integrity, {
       transient = `HTTP ${response.status}`
     }
     assert.ok(attempt + 1 < attempts, `Published metadata verification unavailable after ${attempts} reads (${transient}); retry the CI job, not publication manually`)
-    const delay = 1000 * 2 ** attempt
+    const delay = Math.min(30000, 1000 * 2 ** attempt)
     report(`Registry verification ${transient}; retrying read ${attempt + 2}/${attempts} in ${delay}ms`)
     await wait(delay)
   }

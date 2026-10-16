@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Device Core 0.3.0 adds explicit complete-firmware installation for blank devices through the existing firmware API/CLI and ROM adapters. Release metadata qualifies the merged bootloader, partition table, application, flash capacity and silicon revision; existing application-only updates remain the default.
+
 - Add reliable EV-MUX binary file upload shared by Device Core files, script staging and action bindings: bounded 16 KiB chunks, continuous native VFS writes, SHA-256 commit and session/VM/timeout cleanup. Keep small control messages separate from payloads and allocate receive buffers only for authorized active frames.
 
 - Device Core 0.1.1 exports passive Node TCP/serial adapters at `/node` and ships its unit/hardware check assets; installed-package validation executes the tests and provider-backed discovery from a clean consumer.

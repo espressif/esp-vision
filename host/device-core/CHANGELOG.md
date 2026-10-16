@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- Export the passive built-in `openNodeRom({ port, python?, signal? })` adapter from `/node` so Node SDK hosts and the CLI share the same ROM implementation.
+
+- Explicit `mode: 'install'` on firmware check/update and CLI `--mode install` for blank-device ROM installation over USJ/UART, using qualified complete images with bootloader/partition/application hashes and flash-capacity checks. Default application-only updates retain their existing data-preservation contract; no automatic fallback or TCP OTA is introduced.
+
+### Fixed
+
+- Allow up to 151 seconds of bounded metadata propagation backoff after npm accepts publication, with ten uncached verification reads and no repeated publish.
+
 ## 0.2.0
 
 ### Changed

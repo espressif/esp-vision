@@ -38,7 +38,7 @@ try {
   if (Object.keys(api).sort().join(',') !== 'createDevice') throw new Error('Root must expose only the application API');
   const { DeviceSession } = await import('@esp-vision/device-core/session');
   const { FirmwareFlashSession } = await import('@esp-vision/device-core/firmware');
-  const { tcpTransport, serialTransport } = await import('@esp-vision/device-core/node');
+  const { tcpTransport, serialTransport, openNodeRom } = await import('@esp-vision/device-core/node');
   if (typeof tcpTransport !== 'function' || typeof serialTransport !== 'function') throw new Error('Missing public Node transports');
   const { createNodeDiscovery } = await import('@esp-vision/device-core/discovery/node');
   const { EventEmitter } = await import('node:events');
@@ -49,6 +49,7 @@ try {
   const device = api.createDevice({ discovery: provider });
   if (typeof provider.list !== 'function') throw new Error('Discovery providers must expose list()');
   if ((await device.discover({ timeout: 50 })).length !== 0 || !queries) throw new Error('Device discovery did not call its provider');
+  if (typeof openNodeRom !== 'function' || typeof openNodeRom({ port: 'not-opened' }).initialize !== 'function') throw new Error('Missing passive Node ROM adapter');
   // Constructors must be passive: these endpoints need not exist to create adapters.
   api.createDevice({ transport: tcpTransport({ host: '127.0.0.1', port: 1 }) });
   api.createDevice({ transport: serialTransport({ python: 'python3', serial: 'not-opened' }) });

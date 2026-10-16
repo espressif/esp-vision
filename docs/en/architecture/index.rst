@@ -109,3 +109,5 @@ MicroPython Overlay
 ESP-VISION uses MicroPython v1.28.0 as a fixed upstream baseline. Project changes to the ESP32 port live under ``overlay/micropython/``. The ``prepare-micropython`` build step applies that tree to a generated copy under ``build/micropython/idf<ESP_IDF_VERSION>/micropython/``; the ``lib/micropython`` submodule remains a clean upstream reference.
 
 For how ESP-VISION relates to its upstream projects, see :doc:`../project-relationship/index`; for the license of each component, see :doc:`../license/index`.
+
+The same Device Core firmware API supports two explicit ROM operations: default application-only update with layout matching, and complete installation for blank devices using bootloader/partition/application manifests. Neither operation uses EV-MUX for firmware payloads; IDE/Agent/CLI share its validation and readback logic rather than implementing separate flashing workflows.

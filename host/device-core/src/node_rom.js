@@ -41,6 +41,7 @@ export function openNodeRom({ port, python = defaultPython, signal } = {}) {
       try { Object.assign(loader, await rpc('initialize')) }
       finally { signal?.removeEventListener('abort', cancelled) }
     },
+    flashId: () => rpc('flashId'),
     getSecurityInfo: () => rpc('security'),
     async runStub() { await rpc('stub'); return loader },
     async readFlash(offset, bytes) { return new Uint8Array(Buffer.from(await rpc('read', [offset, bytes]), 'base64')) },

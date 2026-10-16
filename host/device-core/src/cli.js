@@ -21,9 +21,9 @@ esp-vision-device configure (--port PATH | --tcp HOST[:PORT])
 esp-vision-device control (--port PATH | --tcp HOST[:PORT])
   --action stop|reset|bootloader [--mode soft|hard]
 esp-vision-device firmware check [--port PATH | --tcp HOST[:PORT]]
-  [--catalog FILE|HTTPS_URL] [--board BOARD --current-version VERSION] [--version VERSION]
+  [--catalog FILE|HTTPS_URL] [--board BOARD --current-version VERSION] [--version VERSION] [--mode update|install]
 esp-vision-device firmware update [--port PATH | --tcp HOST[:PORT]]
-  [--catalog FILE|HTTPS_URL] --version VERSION [--image APPLICATION.bin]
+  [--catalog FILE|HTTPS_URL] --version VERSION [--image FIRMWARE.bin] [--mode update|install]
   [--board BOARD --current-version VERSION]
 Common: --timeout MS (default 3000 enumeration, 30000 command),
   --probe-timeout MS (default 5000 per device), --role usb|usj|uart|unknown,
@@ -33,7 +33,10 @@ also includes native UART/Bluetooth ports. No serial
 port is opened. --probe and targeted commands acquire a session and can interrupt
 Python. Rows with unknown firmware remain visible; numbering is per invocation.
 Firmware versions come from dl.espressif.com by default; local catalogs are advanced overrides.
-Firmware update uses the built-in serial flasher (Python esptool>=5.3,<6). TCP is not OTA.`
+Firmware update uses the built-in serial flasher (Python esptool>=5.3,<6). TCP is not OTA.
+Default mode update preserves the existing layout/data; explicit mode install writes
+a complete image, replacing data in its written range. Blank boards require --board
+and a ROM-capable USJ/UART port, not an application USB-OTG interface.`
 const error = (code, message) => Object.assign(new Error(message), { code })
 const fields = ['identity', 'capabilities', 'runtime', 'network', 'storage']
 export function parseCli(args) {
@@ -43,7 +46,7 @@ export function parseCli(args) {
   if (v.help) return { help: true }
   const command = p[0] ?? 'inspect', action = command === 'firmware' ? p[1] : null
   if (!['inspect', 'configure', 'control', 'firmware'].includes(command) || p.length > (command === 'firmware' ? 2 : 1) || (command === 'firmware' && !['check', 'update'].includes(action))) throw error('ARGUMENT', 'Unknown command; use --help')
-  const allowed = { inspect: ['all-ports', 'select', 'fields', 'interface', 'probe', 'probe-timeout'], configure: ['ssid', 'forget-wifi', 'password-stdin', 'network-enabled'], control: ['action', 'mode'], firmware: ['catalog', 'board', 'current-version', 'version', 'image'] }[command]
+  const allowed = { inspect: ['all-ports', 'select', 'fields', 'interface', 'probe', 'probe-timeout'], configure: ['ssid', 'forget-wifi', 'password-stdin', 'network-enabled'], control: ['action', 'mode'], firmware: ['mode', 'catalog', 'board', 'current-version', 'version', 'image'] }[command]
   for (const key of Object.keys(v)) if (!['json', 'port', 'tcp', 'python', 'timeout', 'role', ...allowed].includes(key)) throw error('ARGUMENT', `Option --${key} is not valid for ${command}`)
   if ([v.port, v.tcp, v.select].filter(value => value !== undefined).length > 1) throw error('ARGUMENT', 'Select exactly one device address or number')
   if (v.role && !['usb', 'usj', 'uart', 'unknown'].includes(v.role)) throw error('ARGUMENT', 'Invalid serial role')
@@ -74,6 +77,8 @@ export function parseCli(args) {
   }
   if (command === 'control' && (!['stop', 'reset', 'bootloader'].includes(v.action) || (v.action === 'reset' ? !['soft', 'hard'].includes(v.mode) : v.mode !== undefined))) throw error('ARGUMENT', 'Control requires action; reset requires mode soft or hard')
   if (command === 'firmware') {
+    if (v.mode !== undefined && !['update', 'install'].includes(v.mode)) throw error('ARGUMENT', 'Firmware mode must be update or install')
+    if (v.mode === 'install' && !v.board) throw error('ARGUMENT', 'Firmware installation requires explicit --board')
     if (!endpoint && !v.board) throw error('ARGUMENT', 'Firmware requires a connected device or --board')
     if (action === 'update' && (!v.port || !v.version)) throw error('ARGUMENT', 'Firmware update requires local --port and explicit --version')
     if (action === 'check' && v.image) throw error('ARGUMENT', 'Image applies only to firmware update')
@@ -108,9 +113,9 @@ export async function runCli(options, dependencies = {}) {
     endpoint = listing.devices.find(row => row.number === options.select)
     if (!endpoint) throw error('DEVICE_NOT_FOUND', 'Selected result number is unavailable in this enumeration')
   }
-  const device = makeDevice(endpoint ? { transport: (dependencies.transportFor ?? transportFor)(endpoint, options) } : {})
+  const offline = options.command === 'firmware' && options.board
+  const device = makeDevice(endpoint && !offline ? { transport: (dependencies.transportFor ?? transportFor)(endpoint, options) } : {})
   try {
-    const offline = options.command === 'firmware' && options.board
     if (endpoint && !offline) await device.connect({ role: endpoint.interface === 'serial' ? 'unknown' : endpoint.interface, timeout: options.timeout, signal, ...(endpoint.advertisement ? { expectedDevice: endpoint.advertisement } : {}) })
     if (options.command === 'inspect') return await device.inspect({ fields: options.fields, timeout: options.timeout, signal })
     if (options.command === 'configure') {
@@ -123,10 +128,11 @@ export async function runCli(options, dependencies = {}) {
     }
     if (options.command === 'control') return await device.control({ action: options.action, ...(options.mode ? { mode: options.mode } : {}), timeout: options.timeout, signal })
     let catalog = options.catalog
+    const mode = options.mode ?? 'update'
     if (catalog !== undefined && !/^https:\/\//.test(catalog)) catalog = JSON.parse(await (dependencies.readFile ?? readFile)(catalog, 'utf8'))
-    const checked = await device.firmware.check({ catalog, ...(endpoint && !offline ? {} : { identity: { board: options.board, firmwareVersion: options['current-version'] ?? 'unknown' } }), ...(options.version ? { version: options.version } : {}), signal })
+    const checked = await device.firmware.check({ catalog, mode, ...(endpoint && !offline ? {} : { identity: { board: options.board, firmwareVersion: options['current-version'] ?? 'unknown' } }), ...(options.version ? { version: options.version } : {}), signal })
     if (options.action === 'check') return checked
-    return await device.firmware.update({ release: checked.release, board: options.board, ...(options.image ? { data: new Uint8Array(await (dependencies.readFile ?? readFile)(options.image)) } : {}), openLoader: ({ signal }) => (dependencies.openLoader ?? openNodeRom)({ port: options.port, python: options.python, signal }), onPhase: dependencies.onPhase ?? (() => {}), signal })
+    return await device.firmware.update({ mode, release: checked.release, board: options.board, ...(options.image ? { data: new Uint8Array(await (dependencies.readFile ?? readFile)(options.image)) } : {}), openLoader: ({ signal }) => (dependencies.openLoader ?? openNodeRom)({ port: options.port, python: options.python, signal }), onPhase: dependencies.onPhase ?? (() => {}), signal })
   } finally { await device.disconnect() }
 }
 const safe = value => String(value ?? '—').replace(/[\x00-\x1f\x7f-\x9f]/g, '?')

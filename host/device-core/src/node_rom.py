@@ -32,6 +32,8 @@ def main():
                         esp = esptool.run_stub(esp)
                         esptool.attach_flash(esp)
                         esp.change_baud(460800)
+                    elif method == 'flashId':
+                        result = esp.flash_id()
                     elif method == 'read':
                         result = base64.b64encode(esp.read_flash(*args)).decode('ascii')
                     elif method == 'write':

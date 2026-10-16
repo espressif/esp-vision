@@ -3,7 +3,7 @@ Advanced export API reference
 
 :link_to_translation:`zh_CN:[中文]`
 
-This reference follows every entry of package.json exports: 9 import paths and 39 named exports. It lists every non-underscore public prototype method of the exported classes. Underscore methods and src/device_* implementation modules without a package export are internal. Application developers should start with :doc:`api`, not combine multiple owners/parsers on one connection. Signatures below use JavaScript parameter/default syntax; asynchronous methods return Promises.
+This reference follows every entry of package.json exports: 10 import paths and 43 named exports. It lists every non-underscore public prototype method of the exported classes. Underscore methods and src/device_* implementation modules without a package export are internal. Application developers should start with :doc:`api`, not combine multiple owners/parsers on one connection. Signatures below use JavaScript parameter/default syntax; asynchronous methods return Promises.
 
 @esp-vision/device-core
 ----------------------------------------------
@@ -316,7 +316,7 @@ Features required by the v4 capability validator.
 EV_MUX_SCRIPT_CHUNK_BYTES
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Legacy script.write reference constant. SDK 0.2.0 uploads do not use it; binary chunk size comes from fileWriteChunkMax.
+Legacy script.write reference constant. SDK 0.3.0 uploads do not use it; binary chunk size comes from fileWriteChunkMax.
 
 .. code-block:: json
 
@@ -1218,7 +1218,7 @@ Bind generic session/file/Python/capture handlers to a registry and return { evi
 FirmwareFlashSession
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``new FirmwareFlashSession(loader, image, { reset = () => loader.hardReset() } = {})``
+``new FirmwareFlashSession(loader, image, { reset = () => loader.hardReset(), mode = 'update' } = {})``
 
 ROM-loader adapter, separate from a live EV-MUX session. Each instance has one lifetime. state progresses idle → connecting → connected → flashing → verified → closed, or error → closed. flash always disconnects, so closed alone is not evidence that verification succeeded.
 
@@ -1231,7 +1231,12 @@ ROM-loader adapter, separate from a live EV-MUX session. Each instance has one l
 ``FirmwareFlashSession.disconnect()``
     Close loader once; subsequent calls are no-ops.
 
-Image descriptor: evMuxVersion=4, bytes, offset, partitionSize, sha256, chipFamily, chipRevision and partitionTable:{offset,bytes,sha256}. Supply trusted build metadata and an exact Uint8Array; this class never performs whole-chip erase or partition migration. The injected loader provides initialize(), chipFamily/chipRevision, getSecurityInfo(), runStub(true), hardReset(), disconnect(). The returned stub provides flashData(), readFlash(), readRegister() and writeRegister(). P4 normal-boot latch handling is built in. A reset failure after verified readback is reported through onPhase; it does not undo verification or automatically flash again.
+Image descriptor: evMuxVersion=4, bytes, offset, partitionSize, sha256, chipFamily, chipRevision and partitionTable:{offset,bytes,sha256}. Supply trusted build metadata and an exact Uint8Array; default mode never performs whole-chip erase or partition migration. The injected loader provides initialize(), chipFamily/chipRevision, getSecurityInfo(), runStub(true), hardReset(), disconnect(). The returned stub provides flashData(), readFlash(), readRegister() and writeRegister(). P4 normal-boot latch handling is built in. A reset failure after verified readback is reported through onPhase; it does not undo verification or automatically flash again.
+
+
+``mode: 'install'`` uses a merged image descriptor: application metadata remains under ``application``, while ``bytes/offset=0/sha256/flashSize/bootloader`` describe the complete image. The partitionTable descriptor remains unchanged. Chip revision bounds must cover both bootloader and application. Install skips existing-layout matching and requires the returned stub to implement ``flashId()`` returning the integer JEDEC ID (capacity exponent in bits 16–23). Existing application-update adapters need no changes; the bundled Node adapter and the website's Web Serial loader provide flashId. Full installation and data replacement semantics are defined in :doc:`api`.
+
+``firmwareMode(mode = 'update')`` validates and returns update/install; other values throw TypeError. ``validateFirmwareImage(image, bytes, { mode = 'update' } = {})`` also validates embedded bootloader/partition/application ranges and hashes for install mode.
 
 firmwareSha256
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1243,7 +1248,7 @@ Promise<string>: lowercase SHA-256 hexadecimal digest; requires Web Crypto.
 validateFirmwareImage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``validateFirmwareImage(image, bytes)``
+``validateFirmwareImage(image, bytes, { mode = 'update' } = {})``
 
 Promise<Uint8Array>: validate v4, exact byte size, application partition bounds and SHA-256; returns the supplied bytes. It does not infer or download an approved manifest.
 
@@ -1255,6 +1260,10 @@ Promise<Uint8Array>: validate v4, exact byte size, application partition bounds 
 
 ``serialTransport({ serial, python })``
     Return the shared Node/Python serial byte adapter. Use an explicit serial device name/path and an interpreter with pyserial (for example ``python3``). Core opens/closes it; choose role ``usj``, ``usb`` or ``uart`` for the actual interface. The adapters carry bytes, not another device session. This Node-only export is available starting in 0.1.1.
+
+
+``openNodeRom({ port, python?, signal? })``
+    Return the built-in ROM adapter without opening the port. Use with ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })`` for both installation and application updates. The adapter requires separately installed Python esptool>=5.3,<6; python defaults to python3 on Unix and python on Windows. Core manages initialize, validation, write/readback, reset and disconnect. Available from SDK 0.3.0; it is Node-only, not a runtime serialTransport or a TCP OTA adapter.
 
 @esp-vision/device-core/discovery
 ------------------------------------------------------------------

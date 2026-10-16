@@ -1,6 +1,6 @@
 {
   "name": "@esp-vision/device-core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Shared EV-MUX, framed REPL, device session, and action contracts for ESP Vision clients.",
   "type": "module",
   "exports": {
@@ -13,7 +13,7 @@
     "./firmware": "./src/firmware_flash.js",
     "./discovery": "./src/network_discovery.js",
     "./discovery/node": "./src/network_discovery_node.js",
-    "./node": "./src/node_transport.js"
+    "./node": "./src/node.js"
   },
   "files": [
     "src/*.js",

@@ -51,8 +51,16 @@ test('missing published integrity is not accepted', async () => {
   await assert.rejects(verifyPublishedIntegrity(url, integrity, f.options), /integrity mismatch/)
   assert.deepEqual(f.waits, [])
 })
-test('persistent propagation failures stop after six reads with bounded backoff', async () => {
-  const f = fixture(Array.from({ length: 6 }, () => new Response('', { status: 404 })))
-  await assert.rejects(verifyPublishedIntegrity(url, integrity, f.options), /after 6 reads/)
-  assert.equal(f.calls.length, 6); assert.deepEqual(f.waits, [1000, 2000, 4000, 8000, 16000])
+test('persistent propagation failures stop after ten reads with bounded backoff', async () => {
+  const f = fixture(Array.from({ length: 10 }, () => new Response('', { status: 404 })))
+  await assert.rejects(verifyPublishedIntegrity(url, integrity, f.options), /after 10 reads/)
+  assert.equal(f.calls.length, 10); assert.deepEqual(f.waits, [1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000])
+})
+
+test('registry visibility delayed beyond the original 31-second window is verified without another publish', async () => {
+  const f = fixture([...Array.from({ length: 7 }, () => new Response('', { status: 404 })), published(integrity)])
+  await verifyPublishedIntegrity(url, integrity, f.options)
+  assert.equal(f.calls.length, 8)
+  assert.ok(f.waits.reduce((total, delay) => total + delay, 0) > 31000)
+  assert.ok(f.waits.every(delay => delay <= 30000))
 })

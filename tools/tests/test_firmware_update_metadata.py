@@ -45,3 +45,38 @@ class FirmwareMetadataTests(unittest.TestCase):
             with patch.dict(sys.modules, {'esptool': SimpleNamespace(), 'esptool.bin_image': SimpleNamespace(LoadFirmwareImage=lambda *_: None)}):
                 with self.assertRaisesRegex(ValueError, 'fit'):
                     MODULE.publish_update('BOARD', 'esp32p4', 'v1', root, root)
+
+    def test_complete_install_manifest_uses_merged_bootloader_and_validates_all_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = b'application'
+            table = struct.pack('<HBBII16sI', 0x50AA, 0, 0, 65536, 4096, b'factory', 0)
+            boot = b'bootloader'
+            for name, data in [('app.bin', app), ('table.bin', table), ('boot.bin', boot)]:
+                (root / name).write_bytes(data)
+            args = {'app': {'offset': '0x10000', 'file': 'app.bin'},
+                    'bootloader': {'offset': '0x2000', 'file': 'boot.bin'},
+                    'partition-table': {'offset': '0x8000', 'file': 'table.bin'},
+                    'flash_settings': {'flash_size': '16MB'},
+                    'flash_files': {'0x2000': 'boot.bin', '0x8000': 'table.bin', '0x10000': 'app.bin'}}
+            (root / 'flasher_args.json').write_text(json.dumps(args))
+            (root / 'project_description.json').write_text('{"project_version":"v1"}')
+            full = bytearray(b'\xff' * (65536 + len(app)))
+            full[8192:8192 + len(boot)] = boot
+            full[8192] = 0xe9  # merge-bin may rewrite the bootloader header.
+            full[32768:32768 + len(table)] = table
+            full[65536:] = app
+            full_path = root / 'full.bin'
+            full_path.write_bytes(full)
+            fake = SimpleNamespace(LoadFirmwareImage=lambda *_: SimpleNamespace(min_rev_full=301, max_rev_full=399))
+            with patch.dict(sys.modules, {'esptool': SimpleNamespace(), 'esptool.bin_image': fake}):
+                entry = MODULE.publish_update('BOARD', 'esp32p4', 'v1', root, root, full_path)
+                self.assertEqual(entry['install']['offset'], 0)
+                self.assertEqual(entry['install']['flashSize'], 16 * 1024 * 1024)
+                self.assertEqual(entry['install']['sha256'], hashlib.sha256(full).hexdigest())
+                self.assertEqual(entry['install']['bootloader']['sha256'], hashlib.sha256(full[8192:8192 + len(boot)]).hexdigest())
+                self.assertEqual(entry['image']['sha256'], hashlib.sha256(app).hexdigest())
+                full[65536] ^= 1
+                full_path.write_bytes(full)
+                with self.assertRaisesRegex(ValueError, 'flash inputs'):
+                    MODULE.publish_update('BOARD', 'esp32p4', 'v1', root, root, full_path)
