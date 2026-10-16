@@ -13,6 +13,7 @@ function executionFixture({ short = false, failWrite = false, failStop = false, 
   let session
   let resetRequested = false
   let resetPolls = 0
+  let uploaded = 0
   const stdout = (payload) => session.feedBytes(makeEvMuxFrame({
     channel: 'repl.stdout', type: 'data', sessionId: session.sessionId, vmEpoch: session.vmEpoch, payload,
   }))
@@ -26,7 +27,7 @@ function executionFixture({ short = false, failWrite = false, failStop = false, 
   const parser = new EvMuxParser({
     filterFrame: (metadata, bytes) => {
       const text = new TextDecoder().decode(bytes)
-      const payload = metadata.channel.endsWith('.rpc') ? JSON.parse(text) : text
+      const payload = metadata.encoding === 'binary' ? bytes : metadata.channel.endsWith('.rpc') ? JSON.parse(text) : text
       requests.push({ metadata, payload })
       if (metadata.channel === 'repl.signal') return
       if (metadata.channel === 'repl.stdin') {
@@ -51,7 +52,15 @@ function executionFixture({ short = false, failWrite = false, failStop = false, 
         response = { ok: true, sessionId: session.sessionId, vmEpoch: responseEpoch,
           vmReady: stalledReset || resetPolls === 1 || resetPolls >= 3 }
       }
-      if (metadata.method === 'script.write' && failWrite) {
+      if (metadata.method === 'file.write') {
+        if (payload instanceof Uint8Array) {
+          uploaded = new DataView(payload.buffer, payload.byteOffset, payload.byteLength).getUint32(16, true) + payload.length - 20
+          response = { ok: true, writtenBytes: uploaded }
+        } else if (payload.action === 'begin') {
+          uploaded = 0; response = { ok: true, uploadId: payload.uploadId, chunkBytes: 16384 }
+        } else response = { ok: true, bytes: uploaded, complete: payload.action === 'commit' }
+      }
+      if (metadata.method === 'file.write' && failWrite) {
         response = { ok: false, error: { code: 'WRITE_FAILED', message: 'simulated write failure' } }
       } else if (metadata.method === 'script.run') {
         running = true
@@ -75,7 +84,8 @@ function executionFixture({ short = false, failWrite = false, failStop = false, 
   session.sessionId = 'a'.repeat(32)
   session.vmEpoch = 1
   session.vmReady = true
-  session.capabilities = { features: ['script.write', 'script.run', 'device.control'] }
+  session.limits.fileWriteChunkMax = 16384
+  session.capabilities = { features: ['file.write.binary', 'script.run', 'device.control'] }
   return { session, requests, finish, get terminal() { return terminal }, get running() { return running } }
 }
 

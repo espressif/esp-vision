@@ -74,7 +74,7 @@ export const DEVICE_ACTION_DESCRIPTORS = Object.freeze([
     includeFiles: { type: 'boolean', default: true },
     logLimit: { type: 'integer', minimum: 0, maximum: 500, default: 100 },
   }), { readOnly: true, concurrency: 'shared-read' }),
-  action('python.execute', 'Execute MicroPython through the shared interpreter using bounded REPL or chunked script transport.', objectSchema({
+  action('python.execute', 'Execute MicroPython through the shared interpreter using bounded REPL or binary file staging.', objectSchema({
     code: { type: 'string' },
     timeoutMs: { type: 'integer', minimum: 100, maximum: 120000, default: 8000 },
   }, ['code']), { destructive: true, openWorld: true }),

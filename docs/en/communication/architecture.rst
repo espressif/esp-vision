@@ -160,7 +160,7 @@ Execution responsibilities
      - Record DTR/RTS and defer download/reset work.
      - Do not tear down USB in its control callback; this is separate from EV-MUX acquire.
 
-``script.write``, ``script.run``, ``debug.capture_frame``, ``debug.capture_screen`` and object-related ``debug.info`` enter the VM queue; ``scope:transport.stats`` is the exception. Two ring-array slots provide one usable pending request. Queue expiry is 5000 ms; busy/expired work reports ``VM_BUSY``/``VM_TIMEOUT``.
+``file.write`` runs in the transport task and writes native VFS under session/VM generation and storage drain checks; it does not enter the interpreter queue. Legacy ``script.write``, ``script.run``, ``debug.capture_frame``, ``debug.capture_screen`` and object-related ``debug.info`` enter the VM queue; ``scope:transport.stats`` is the exception. Two ring-array slots provide one usable pending request. Queue expiry is 5000 ms; busy/expired work reports ``VM_BUSY``/``VM_TIMEOUT``.
 
 LCD screenshots read the display layer's last submitted RGB565 frame and encode JPEG in the same VM task. They do not invoke ``sensor`` or the camera, change displayed content, subscribe to preview or read back a physical panel. Execution is serialized with display/soft-reset cleanup to avoid reading freed frame buffers.
 

@@ -178,6 +178,7 @@ target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_ROOT}/platform/display.c
     ${ESP_VISION_ROOT}/platform/ev_channel.c
     ${ESP_VISION_ROOT}/platform/ev_control_transport.c
+    ${ESP_VISION_ROOT}/platform/ev_file_transfer.c
     ${ESP_VISION_ROOT}/platform/ev_launcher_state.c
     ${ESP_VISION_ROOT}/platform/ev_mux.c
     ${ESP_VISION_ROOT}/platform/ev_session.c

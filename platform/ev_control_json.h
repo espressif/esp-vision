@@ -47,6 +47,7 @@ typedef struct {
     bool has_method;
     bool has_sid;
     bool has_encoding;
+    char encoding[8];
     bool has_session_id;
     bool has_vm_epoch;
 } ev_control_json_metadata_t;
@@ -620,7 +621,7 @@ static inline bool ev_control_json_parse_metadata(const char *text, size_t lengt
         ev_control_json_uint32_field("seq", true),
         ev_control_json_string_field("method", false, out->method, sizeof(out->method)),
         ev_control_json_string_field("sid", false, NULL, 0),
-        ev_control_json_string_field("encoding", false, NULL, 0),
+        ev_control_json_string_field("encoding", false, out->encoding, sizeof(out->encoding)),
         ev_control_json_string_field("sessionId", false, out->session_id, sizeof(out->session_id)),
         ev_control_json_uint32_field("vmEpoch", false),
     };

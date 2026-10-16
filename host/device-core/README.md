@@ -19,10 +19,10 @@
 | Visibility | Public; installation needs no npm login |
 | Source location | `host/device-core` in the ESP-VISION firmware repository |
 
-The `/node` export and bundled checks below require 0.1.1, the next patch release prepared by this source tree; 0.1.0 remains the published baseline until the release pipeline succeeds. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
+The `/node` export and bundled checks were introduced in 0.1.1. This source prepares 0.2.0 with reliable binary uploads; confirm registry publication before installing it. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
 
 ```sh
-npm install --save-exact @esp-vision/device-core@0.1.1 --registry=https://registry.npmjs.org/
+npm install --save-exact @esp-vision/device-core@0.2.0 --registry=https://registry.npmjs.org/
 ```
 
 EV-MUX v4 firmware is required. A v3 hello is rejected with `VERSION_MISMATCH`; applications should ask the user to update firmware. Core has no runtime dependency on the IDE, Agent, DOM or Node serial libraries. The host supplies the physical byte transport and discovery adapter; Core owns protocol parsing, session negotiation, REPL coordination and device operations.
@@ -41,7 +41,7 @@ Documentation source lives in this repository under `docs/en/device-core/` and `
 The npm package installs `esp-vision-device`. `inspect` combines passive wired/LAN enumeration and targeted queries. By default it lists USB serial candidates; `--all-ports` also includes native UART/Bluetooth ports. Explicit `--port` bypasses discovery filtering; `configure`, `control`, and `firmware check/update` cover management. See the [CLI guide](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/cli.html) ([中文](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/cli.html)).
 
 ```sh
-npm install -g @esp-vision/device-core@0.1.1
+npm install -g @esp-vision/device-core@0.2.0
 esp-vision-device inspect
 esp-vision-device inspect --all-ports
 esp-vision-device inspect --interface usj,usb --probe --json
@@ -220,7 +220,7 @@ const image = await device.capture({ source: 'camera', format: 'jpeg', timeout: 
 
 Paths are absolute device paths. `files.list({ path: '/', recursive: false })` returns entries `{ name, path, type, size }`. `files.read({ path })` returns a `Uint8Array`; use `encoding: 'utf-8'` to return text, and `maxBytes` to bound a read. Writes default to `overwrite: true`; set it to `false` to require a new destination. Uploading and executing are separate operations; create an empty file with `files.write({ path, data: new Uint8Array() })` rather than a second touch API. Remove an empty directory with `files.remove({ path: '/models', type: 'directory' })`; there is no implicit recursive deletion. `files.mkdir({ path, recursive: true })` creates missing parents.
 
-**Current firmware limits:** file upload still uses the existing `script.write` chunked RPC, including Base64/JSON overhead. This API cleanup does not implement the proposed high-throughput raw binary protocol or promise improved model-upload throughput. The filesystem must be mounted and allow writing, with room for the temporary upload and any existing destination file. File reads and directory operations currently use the REPL.
+**Binary uploads (SDK 0.2.0):** text, model and image uploads share reliable raw binary `file.write` frames with 16 KiB blocks, continuous native VFS writes and SHA-256 commit. Matching firmware must advertise `file.write.binary`; missing support rejects with a firmware-upgrade message, without a slow upload fallback. File progress is not a durable commit. FAT replacement preserves an old-file backup until ordinary publication succeeds, with rollback on ordinary rename failure; it is not a power-loss-atomic journal. The filesystem must be mounted and allow writing, with room for the temporary upload and any existing destination file. File reads and directory operations currently use the REPL.
 
 `capture({ source: 'screen', format: 'jpeg' })` uses the dedicated `debug.capture_screen` RPC to encode the LCD's last submitted RGB565 framebuffer, including the display's scaling and letterboxing. It does not read the panel electronics or capture the camera. Camera capture uses `debug.capture_frame`. Both return binary JPEG responses correlated to the request; optional `quality` is an integer from 1 to 100. Missing firmware capabilities reject with `UNSUPPORTED_OPERATION`; an uninitialized display returns `DISPLAY_NOT_READY`, and a board without an LCD returns `NOT_SUPPORTED`. Preview is a separate real-time stream and may drop frames under congestion.
 

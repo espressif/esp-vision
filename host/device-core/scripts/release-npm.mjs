@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 ESP-VISION-IDE
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict'
+import { verifyPublishedIntegrity } from './verify-registry.mjs'
 import { spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -48,7 +49,7 @@ try {
     console.log(`Npm publisher: ${publisher}`)
     const url = new URL(encodeURIComponent(manifest.name), registry)
     url.pathname += '/' + encodeURIComponent(manifest.version)
-    const response = await fetch(url, { signal: AbortSignal.timeout(15000) })
+    const response = await fetch(url, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(15000) })
     if (response.ok) {
       const existing = await response.json()
       assert.equal(existing.dist?.integrity, packed.integrity,
@@ -57,8 +58,8 @@ try {
     } else {
       assert.equal(response.status, 404, 'Registry lookup failed; do not attempt publication')
       npm(['publish', join(temporary, packed.filename), '--ignore-scripts', '--access', 'public', '--registry', registry])
-      const verified = JSON.parse(npm(['view', `${manifest.name}@${manifest.version}`, 'dist.integrity', '--json', '--registry', registry]))
-      assert.equal(verified, packed.integrity, 'Published tarball integrity mismatch')
+      console.log('npm publish accepted; verifying registry metadata')
+      await verifyPublishedIntegrity(url, packed.integrity)
       console.log(`Published and verified ${packed.name}@${packed.version}`)
     }
   }

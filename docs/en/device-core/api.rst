@@ -215,7 +215,7 @@ device.files.write(request)
 
 ``{ path, data, overwrite = true, onProgress = null, signal? }``
 
-data is string or Uint8Array. overwrite:false requests create-only. Progress receives { writtenBytes, totalBytes }. Returns the final firmware script.write acknowledgement, not a file hash. It does not execute the file.
+data is string or Uint8Array. overwrite:false requests create-only. Progress receives { writtenBytes, totalBytes }. Returns the verified commit acknowledgement with total bytes, complete:true and path, after the firmware checks the complete SHA-256. It does not execute the file.
 
 device.files.remove(request)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -231,7 +231,7 @@ device.files.mkdir(request)
 
 Returns {ok:true}; recursive mode creates parents and accepts an existing directory, but not an existing file in its place.
 
-The current writer transports both text and bytes through Base64/JSON ``script.write`` chunks. Binary input does not imply a separate high-speed binary upload protocol. list/read/remove/mkdir currently use framed REPL. There is no advertised ``files.writeBinary``. Application updates use ``device.firmware.update()`` and reuse the ROM implementation in the ``/firmware`` subpath.
+SDK 0.2.0 transports all file types through reliable raw binary ``file.write`` frames, including Python source and model files. Upload requires firmware feature ``file.write.binary`` and a valid ``limits.fileWriteChunkMax`` (4096..16384, aligned to 4096); missing support rejects with UNSUPPORTED_OPERATION and a firmware-upgrade message. There is no Base64/JSON or REPL upload fallback. list/read/remove/mkdir still use framed REPL; no separate public files.writeBinary method is needed. Progress reports confirmed bytes, not a durable commit. Only the final resolved result means length/hash verification and file publication completed. Cancellation or failure triggers best-effort abort; firmware also expires stale transfers and cleans up on session/VM changes. Existing target contents survive upload, hash and ordinary pre-publication failures. FAT replacement uses an old-file backup and rollback for ordinary rename failure; it is not a power-loss-atomic journal. See :doc:`../communication/python-files` for the wire contract. Application updates use ``device.firmware.update()`` and reuse the ROM implementation in the ``/firmware`` subpath.
 
 device.capture(request)
 ----------------------------------------------

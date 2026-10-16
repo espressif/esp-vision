@@ -389,14 +389,14 @@ export class EvMuxParser {
     }
 }
 
-export function makeEvMuxFrame({ channel, type = 'data', method = null, payload = '', seq = 0, sid = 'web-ide', sessionId = undefined, vmEpoch = undefined, contentType = undefined, width = undefined, height = undefined, route = undefined }) {
+export function makeEvMuxFrame({ channel, type = 'data', method = null, payload = '', seq = 0, sid = 'web-ide', sessionId = undefined, vmEpoch = undefined, contentType = undefined, width = undefined, height = undefined, route = undefined, encoding = undefined }) {
     const payloadBytes = payload instanceof Uint8Array ? payload : new TextEncoder().encode(payload)
     const metadata = {
         sid,
         seq,
         channel,
         type,
-    encoding: channel.endsWith('.rpc') ? 'json' : 'text',
+    encoding: encoding ?? (channel.endsWith('.rpc') ? 'json' : 'text'),
     ...(sessionId ? { sessionId } : {}),
     ...(vmEpoch !== undefined ? { vmEpoch } : {}),
     ...(contentType ? { contentType } : {}),
@@ -408,7 +408,8 @@ export function makeEvMuxFrame({ channel, type = 'data', method = null, payload 
         metadata.method = method
     }
     const metadataBytes = new TextEncoder().encode(JSON.stringify(metadata))
-    const header = new TextEncoder().encode(`\x1eEVMUX/1 h=${metadataBytes.length} p=${payloadBytes.length} c=00000000\r\n`)
+    const checksum = encoding === 'binary' ? crc32(payloadBytes).toString(16).padStart(8, '0') : '00000000'
+    const header = new TextEncoder().encode(`\x1eEVMUX/1 h=${metadataBytes.length} p=${payloadBytes.length} c=${checksum}\r\n`)
     const out = new Uint8Array(header.length + metadataBytes.length + payloadBytes.length + 1)
     out.set(header, 0)
     out.set(metadataBytes, header.length)

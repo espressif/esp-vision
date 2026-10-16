@@ -76,7 +76,7 @@ evmux_host_checks:
   image: python:3.11-slim
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends ca-certificates git gcc libc6-dev
+    - apt-get install -y --no-install-recommends ca-certificates git gcc libc6-dev libssl-dev
     - python -m pip install PyYAML
     - git submodule sync -- lib/micropython
     - git submodule update --init --depth 1 lib/micropython
@@ -132,6 +132,9 @@ check_readme_links:
 .firmware_base:
   stage: build
   extends: .rules:build:firmware
+  # Firmware consumes no npm artifacts; keep native build validation independent
+  # of the internet-tagged Node runner queue. SDK checks still gate the pipeline.
+  needs: [pre_commit, python_stubs, evmux_host_checks]
   tags:
     - build
   variables:

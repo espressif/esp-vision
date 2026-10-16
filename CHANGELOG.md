@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Add reliable EV-MUX binary file upload shared by Device Core files, script staging and action bindings: bounded 16 KiB chunks, continuous native VFS writes, SHA-256 commit and session/VM/timeout cleanup. Keep small control messages separate from payloads and allocate receive buffers only for authorized active frames.
+
 - Device Core 0.1.1 exports passive Node TCP/serial adapters at `/node` and ships its unit/hardware check assets; installed-package validation executes the tests and provider-backed discovery from a clean consumer.
 
 - Official release artifacts now include application-only update images and per-board/version metadata (SHA-256, partition layout and silicon revision bounds) for automatic Device Core/CLI updates from dl.espressif.com.
@@ -51,6 +53,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Optimized NanoTrack preprocessing and raised the example match threshold to 0.95.
 
 ### Fixed
+
+- Retry bounded, uncached registry reads after npm publication while metadata propagates; keep publication single-shot and reject authentication failures or integrity mismatches immediately.
 
 - Corrected bilingual communication guides to distinguish public Core file/Python APIs from low-level helpers, clarified firmware-unit versus Core hardware tests, and kept SDK documentation links within the current documentation version and target.
 
