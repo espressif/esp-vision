@@ -176,9 +176,13 @@ RPC methods and execution layers
      - transport
      - Renew lease, query ready/epoch, release owner.
    * - user.rpc
+     - ``file.write``
+     - transport / native VFS
+     - Verified binary upload; session/VM-scoped without interpreter execution.
+   * - user.rpc
      - ``script.write`` / ``script.run``
      - VM
-     - Publish chunked scripts/files and queue REPL execution.
+     - Legacy Base64 writer / queue script execution.
    * - user.rpc
      - ``device.control``
      - Primarily transport
@@ -256,3 +260,5 @@ This **host CPython** example explains framing. Use the shared client in :doc:`h
    )
 
 This function only encodes frames. It implements no session, concurrent reader, deadlines, RPC correlation or recovery, and cannot replace a complete client. Do not assume host ``zlib``/thread/socket combinations are available unchanged in device MicroPython.
+
+Authorized file.write requests are the bounded exception: binary payloads can carry 16384 file bytes plus a 20-byte ID/offset prefix, with CRC32. All other control payloads retain the 2048-byte limit. See :doc:`python-files` for begin/data/commit/abort.

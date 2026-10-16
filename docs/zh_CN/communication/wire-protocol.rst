@@ -176,9 +176,13 @@ RPC 方法清单与执行层
      - transport
      - 续租、查询 ready/epoch、释放 owner。
    * - user.rpc
+     - ``file.write``
+     - transport / native VFS
+     - 可靠二进制上传；绑定会话/VM 代次，不执行解释器。
+   * - user.rpc
      - ``script.write`` / ``script.run``
      - VM
-     - 分块发布脚本/文件、排入 REPL 执行。
+     - 旧版 Base64 写入 / 排入脚本执行。
    * - user.rpc
      - ``device.control``
      - 主要为 transport
@@ -256,3 +260,5 @@ RPC 方法清单与执行层
    )
 
 该函数只编码帧，不实现会话、并发 reader、期限、RPC 关联或恢复。它不能替代完整客户端，也不能在设备 MicroPython 中直接假定可用主机 ``zlib``/线程/socket 组合。
+
+file.write 是经过会话授权后的有界例外：二进制 payload 可携带 16384 字节文件内容和 20 字节 ID/offset 前缀，并校验 CRC32；其他控制 payload 仍限制 2048 字节。begin/data/commit/abort 见 :doc:`python-files`。

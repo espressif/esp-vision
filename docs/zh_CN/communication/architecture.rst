@@ -160,7 +160,7 @@ IDF system console 的 Kconfig 选择底层系统输出目的地。MicroPython �
      - 回调记录 DTR/RTS 状态，延迟处理下载/复位。
      - 不在 USB control callback 内立即拆除驱动；与 EV-MUX 接管是不同控制面。
 
-``script.write``、``script.run``、``debug.capture_frame``、``debug.capture_screen`` 和涉及 Python 状态的 ``debug.info`` 进入 VM 请求队列。``debug.info`` 的 ``scope:transport.stats`` 是例外：它在 VM 忙时也可查询。队列数组有两个槽位，以环形队列空槽规则实际只容纳一个待执行请求；过期预算为 5000 ms，忙或过期会报告 ``VM_BUSY`` / ``VM_TIMEOUT``。
+``file.write`` 在 transport task 中直接写原生 VFS，检查会话/VM 代次并持有存储交接计数，不进入解释器队列。旧版 ``script.write``、``script.run``、``debug.capture_frame``、``debug.capture_screen`` 和涉及 Python 状态的 ``debug.info`` 进入 VM 请求队列。``debug.info`` 的 ``scope:transport.stats`` 是例外：它在 VM 忙时也可查询。队列数组有两个槽位，以环形队列空槽规则实际只容纳一个待执行请求；过期预算为 5000 ms，忙或过期会报告 ``VM_BUSY`` / ``VM_TIMEOUT``。
 
 LCD 抓屏在同一 VM 任务中读取显示层最后提交的 RGB565 帧并编码 JPEG，不调用 ``sensor`` 或摄像头，不改变显示内容。它不是 preview 订阅，也不是物理面板回读；与 display/软复位清理串行执行，避免读取已释放的帧缓冲。
 

@@ -47,6 +47,7 @@ const EV_MUX_USER_RPC_METHODS = new Set([
   'capabilities',
   'session.keepalive',
   'session.release',
+  'file.write',
   'script.write',
   'script.run',
   'device.control',
@@ -146,37 +147,13 @@ function isNetworkAction(method, payload) {
 }
 
 function isVmRpc(method, payload) {
-  if (method === 'script.write' || method === 'script.run' || method === 'debug.capture_frame' || method === 'debug.capture_screen') return true
+  if (method === 'file.write' || method === 'script.write' || method === 'script.run' || method === 'debug.capture_frame' || method === 'debug.capture_screen') return true
   if (method === 'debug.info') return payload?.scope !== 'transport.stats'
   return false
 }
 
 function payloadBytes(payload) {
   return payload instanceof Uint8Array ? payload : utf8Bytes(payload)
-}
-
-function maxScriptChunkBytes({ path, encoding, mode, runAfterWrite, rxPayloadMax, totalBytes }) {
-  let low = 1
-  let high = Math.max(1, Math.min(EV_MUX_SCRIPT_CHUNK_BYTES, rxPayloadMax))
-  while (low < high) {
-    const candidate = Math.ceil((low + high) / 2)
-    const payload = {
-      path, encoding, mode, offset: Math.max(0, totalBytes - 1), totalBytes,
-      contentBase64: 'A'.repeat(Math.ceil(candidate / 3) * 4), runAfterWrite,
-    }
-    if (utf8Bytes(JSON.stringify(payload)).length <= rxPayloadMax) low = candidate
-    else high = candidate - 1
-  }
-  return low
-}
-
-function bytesToBase64(bytes) {
-  let binary = ''
-  const chunkSize = 0x8000
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
-  }
-  return btoa(binary)
 }
 
 function defaultSleep(ms) {
@@ -262,6 +239,11 @@ export function validateEvmuxCapabilities(payload) {
   }
 
   for (const key of Object.keys(EV_MUX_DEFAULT_LIMITS)) validateLimit(payload.limits, key)
+  if (payload.features.includes('file.write.binary') && (!Number.isSafeInteger(payload.limits.fileWriteChunkMax)
+      || payload.limits.fileWriteChunkMax < 4096 || payload.limits.fileWriteChunkMax > 16384
+      || payload.limits.fileWriteChunkMax % 4096 !== 0)) {
+    throw new Error('EV-MUX v4 capabilities are missing a valid limits.fileWriteChunkMax')
+  }
   if (payload.session?.policy !== 'firstCome'
       || !Number.isSafeInteger(payload.session.leaseMs)
       || !Number.isSafeInteger(payload.session.keepaliveMs)
@@ -622,6 +604,7 @@ export class DeviceSession {
     redactSsid = true,
     forceNetwork = false,
   } = {}) {
+    if (payload instanceof Uint8Array) return { binaryBytes: payload.byteLength }
     if (!forceNetwork && !isNetworkAction(method, payload) && !isNetworkAction(method, requestPayload)) return payload
     const secrets = [requestPayload?.ssid, requestPayload?.password]
       .filter((value) => typeof value === 'string' && value.length > 0)
@@ -687,6 +670,7 @@ export class DeviceSession {
     seq: requestedSeq = null,
     signal = null,
     writeTimeout = null,
+    encoding = undefined,
   } = {}) {
     if (this.state === 'disconnected') {
       throw new Error('EV-MUX is not connected')
@@ -715,7 +699,9 @@ export class DeviceSession {
         && (payloadData.length !== 1 || payloadData[0] !== 0x03)) {
       throw new Error('EV-MUX repl.signal only accepts the single-byte Ctrl-C signal 0x03')
     }
-    if (this.capabilities && payloadData.length > this.limits.rxPayloadMax) {
+    const payloadLimit = method === 'file.write' && encoding === 'binary' && this.hasFeature('file.write.binary')
+      ? this.limits.fileWriteChunkMax + 20 : this.limits.rxPayloadMax
+    if (this.capabilities && payloadData.length > payloadLimit) {
       throw new Error(`EV-MUX payload is ${payloadData.length} bytes; device limit is ${this.limits.rxPayloadMax}`)
     }
     if ((channel === 'repl.stdin' || channel === 'repl.signal') && payloadData.length > this.limits.replInputMax) {
@@ -727,7 +713,7 @@ export class DeviceSession {
       seq,
       channel,
       type: frameType,
-      encoding: channel.endsWith('.rpc') ? 'json' : 'text',
+      encoding: encoding ?? (channel.endsWith('.rpc') ? 'json' : 'text'),
       ...(method ? { method } : {}),
       ...(needsAuthorization ? { sessionId: this.sessionId } : {}),
       ...(usesVm && needsAuthorization ? { vmEpoch: this.vmEpoch } : {}),
@@ -738,6 +724,7 @@ export class DeviceSession {
     const frame = this.makeEvMuxFrame({
       channel,
       type: frameType,
+      encoding,
       method,
       payload,
       seq,
@@ -764,6 +751,7 @@ export class DeviceSession {
       throw new Error('EV-MUX is not connected')
     }
     if (signal?.aborted) throw abortError(signal)
+    if (payload instanceof Uint8Array && method !== 'file.write') throw new TypeError('Raw binary requests are only supported for file.write')
     if (method === 'script.write' || method === 'script.run') validateRpcPath(payload?.path)
     if (method === 'debug.info' && (payload?.scope === 'fs.list' || payload?.scope === 'fs.read')) {
       validateRpcPath(payload.path ?? (payload.scope === 'fs.list' ? '/' : undefined))
@@ -816,7 +804,8 @@ export class DeviceSession {
     this.handlers.rpcRequest?.({ channel: rpcChannel, method, seq, timeout, payload: safePayload })
     this._diagnostic('rpc.request', { channel: rpcChannel, method, seq })
     try {
-      await this.writeFrame(rpcChannel, 'req', method, JSON.stringify(payload), {
+      await this.writeFrame(rpcChannel, 'req', method, payload instanceof Uint8Array ? payload : JSON.stringify(payload), {
+        encoding: payload instanceof Uint8Array ? 'binary' : undefined,
         vmRequest,
         seq,
         signal,
@@ -1089,41 +1078,45 @@ export class DeviceSession {
       : content instanceof Uint8Array
         ? content
         : new Uint8Array(content)
-    const chunkBytes = maxScriptChunkBytes({
-      path, encoding, mode, runAfterWrite, rxPayloadMax: this.limits.rxPayloadMax, totalBytes: bytes.length,
-    })
-    if (this.hasFeature('script.write.chunked') && bytes.length > chunkBytes) {
-      let lastResponse = null
-      for (let offset = 0; offset < bytes.length; offset += chunkBytes) {
+    if (!this.hasFeature('file.write.binary')) {
+      throw Object.assign(new Error('File upload requires firmware with file.write.binary; update the device firmware'), { code: 'UNSUPPORTED_OPERATION' })
+    }
+    const limit = this.limits.fileWriteChunkMax
+    if (!Number.isSafeInteger(limit) || limit < 4096 || limit > 16384 || limit % 4096 !== 0 || bytes.length > 0xffffffff) {
+      throw new Error('Invalid negotiated binary file transfer limit or file size')
+    }
+    const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes))
+    if (signal?.aborted) throw abortError(signal)
+    const sha256 = Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('')
+    const uploadId = randomHex()
+    let committed = false
+    try {
+      const begin = await this.rpc('file.write', { action: 'begin', path, mode, totalBytes: bytes.length, sha256, uploadId }, { timeout: 8000, signal })
+      if (begin.uploadId !== uploadId || begin.chunkBytes !== limit) throw new Error('Invalid binary file transfer acknowledgement')
+      const token = Uint8Array.from(begin.uploadId.match(/../g), byte => parseInt(byte, 16))
+      for (let offset = 0; offset < bytes.length; offset += limit) {
         if (signal?.aborted) throw abortError(signal)
-        const chunk = bytes.subarray(offset, Math.min(offset + chunkBytes, bytes.length))
-        lastResponse = await this.rpc('script.write', {
-          path,
-          encoding,
-          mode,
-          offset,
-          totalBytes: bytes.length,
-          contentBase64: bytesToBase64(chunk),
-          runAfterWrite: runAfterWrite && offset + chunk.length >= bytes.length,
-        }, { timeout: 8000, signal })
+        const chunk = bytes.subarray(offset, Math.min(offset + limit, bytes.length))
+        const payload = new Uint8Array(20 + chunk.length)
+        payload.set(token)
+        new DataView(payload.buffer).setUint32(16, offset, true)
+        payload.set(chunk, 20)
+        const response = await this.rpc('file.write', payload, { timeout: 8000, signal })
+        if (response.writtenBytes !== offset + chunk.length) throw new Error('Incomplete binary file transfer acknowledgement')
         onProgress?.({ writtenBytes: offset + chunk.length, totalBytes: bytes.length })
       }
-      return lastResponse
+      const result = await this.rpc('file.write', { action: 'commit', uploadId: begin.uploadId }, { timeout: 8000, signal })
+      if (result.complete !== true || result.bytes !== bytes.length) throw new Error('Incomplete binary file commit acknowledgement')
+      committed = true
+      if (bytes.length === 0) onProgress?.({ writtenBytes: 0, totalBytes: 0 })
+      if (runAfterWrite) await this.rpc('script.run', { path }, { timeout: 8000, signal })
+      return { ...result, path, runAfterWrite }
+    } finally {
+      if (!committed) {
+        // Cancellation does not cancel cleanup, and cleanup cannot mask the primary error.
+        await this.rpc('file.write', { action: 'abort', uploadId }, { timeout: 1500 }).catch(() => {})
+      }
     }
-
-    const payload = {
-      path,
-      encoding,
-      mode,
-      contentBase64: bytesToBase64(bytes),
-      runAfterWrite,
-    }
-    if (utf8Bytes(JSON.stringify(payload)).length > this.limits.rxPayloadMax) {
-      throw new Error(`script.write payload exceeds the device RX limit ${this.limits.rxPayloadMax}; firmware must support script.write.chunked.`)
-    }
-    const response = await this.rpc('script.write', payload, { timeout: 8000, signal })
-    onProgress?.({ writtenBytes: bytes.length, totalBytes: bytes.length })
-    return response
   }
 
   async writeScript(path, content, { runAfterWrite = false, signal = null } = {}) {
@@ -1217,10 +1210,10 @@ export class DeviceSession {
     if (commandBytes <= inputLimit) {
       return this.repl.execPy(source, { timeout, signal })
     }
-    if (!this.hasFeature('script.write') || !this.hasFeature('script.run')) {
+    if (!this.hasFeature('file.write.binary') || !this.hasFeature('script.run')) {
       throw new Error(
         `Python source requires ${commandBytes} REPL bytes, above the firmware limit ${inputLimit}; ` +
-        'upgrade firmware with script.write and script.run support.',
+        'upgrade firmware with file.write.binary and script.run support.',
       )
     }
 
@@ -1365,8 +1358,8 @@ export class DeviceSession {
     if (timeout !== null && (!Number.isFinite(timeout) || timeout <= 0)) {
       throw new RangeError('Script timeout must be a positive number or null for an interactive run')
     }
-    if ((content !== undefined && !this.hasFeature('script.write')) || !this.hasFeature('script.run')) {
-      throw new Error('Running scripts requires script.run and uploading source also requires script.write')
+    if ((content !== undefined && !this.hasFeature('file.write.binary')) || !this.hasFeature('script.run')) {
+      throw new Error('Running scripts requires script.run and uploading source also requires file.write.binary')
     }
     if (this.runCapture || this.runStarting) {
       throw new Error('A script is already running')

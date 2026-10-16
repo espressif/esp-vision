@@ -12,12 +12,12 @@ Source, versions and installation
 
 Device Core is maintained in ``host/device-core/`` in the ESP-VISION firmware repository. ``host/`` contains code running on the host, not firmware modules. IDE and Agent are npm consumers; Agent MCP mappings, model providers and plugins remain in their independent project. Protocol changes should align firmware, Core, documentation and tests in one MR.
 
-The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.1.1`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Install the version after the public npm registry confirms publication; a dry run or an open MR alone does not publish it.
+The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.2.0`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Install the version after the public npm registry confirms publication; a dry run or an open MR alone does not publish it.
 
 .. code-block:: console
 
-   npm view @esp-vision/device-core@0.1.1 version dist.integrity
-   npm install --save-exact @esp-vision/device-core@0.1.1
+   npm view @esp-vision/device-core@0.2.0 version dist.integrity
+   npm install --save-exact @esp-vision/device-core@0.2.0
 
 Node.js 22 is the Node host baseline. Browsers need a bundler/import map for package specifiers and Web Serial or a binary WebSocket bridge. The package contains no serial driver, network bridge, model, IDE UI or Agent runtime. Node mDNS discovery uses the optional ``multicast-dns`` peer. Before publication, install a local ``npm pack`` tarball for verification; production consumers should pin npm versions and update lockfiles.
 
@@ -159,7 +159,7 @@ These operations assume a connected ``device``. Receive output through ``device.
 
 ``python.execute`` accepts exactly one of ``source`` and ``path``. ``completion: 'wait'`` awaits the result; ``'start'`` returns a handle with a ``done`` Promise. Upload success and startup do not prove execution completion. Infinite programs need ``control({ action: 'stop' })``, continued receive processing and an execution result; a stop ACK does not prove resource cleanup.
 
-``files.list/read/write/remove/mkdir`` are the sole application file API. ``files.write`` accepts strings or ``Uint8Array``; it currently uses ``script.write`` chunked Base64/JSON RPC. This API migration does not implement high-throughput raw binary transfer. Reads and directory operations currently use framed REPL. The filesystem must be mounted and writable with temporary-file space. Terminal input, automated scripts and filesystem helpers share one interpreter. Core rejects conflicting automated operations with ``DEVICE_BUSY``; applications must not inject terminal input into a REPL held by an automated operation. See :doc:`communication/python-files <../communication/python-files>` for details.
+``files.list/read/write/remove/mkdir`` are the sole application file API. ``files.write`` accepts strings or ``Uint8Array``; SDK 0.2.0 sends both through ``file.write`` raw binary blocks with continuous native writes and SHA-256 commit. Firmware must advertise ``file.write.binary``; unsupported versions require an upgrade. Reads and directory operations currently use framed REPL. The filesystem must be mounted and writable with temporary-file space. Terminal input, automated scripts and filesystem helpers share one interpreter. Core rejects conflicting automated operations with ``DEVICE_BUSY``; applications must not inject terminal input into a REPL held by an automated operation. See :doc:`communication/python-files <../communication/python-files>` for details.
 
 Wi-Fi configuration and status
 ------------------------------

@@ -18,11 +18,11 @@ Installation and compatibility
 
 .. code-block:: console
 
-   npm install --save-exact @esp-vision/device-core@0.1.1
+   npm install --save-exact @esp-vision/device-core@0.2.0
    # Optional Node LAN discovery adapter:
    npm install multicast-dns
 
-These examples target SDK ``0.1.1``. Install that version once the registry reports it as published; a source checkout, MR or dry run does not publish it. Node.js 22 is the host baseline. Browsers require a bundler/import map and a host-provided Web Serial or binary WebSocket transport. Only EV-MUX v4 is supported; a v3 device must update firmware. Package, firmware and IDE versions are independent.
+These examples target SDK ``0.2.0``. Install that version once the registry reports it as published; a source checkout, MR or dry run does not publish it. Node.js 22 is the host baseline. Browsers require a bundler/import map and a host-provided Web Serial or binary WebSocket transport. Only EV-MUX v4 is supported; a v3 device must update firmware. Package, firmware and IDE versions are independent.
 
 Architecture and starting point
 --------------------------------------------------------------
@@ -58,4 +58,4 @@ Licensing
 
 The npm package and ESP-VISION contributions follow Apache-2.0, matching the firmware. The package includes LICENSE and NOTICE; NOTICE preserves historical MIT copyrights and permission text. Third-party dependencies retain their own licenses. See :doc:`../license/index` for the project inventory.
 
-Version 0.1.1 adds ``@esp-vision/device-core/node`` adapters and ships runnable unit/hardware checks. This source prepares the patch; install it after publication or validate a locally packed tarball first. Version 0.1.0 lacks these exports/check assets. Installed checks: ``npm --prefix node_modules/@esp-vision/device-core test`` and ``npm --prefix node_modules/@esp-vision/device-core run test:hardware -- --help``. A missing or empty suite fails. See :doc:`integration` for application ``discover()`` versus provider ``list()``.
+Version 0.1.1 adds ``@esp-vision/device-core/node`` adapters and ships runnable unit/hardware checks. This source prepares 0.2.0 with reliable binary uploads; install it after publication or validate a locally packed tarball first. Version 0.1.0 lacks these exports/check assets. Installed checks: ``npm --prefix node_modules/@esp-vision/device-core test`` and ``npm --prefix node_modules/@esp-vision/device-core run test:hardware -- --help``. A missing or empty suite fails. See :doc:`integration` for application ``discover()`` versus provider ``list()``.

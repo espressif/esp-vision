@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0
+
+### Changed
+
+- File and large-script uploads use one reliable binary `file.write` engine with 16 KiB blocks, integrity validation and cancellation cleanup; no Base64/JSON or REPL upload fallback. Public `files.write` and Python API signatures stay unchanged. Uploads require matching firmware capability `file.write.binary`; older v4 devices can still be inspected but must update firmware before upload.
+
+### Fixed
+
+- Verify newly published tarballs using bounded uncached registry reads instead of a single immediate npm view; retry transient metadata propagation/network failures without repeating publication, while failing immediately on access denial or integrity mismatch.
+
 ## 0.1.1
 
 ### Fixed

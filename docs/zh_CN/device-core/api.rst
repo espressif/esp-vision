@@ -215,7 +215,7 @@ device.files.write(request)
 
 ``{ path, data, overwrite = true, onProgress = null, signal? }``
 
-data 为字符串或 Uint8Array；overwrite:false 请求只创建。进度回调接收 { writtenBytes, totalBytes }。返回固件最终 script.write 确认，不是文件哈希，也不会执行文件。
+data 为字符串或 Uint8Array；overwrite:false 请求只创建。进度回调接收 { writtenBytes, totalBytes }。完整文件通过固件 SHA-256 校验和发布后，返回包含总 bytes、complete:true 与 path 的提交确认；不会执行文件。
 
 device.files.remove(request)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -231,7 +231,7 @@ device.files.mkdir(request)
 
 返回 {ok:true}；递归模式创建父目录，允许目标已是目录，但不允许被同名文件占用。
 
-当前写入器将文本与字节均通过 Base64/JSON 的 ``script.write`` 分块传输；接收二进制数据不等于已实现独立高速二进制上传协议。list/read/remove/mkdir 当前使用 framed REPL。设备对象没有对外声明 ``files.writeBinary``。应用更新使用 ``device.firmware.update()``，复用 ``/firmware`` 子路径的 ROM 烧写实现。
+SDK 0.2.0 的所有文件（包括 Python 源码和模型）共用可靠的原始二进制 ``file.write`` 上传。固件须支持 ``file.write.binary`` 并提供有效 ``limits.fileWriteChunkMax``（4096..16384，按 4096 对齐）；不支持时返回 UNSUPPORTED_OPERATION 并提示更新固件，不回退到 Base64/JSON 或 REPL 上传。list/read/remove/mkdir 仍使用 framed REPL，无需另加 files.writeBinary 公开方法。进度是已确认接收的字节，最终 Promise 成功才代表完整长度/哈希校验和发布完成。取消/失败会尽力 abort，固件也会清理超时、旧会话或旧 VM 上传。传输、哈希和普通发布前失败保留原目标；FAT 覆盖使用旧文件备份与普通重命名失败回滚，不承诺掉电原子事务。线上契约见 :doc:`../communication/python-files`。应用更新使用 ``device.firmware.update()``，复用 ``/firmware`` 子路径的 ROM 烧写实现。
 
 device.capture(request)
 ----------------------------------------------

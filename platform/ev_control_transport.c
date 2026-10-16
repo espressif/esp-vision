@@ -6,6 +6,7 @@
 
 #include "ev_control_transport.h"
 #include "ev_launcher_state.h"
+#include "ev_file_transfer.h"
 
 #include <ctype.h>
 #include <inttypes.h>
@@ -132,6 +133,7 @@ typedef struct {
     size_t metadata_len;
     size_t metadata_pos;
     uint8_t payload[EV_CONTROL_PAYLOAD_MAX + 1];
+    uint8_t *file_payload;
     size_t payload_len;
     size_t payload_pos;
     uint32_t expected_crc;
@@ -304,6 +306,7 @@ static uint32_t ev_control_now_ms(void)
 
 static void ev_control_parser_reset(ev_control_parser_t *parser)
 {
+    heap_caps_free(parser->file_payload);
     memset(parser, 0, sizeof(*parser));
     parser->state = EV_CONTROL_PARSE_SOF;
 }
@@ -1205,6 +1208,7 @@ static void ev_control_session_changed(const ev_session_snapshot_t *snapshot,
     /* A lease is bound to the authenticated EV-MUX session. Release it only
      * through the explicit storage.writer.release action; any other session
      * transition permanently quarantines an outstanding lease. */
+    ev_file_transfer_poll();
     esp_vision_msc_writer_session_changed(snapshot->has_owner ? snapshot->session_id : NULL);
     if ((previous_link != NULL) && (previous_session_id != NULL) &&
             (previous_session_id[0] != '\0')) {
@@ -1450,7 +1454,7 @@ static esp_err_t ev_control_send_capabilities(uint32_t seq)
                      "\"features\":[\"hello\",\"capabilities\",\"transport.state\",\"route.get\","
                      "\"route.changed\",\"session.firstCome\",\"session.keepalive\","
                      "\"network.background\",\"network.configure\",\"framed.repl\","
-                     "\"script.write\",\"script.write.chunked\",\"script.run\","
+                     "\"file.write.binary\",\"script.write\",\"script.write.chunked\",\"script.run\","
                      "\"launcher.boot.status.v1\",\"launcher.trial.status.v1\",\"launcher.typed-runner.v1\","
 #if MICROPY_HW_ENABLE_USBDEV && MICROPY_HW_USB_MSC
                      "\"debug.info\",\"debug.capture_frame\",\"debug.capture_screen\",\"device.control\",\"storage.writer.lease\"],"
@@ -1458,7 +1462,7 @@ static esp_err_t ev_control_send_capabilities(uint32_t seq)
                      "\"debug.info\",\"debug.capture_frame\",\"debug.capture_screen\",\"device.control\"],"
 #endif
                      "\"limits\":{\"metadataMax\":384,\"rxPayloadMax\":2048,"
-                     "\"replInputMax\":511,\"vmPendingMax\":1,\"txLargePayloadMax\":%u,"
+                     "\"fileWriteChunkMax\":16384,\"replInputMax\":511,\"vmPendingMax\":1,\"txLargePayloadMax\":%u,"
                      "\"txFrameTimeoutMs\":1500,\"txQueueTimeoutMs\":2000},"
                      "\"session\":{\"policy\":\"firstCome\",\"leaseMs\":%u,\"keepaliveMs\":%u},"
                      "\"tcp\":{\"supported\":%s,\"port\":%u,\"maxLinks\":2,\"handshakeTimeoutMs\":3000}}",
@@ -2603,6 +2607,7 @@ static bool ev_control_frame_authorized(const ev_link_ref_t *link,
     }
 
     bool vm_related = is_repl_stdin || is_repl_signal ||
+                      (is_user_or_debug_rpc && strcmp(method, "file.write") == 0) ||
                       (is_user_or_debug_rpc && ev_control_rpc_needs_vm(
                            (strcmp(channel, "debug.rpc") == 0) ? EV_RPC_DEBUG : EV_RPC_USER,
                            method, payload));
@@ -2689,9 +2694,64 @@ static bool ev_control_link_equal(const ev_link_ref_t *a, const ev_link_ref_t *b
            (a->slot == b->slot) && (a->generation == b->generation);
 }
 
+static uint8_t *ev_control_frame_payload(ev_control_parser_t *parser)
+{
+    return parser->file_payload != NULL ? parser->file_payload : parser->payload;
+}
+
+static void ev_control_handle_file_write(uint32_t seq, const ev_control_json_metadata_t *metadata,
+                                         const ev_session_snapshot_t *session,
+                                         const uint8_t *data, size_t length)
+{
+    const char *error = NULL;
+    uint32_t received = 0;
+    char response[160];
+    if (strcmp(metadata->encoding, "binary") == 0) {
+        error = ev_file_transfer_write(session, data, length, &received);
+        (void)snprintf(response, sizeof(response), "{\"ok\":true,\"writtenBytes\":%" PRIu32 "}", received);
+    } else {
+        char action[12] = "", path[EV_CONTROL_PATH_PARSE_CAP] = "", mode[12] = "overwrite";
+        char sha256[65] = "", upload_id[33] = "";
+        ev_control_json_field_t fields[] = {
+            ev_control_json_string_field("action", true, action, sizeof(action)),
+            ev_control_json_string_field("path", false, path, sizeof(path)),
+            ev_control_json_string_field("mode", false, mode, sizeof(mode)),
+            ev_control_json_uint32_field("totalBytes", false),
+            ev_control_json_string_field("sha256", false, sha256, sizeof(sha256)),
+            ev_control_json_string_field("uploadId", false, upload_id, sizeof(upload_id)),
+        };
+        if (!ev_control_json_parse_object((const char *)data, length, fields, MP_ARRAY_SIZE(fields))) {
+            error = "INVALID_ARGUMENT";
+        } else if (strcmp(action, "begin") == 0) {
+            if (!fields[1].present || !fields[3].present || !fields[4].present || !fields[5].present ||
+                    !ev_control_path_allowed(path) || (strcmp(mode, "create") != 0 && strcmp(mode, "overwrite") != 0)) {
+                error = "INVALID_ARGUMENT";
+            } else {
+                error = ev_file_transfer_begin(session, path, strcmp(mode, "overwrite") == 0,
+                                               fields[3].value.uint32, sha256, upload_id);
+                (void)snprintf(response, sizeof(response),
+                               "{\"ok\":true,\"uploadId\":\"%s\",\"chunkBytes\":%u}", upload_id, EV_FILE_CHUNK_BYTES);
+            }
+        } else if ((strcmp(action, "commit") == 0 || strcmp(action, "abort") == 0) && fields[5].present) {
+            error = ev_file_transfer_end(session, upload_id, strcmp(action, "commit") == 0, &received);
+            (void)snprintf(response, sizeof(response),
+                           "{\"ok\":true,\"bytes\":%" PRIu32 ",\"complete\":%s}",
+                           received, ev_control_bool_str(strcmp(action, "commit") == 0));
+        } else {
+            error = "INVALID_ARGUMENT";
+        }
+    }
+    if (error != NULL) {
+        (void)ev_control_send_error("file.write", seq, error, "binary file transfer failed");
+    } else {
+        (void)ev_control_send_rpc_with_seq("rsp", "file.write", response, seq);
+    }
+}
+
 static void ev_control_handle_frame(ev_control_parser_t *parser, const ev_link_ref_t *link)
 {
-    parser->payload[parser->payload_len] = '\0';
+    uint8_t *payload = ev_control_frame_payload(parser);
+    payload[parser->payload_len] = '\0';
     ev_control_json_metadata_t metadata;
     if (!ev_control_json_parse_metadata(parser->metadata, parser->metadata_len, &metadata)) {
         ev_control_log_rejected_frame(link, "<invalid>", "");
@@ -2706,7 +2766,10 @@ static void ev_control_handle_frame(ev_control_parser_t *parser, const ev_link_r
         ev_control_log_rejected_frame(link, channel, method);
         return;
     }
-    if (is_rpc && !ev_control_json_rpc_payload_valid(parser->payload, parser->payload_len)) {
+    bool file_write = strcmp(channel, "user.rpc") == 0 && strcmp(method, "file.write") == 0;
+    bool binary_file = file_write && strcmp(metadata.encoding, "binary") == 0;
+    if ((strcmp(metadata.encoding, "binary") == 0 && !binary_file) ||
+            (is_rpc && !binary_file && !ev_control_json_rpc_payload_valid(payload, parser->payload_len))) {
         ev_control_log_rejected_frame(link, channel, method);
         return;
     }
@@ -2723,7 +2786,7 @@ static void ev_control_handle_frame(ev_control_parser_t *parser, const ev_link_r
         s_response_session_id[0] = '\0';
         s_response_vm_epoch = 0;
         if (strcmp(method, "hello") == 0) {
-            (void)ev_control_send_hello_acquire(seq, (const char *)parser->payload,
+            (void)ev_control_send_hello_acquire(seq, (const char *)payload,
                                                 parser->payload_len);
         } else {
             (void)ev_control_send_capabilities(seq);
@@ -2735,7 +2798,7 @@ static void ev_control_handle_frame(ev_control_parser_t *parser, const ev_link_r
     ev_session_snapshot_t session;
     ev_session_result_t auth_result = EV_SESSION_RESULT_SESSION_REQUIRED;
     if (!ev_control_frame_authorized(link, channel, method, &metadata,
-                                     (const char *)parser->payload, parser->payload_len,
+                                     (const char *)payload, parser->payload_len,
                                      &session, &auth_result)) {
         ev_control_log_rejected_frame(link, channel, method);
         ev_control_response_context_clear();
@@ -2764,11 +2827,16 @@ static void ev_control_handle_frame(ev_control_parser_t *parser, const ev_link_r
     s_response_vm_epoch = session.vm_epoch;
     s_response_input_generation = session.input_generation;
     s_response_transition_id = session.transition_id;
-    if (is_rpc && ev_control_rpc_needs_vm(domain, method, (const char *)parser->payload)) {
+    if (file_write || (is_rpc && ev_control_rpc_needs_vm(domain, method, (const char *)payload))) {
         s_response_tx_vm_epoch = session.vm_epoch;
     }
+    if (file_write) {
+        ev_control_handle_file_write(seq, &metadata, &session, payload, parser->payload_len);
+        ev_control_response_context_clear();
+        return;
+    }
     if (strcmp(channel, "repl.stdin") == 0) {
-        if (!ev_control_repl_rx_push(parser->payload, parser->payload_len,
+        if (!ev_control_repl_rx_push(payload, parser->payload_len,
                                      link, session.session_id, session.vm_epoch,
                                      session.input_generation, session.transition_id)) {
             ++s_stats.repl_rx_dropped;
@@ -2785,21 +2853,21 @@ static void ev_control_handle_frame(ev_control_parser_t *parser, const ev_link_r
     }
 
     if (is_rpc) {
-        bool needs_vm = ev_control_rpc_needs_vm(domain, method, (const char *)parser->payload);
+        bool needs_vm = ev_control_rpc_needs_vm(domain, method, (const char *)payload);
         if (needs_vm) {
             if (!ev_control_vm_queue_push(domain, link, session.session_id, method, seq,
                                           session.vm_epoch,
                                           session.input_generation, session.transition_id,
-                                          parser->payload, parser->payload_len)) {
+                                          payload, parser->payload_len)) {
                 ++s_stats.vm_busy;
                 (void)ev_control_send_error(method, seq, "VM_BUSY", "interpreter busy");
             } else {
                 mp_hal_wake_main_task();
             }
         } else if (domain == EV_RPC_DEBUG) {
-            ev_control_handle_debug_rpc(seq, method, (const char *)parser->payload);
+            ev_control_handle_debug_rpc(seq, method, (const char *)payload);
         } else {
-            ev_control_handle_user_rpc(seq, method, (const char *)parser->payload);
+            ev_control_handle_user_rpc(seq, method, (const char *)payload);
         }
     }
     ev_control_response_context_clear();
@@ -2849,7 +2917,7 @@ static bool ev_control_parse_header(ev_control_parser_t *parser)
     if ((sscanf(parser->header, "EVMUX/1 h=%u p=%u c=%8x\r\n%n",
                 &metadata_len, &payload_len, &crc, &consumed) != 3) ||
             (consumed != (int)parser->header_len) || (metadata_len == 0) ||
-            (metadata_len > EV_CONTROL_METADATA_MAX) || (payload_len > EV_CONTROL_PAYLOAD_MAX)) {
+            (metadata_len > EV_CONTROL_METADATA_MAX) || (payload_len > EV_FILE_PAYLOAD_MAX)) {
         return false;
     }
     parser->metadata_len = metadata_len;
@@ -2904,11 +2972,31 @@ static void ev_control_parser_feed_byte(ev_control_parser_t *parser,
         parser->last_progress_ms = now_ms;
         if (parser->metadata_pos >= parser->metadata_len) {
             parser->metadata[parser->metadata_len] = '\0';
+            if (parser->payload_len > EV_CONTROL_PAYLOAD_MAX) {
+                ev_control_json_metadata_t metadata;
+                ev_session_snapshot_t session;
+                ev_session_result_t result;
+                if (!ev_control_json_parse_metadata(parser->metadata, parser->metadata_len, &metadata) ||
+                        strcmp(metadata.channel, "user.rpc") != 0 || strcmp(metadata.method, "file.write") != 0 ||
+                        strcmp(metadata.type, "req") != 0 || strcmp(metadata.encoding, "binary") != 0 ||
+                        !ev_control_frame_authorized(link, metadata.channel, metadata.method, &metadata, "",
+                                                     parser->payload_len, &session, &result) || result != EV_SESSION_RESULT_OK) {
+                    ++s_stats.frames_rejected;
+                    ev_control_parser_reset_keep_link(parser);
+                    return;
+                }
+                parser->file_payload = heap_caps_malloc(parser->payload_len + 1, MALLOC_CAP_8BIT);
+                if (parser->file_payload == NULL) {
+                    ++s_stats.frames_rejected;
+                    ev_control_parser_reset_keep_link(parser);
+                    return;
+                }
+            }
             parser->state = (parser->payload_len == 0) ? EV_CONTROL_PARSE_EOF : EV_CONTROL_PARSE_PAYLOAD;
         }
         return;
     case EV_CONTROL_PARSE_PAYLOAD:
-        parser->payload[parser->payload_pos++] = byte;
+        ev_control_frame_payload(parser)[parser->payload_pos++] = byte;
         parser->last_progress_ms = now_ms;
         if (parser->payload_pos >= parser->payload_len) {
             parser->state = EV_CONTROL_PARSE_EOF;
@@ -2916,7 +3004,7 @@ static void ev_control_parser_feed_byte(ev_control_parser_t *parser,
         return;
     case EV_CONTROL_PARSE_EOF:
         if ((byte == 0x1f) && ((parser->expected_crc == 0) ||
-                               (ev_mux_crc32(parser->payload, parser->payload_len) == parser->expected_crc))) {
+                               (ev_mux_crc32(ev_control_frame_payload(parser), parser->payload_len) == parser->expected_crc))) {
             ++s_stats.frames_ok;
             if (ev_transport_link_is_current(link)) {
                 ev_control_handle_frame(parser, link);
@@ -2989,6 +3077,7 @@ void ev_control_transport_init0(void)
                 ev_control_parser_reset(&s_parsers[id][slot]);
             }
         }
+        (void)ev_file_transfer_init();
         ev_control_repl_rx_clear();
         ev_control_vm_queue_clear();
         memset(&s_stats, 0, sizeof(s_stats));
@@ -3307,6 +3396,7 @@ static void ev_control_transport_task(void *arg)
 #endif
         }
         (void)ev_session_tick(ev_control_now_ms());
+        ev_file_transfer_poll();
         vTaskDelay(pump_delay_ticks);
     }
 }

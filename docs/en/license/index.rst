@@ -26,7 +26,7 @@ The following table lists the direct dependencies most relevant to redistributio
      - Apache-2.0 (``host/device-core/LICENSE``); historical MIT notices in ``NOTICE``
    * - Device-side camera/LCD test fixture
      - ``host/device-core/tests/fixtures/device-checks.py``
-     - Hardware acceptance functions migrated from the firmware tests; excluded from npm
+     - Hardware acceptance functions migrated from the firmware tests; included in the npm package for shared hardware checks
      - Apache-2.0 (original notice retained)
    * - `MicroPython <https://github.com/micropython/micropython>`__ v1.28.0
      - ``lib/micropython``
@@ -118,3 +118,5 @@ When adding a third-party package or source file to ESP-VISION:
 #. record the source, version, local path, purpose, and license in this inventory;
 #. verify that build switches actually exclude code that is not intended for distribution instead of relying on documentation alone;
 #. obtain legal review before merging when licensing is unclear or imposes commercial-distribution constraints.
+
+Native binary-upload tests use the system OpenSSL 3 libcrypto (Apache-2.0) as their SHA-256 oracle through a PSA test shim. This is a host-test dependency only; OpenSSL and the shim are not linked into firmware or distributed in the npm package. Firmware uses ESP-IDF PSA Crypto.

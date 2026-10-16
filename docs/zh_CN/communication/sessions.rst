@@ -122,7 +122,7 @@
      - 在一个请求上下文中关联响应。
      - 相同 seq 的 event、preview 或旧响应不能完成当前 RPC。
 
-所有非发现业务携带 sessionId。VM 相关的 ``script.write`` / ``script.run``、相机/对象/VFS 调试、``repl.stdin`` / ``repl.signal`` 还携带当前 vmEpoch。传输统计、保活、释放和后台网络控制不必依赖 VM 空闲，但仍要求相应的 owner 授权。
+所有非发现业务携带 sessionId。绑定 VM 代次的 ``file.write`` / ``script.write`` / ``script.run``、相机/对象/VFS 调试、``repl.stdin`` / ``repl.signal`` 还携带当前 vmEpoch。传输统计、保活、释放和后台网络控制不必依赖 VM 空闲，但仍要求相应的 owner 授权。
 
 启动 VM-ready 与软复位
 ----------------------

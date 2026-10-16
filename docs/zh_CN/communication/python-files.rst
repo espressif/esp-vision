@@ -6,7 +6,7 @@
 一个解释器，多种主机操作
 ------------------------
 
-友好 REPL、上传后运行脚本、Device Core 的文件读写最终都使用同一个 MicroPython VM。一个长时间占用 VM 的程序，会影响 REPL 和需要 VM 的 RPC，但不会让 transport task 自动失去保活/网络控制能力。
+友好 REPL、脚本执行和文件查询共用一个 MicroPython VM；二进制上传在相同会话、VM 代次和存储交接门控下直接写原生 VFS，不执行 Python。Core 仍串行化文件与解释器操作。一个长时间占用 VM 的程序，会影响 REPL 和需要 VM 的 RPC，但不会让 transport task 自动失去保活/网络控制能力。
 
 .. blockdiag::
 
@@ -17,13 +17,16 @@
      ui [label = "Host user action\nterminal / run / file"];
      core [label = "Device Core\npython.input() / files.write()\npython.execute() / control()"];
      text [label = "repl.stdin\nPython bytes"];
-     rpc [label = "user.rpc\nscript.write / script.run"];
+     rpc [label = "user.rpc\nscript.run"];
+     binary [label = "user.rpc\nfile.write (binary)"];
+     native [label = "native VFS\ncontinuous write + SHA-256"];
      stop [label = "repl.signal\n0x03"];
      queue [label = "auth + bounded VM/REPL queues"];
      vm [label = "same MicroPython VM\nREPL / VFS / execfile"];
      output [label = "repl.stdout / stderr\nmarkers + application output"];
      ui -> core;
-     core -> text; core -> rpc; core -> stop;
+     core -> text; core -> rpc; core -> stop; core -> binary;
+     binary -> native;
      text -> queue; rpc -> queue; stop -> queue;
      queue -> vm -> output;
    }
@@ -87,6 +90,62 @@ EV-MUX 启用时，在物理串口上裸发 ``0x03`` 不会被当作 Ctrl-C，�
 
 标记应每次运行唯一。结合 sessionId/vmEpoch、完整行结构和预期结果值判断；对摄像头任务，还要验证实际图像尺寸或其他应用证据。异常可能出现在 stdout，stderr 为空也不是成功依据。
 
+可靠二进制文件上传
+----------------------------------------
+
+SDK 0.2.0 的 Python、模型、图片与其他字节文件共用一个上传引擎；大脚本执行先经该引擎上传临时源码，再 script.run。公开 files.write 参数保持不变。旧 v4 固件缺少 file.write.binary 时仍可查询，但须更新固件后才能上传；Core 不静默回退旧写入器。固件的 script.write 只为此前已发布客户端保留。
+
+控制和数据均使用 user.rpc 的 file.write 方法，携带当前 sessionId/vmEpoch 与对应 seq。小型 JSON 控制仍限制 2048 字节。主机在 begin 前生成新的 16 字节随机 upload ID，begin 响应丢失或取消时仍可针对该 ID 发 abort。
+
+.. code-block:: json
+
+   {"action":"begin","path":"/models/example.tflite","mode":"overwrite","totalBytes":2097152,"sha256":"<64 lowercase hex>","uploadId":"<32 lowercase hex>"}
+   {"ok":true,"uploadId":"<same ID>","chunkBytes":16384}
+
+数据请求 metadata 设置 encoding:binary，payload 为 16 字节原始 upload ID、4 字节小端 offset，随后是 1..16384 字节文件原始内容；CRC32 覆盖整个 payload（含前缀）。非最后一块按 4096 字节对齐，最后一块可较短。NUL、CRLF、SOF、EOF 都是普通数据，不做 Base64 或 Python 输入解析。固件返回 JSON {ok:true,writtenBytes:N}，Core 校验后才发送下一块。重复、跳跃和乱序 offset 被拒绝，不提供随机写、自动重放或断点续传。
+
+.. code-block:: json
+
+   {"action":"commit","uploadId":"<same ID>"}
+   {"ok":true,"bytes":2097152,"complete":true}
+   {"action":"abort","uploadId":"<same ID>"}
+
+固件在整个上传期间保持一个原生临时文件打开，并持有一次完整 VFS 操作的准入计数，阻止 MSC 在活跃描述符尚未关闭时交接。commit 校验总长度与流式 SHA-256，随后 fsync、close、发布；空文件只需 begin/commit。接收器只有在确认当前所有者的 file.write 二进制请求后才分配大块帧存储，其他控制 RPC 限额不变；二进制 payload 上限为 16384+20 字节，与 JSON 的 2048 字节限额分开。
+
+上传绑定物理接口代次、会话、VM epoch 和会话转换代次；旧所有者不能追加或取消新的上传。abort、旧代次、失去会话或 30 秒无文件进展会关闭并删除临时文件；关闭失败保留存储交接屏障，不伪造释放成功。虽然原生 I/O 不执行解释器，VM 复位仍使上传失效。启动时不预留文件传输大缓冲。
+
+传输与完整性检查期间保留原目标。FAT 无法单次重命名覆盖已有目标，因此替换时先保留旧文件备份，已校验临时文件发布成功后才删除备份，普通发布失败会尝试回滚。FAT 目录更新之间掉电可能留下临时/备份文件，不承诺日志式掉电原子替换。commit 成功但响应丢失时，主机无法确认完成状态，重试前应核验目标。SHA-256 校验内容一致性，不用于认证恶意主机。
+
+上传设计与实测性能
+---------------------------------------
+
+文件本质是字节序列，扩展名不改变传输语义；上传与执行是不同操作，因此 Python、模型和图片共用一个二进制引擎。整次传输只打开、哈希和关闭一次，替代每小块重新 open/append/close。原始 16 KiB 块减少封装与往返，非末块按 Flash 的 4 KiB 擦除粒度对齐。方案复用现有 EV-MUX 帧和所有权，不增加物理连接、公开上传 API 或传输窗口。
+
+2026-10-16，P4X-EYE revision 3.2 使用 ESP-IDF 6.1 固件 ``af41759`` 与 SDK 0.2.0 开发源码，在现有 Flash 文件系统得到以下上传耗时。计时包含 begin、数据与校验提交；每次上传后另外在设备端完整读取文件计算 SHA-256，全部一致。这些是当前设备实测样本，不是所有开发板的吞吐保证。
+
+.. list-table:: P4X-EYE Flash 上传样本
+   :header-rows: 1
+   :widths: 25 25 25 25
+
+   * - 接口
+     - 256 KiB 旧写入器
+     - 256 KiB 二进制上传
+     - 2 MiB 二进制上传
+   * - USB-Serial-JTAG
+     - 40.94 s
+     - 7.24 s
+     - 55.75 s
+   * - USB-OTG
+     - 40.75 s
+     - 7.01 s
+     - 55.55 s
+   * - TCP / Wi-Fi
+     - 92.33 s
+     - 9.26 s
+     - 62.17 s
+
+256 KiB 的数据 RPC 从 292 次降为 16 次，另加 begin/commit；应用层收发总字节从文件大小约 2.14 倍降至 1.04 倍。本机 Flash/FAT 顺序写入基线约为 55 KiB/s，这是当前存储实现的基线，不是 USB 物理带宽上限。小文件仍需承担 begin/commit 与 FAT 元数据的固定成本。进一步加速应继续测量存储与接收调度，而不是继续放大 JSON 分块。
+
 公开文件 API 与线上实现
 -----------------------
 
@@ -98,7 +157,7 @@ EV-MUX 启用时，在物理串口上裸发 ``0x03`` 不会被当作 Ctrl-C，�
      - 线上实现
      - 使用场景
    * - ``device.files.write({ path, data, overwrite, ... })``
-     - Core 在 ``user.rpc`` 调用 ``script.write``，按协商的 RX 限额进行 base64 分块；固件通过临时文件写入 VFS。
+     - Core 在 user.rpc 使用 file.write 控制与原始二进制块，固件持续写原生 VFS，完整校验后提交；契约见上文。
      - 应用上传字符串或二进制字节的统一入口，不自动执行 Python。
    * - Device Core ``EvRepl.writeFile()``
      - framed REPL 执行 Python ``open`` / ``binascii.unhexlify`` / ``write`` / ``rename``。
@@ -110,8 +169,10 @@ EV-MUX 启用时，在物理串口上裸发 ``0x03`` 不会被当作 Ctrl-C，�
      - ``debug.rpc``，受限 JSON/base64 调试响应。
      - 快速诊断；当前 fs.read 只读起始最多 384 字节，不是带分页 offset 的完整下载 API。
 
-script.write 的请求与分块
--------------------------
+旧版 script.write 请求与分块
+----------------------------------------
+
+以下契约仅为 SDK 0.1.x 客户端保留，SDK 0.2.0 不再调用。
 
 .. code-block:: json
 

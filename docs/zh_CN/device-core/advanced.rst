@@ -47,7 +47,7 @@ EvMuxParser
 makeEvMuxFrame
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``makeEvMuxFrame({ channel, type = 'data', method = null, payload = '', seq = 0, sid = 'web-ide', sessionId = undefined, vmEpoch = undefined, contentType = undefined, width = undefined, height = undefined, route = undefined })``
+``makeEvMuxFrame({ channel, type = 'data', method = null, payload = '', seq = 0, sid = 'web-ide', sessionId = undefined, vmEpoch = undefined, contentType = undefined, width = undefined, height = undefined, route = undefined, encoding = undefined })``
 
 返回含 metadata、文本/二进制 payload 和 CRC 的线上 Uint8Array。seq 用于关联，sessionId/vmEpoch 标识所有权代次；编码不发送数据，也不获取会话。
 
@@ -193,7 +193,7 @@ DeviceSession
     探测 v4、校验身份/限制、获取所有权，可验证 REPL。
 
 ``DeviceSession.writeFile(path, content, { encoding = 'utf-8', mode = 'overwrite', runAfterWrite = false, signal = null, onProgress = null, } = {})``
-    通过有界 Base64/JSON script.write 分块写 UTF-8/二进制，返回最终 ACK。
+    通过统一的 file.write 二进制引擎写入 UTF-8/字节，完成 SHA-256 提交后返回；要求 file.write.binary，不回退旧上传路径。
 
 ``DeviceSession.writeScript(path, content, { runAfterWrite = false, signal = null } = {})``
     writeFile 的 UTF-8 兼容封装。
@@ -316,7 +316,7 @@ v4 能力校验要求的 feature 集合。
 EV_MUX_SCRIPT_CHUNK_BYTES
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-脚本分块参考上限，实际块可能因路径/JSON 元数据而更小。
+旧 script.write 的参考常量；SDK 0.2.0 上传不再使用，二进制块长取自 fileWriteChunkMax。
 
 .. code-block:: json
 
@@ -550,7 +550,7 @@ Inspect protocol state, device identity, filesystem, and recent logs.
 
 ``python.execute``
 
-Execute MicroPython through the shared interpreter using bounded REPL or chunked script transport.
+Execute MicroPython through the shared interpreter using bounded REPL or binary file staging.
 
 .. code-block:: json
 

@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { EV_REPL_FILE_CHUNK_BYTES } from './evrepl.js'
 
 export const EPHEMERAL_PYTHON_PATH = '/.espvision_agent_run.py'
 
@@ -306,17 +305,9 @@ export function bindSessionDeviceActions(registry, {
   registry.bind('deviceFile.write', async (input, { session, signal }) => {
     const path = validateDevicePath(input.path)
     const bytes = input.encoding === 'base64' ? base64ToBytes(input.content) : null
-    if (bytes) {
-      if (session.hasFeature('script.write')) {
-        await session.writeFile(path, bytes, { encoding: 'binary', signal })
-      } else {
-        await session.repl.writeFile(path, bytes, EV_REPL_FILE_CHUNK_BYTES, false, { signal })
-      }
-    } else if (session.hasFeature('script.write')) {
-      await session.writeScript(path, input.content, { runAfterWrite: input.runAfterWrite, signal })
-    } else {
-      await session.repl.writeFile(path, input.content, EV_REPL_FILE_CHUNK_BYTES, false, { signal })
-    }
+    await session.writeFile(path, bytes ?? input.content, {
+      encoding: bytes ? 'binary' : 'utf-8', runAfterWrite: input.runAfterWrite, signal,
+    })
     return { ok: true, path, bytes: bytes?.length ?? new TextEncoder().encode(input.content).length }
   })
   registry.bind('deviceFile.remove', async (input, { session, signal }) => {

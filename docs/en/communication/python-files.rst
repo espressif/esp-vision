@@ -6,7 +6,7 @@ Interactive Python, scripts and file operations
 One interpreter, multiple host operations
 -----------------------------------------
 
-Friendly REPL, uploaded scripts and Device Core file operations ultimately use one MicroPython VM. A long-running program affects REPL and VM RPCs, but does not automatically stop transport keepalive/network controls.
+Friendly REPL, script execution and file queries share one MicroPython VM. Binary upload writes native VFS directly under the same session, VM generation and storage drain gate; it does not execute Python. Core still serializes file and interpreter operations. A long-running program affects REPL and VM RPCs, but does not automatically stop transport keepalive/network controls.
 
 .. blockdiag::
 
@@ -17,13 +17,16 @@ Friendly REPL, uploaded scripts and Device Core file operations ultimately use o
      ui [label = "Host user action\nterminal / run / file"];
      core [label = "Device Core\npython.input() / files.write()\npython.execute() / control()"];
      text [label = "repl.stdin\nPython bytes"];
-     rpc [label = "user.rpc\nscript.write / script.run"];
+     rpc [label = "user.rpc\nscript.run"];
+     binary [label = "user.rpc\nfile.write (binary)"];
+     native [label = "native VFS\ncontinuous write + SHA-256"];
      stop [label = "repl.signal\n0x03"];
      queue [label = "auth + bounded VM/REPL queues"];
      vm [label = "same MicroPython VM\nREPL / VFS / execfile"];
      output [label = "repl.stdout / stderr\nmarkers + application output"];
      ui -> core;
-     core -> text; core -> rpc; core -> stop;
+     core -> text; core -> rpc; core -> stop; core -> binary;
+     binary -> native;
      text -> queue; rpc -> queue; stop -> queue;
      queue -> vm -> output;
    }
@@ -87,6 +90,62 @@ Completion markers and command echo
 
 Use a unique marker per run, current sessionId/vmEpoch, complete-line structure and expected result. Camera tasks also need actual image dimensions or other application evidence. Exceptions can appear on stdout; empty stderr is not proof of success.
 
+Reliable binary file upload
+----------------------------------------
+
+SDK 0.2.0 uses one upload engine for Python, model, image and arbitrary binary files. Large Python execution stages its temporary source through this engine before ``script.run``. Public ``files.write`` keeps its signature. Older v4 firmware without ``file.write.binary`` can still be inspected, but upload requires updating firmware; Core never silently switches back to the slow legacy writer. The firmware retains script.write only for previously released clients.
+
+All operations use method ``file.write`` on ``user.rpc``, current sessionId/vmEpoch and request/response seq correlation. Small JSON controls remain capped at 2048 bytes. The host creates a fresh 16-byte random upload ID before begin, so cancellation or a lost begin response can still issue abort for that ID.
+
+.. code-block:: json
+
+   {"action":"begin","path":"/models/example.tflite","mode":"overwrite","totalBytes":2097152,"sha256":"<64 lowercase hex>","uploadId":"<32 lowercase hex>"}
+   {"ok":true,"uploadId":"<same ID>","chunkBytes":16384}
+
+Data requests set metadata ``encoding:binary``. Their payload is 16 raw upload-ID bytes, a 4-byte little-endian offset, then 1..16384 raw file bytes. CRC32 covers the complete payload, including the prefix. Non-final blocks are multiples of 4096 bytes. The final block can be shorter. NUL, CRLF, SOF and EOF bytes are ordinary payload; there is no Base64 or Python input interpretation. The response is JSON ``{ok:true,writtenBytes:N}``, checked before sending the next block. Duplicate, skipped or out-of-order offsets reject; this is sequential upload, not random access or automatic replay/resume.
+
+.. code-block:: json
+
+   {"action":"commit","uploadId":"<same ID>"}
+   {"ok":true,"bytes":2097152,"complete":true}
+   {"action":"abort","uploadId":"<same ID>"}
+
+The device keeps one temporary native file open for the entire transfer. An admitted VFS operation remains held until close, preventing MSC handoff across a live descriptor. It checks length and a streaming SHA-256 against begin metadata, fsyncs, closes and publishes only after verification. Empty files use begin/commit without data frames. The receiver allocates larger frame storage only after verifying a file.write binary request from the active owner; limits for unrelated control RPCs remain unchanged. Raw payload is limited to 16384+20 bytes, independent of the 2048-byte JSON limit.
+
+The upload is tied to the physical link generation, session identity, VM epoch and transition generation. Old owners cannot append to or abort a newer upload. Abort, stale generation, session loss or 30 seconds without file progress close/remove the temporary file; failed close retains the storage drain barrier rather than claiming a clean handoff. Uploads are invalidated on VM reset even though native I/O needs no interpreter execution. No file buffer is permanently reserved at boot.
+
+Existing target data is preserved during transfer and integrity checks. FatFS cannot replace a destination in one rename: replacement retains the old regular file as a backup until the verified temporary file is renamed, and attempts rollback on ordinary publication failure. Power loss between FAT directory updates can leave staging/backup files and is not a journaled atomic replace. A successful commit followed by lost response has unknown completion from the host's perspective; inspect the destination before retrying. SHA-256 detects transport/content mismatch against host input, not malicious-host authenticity.
+
+Upload design and measured performance
+---------------------------------------
+
+A file is a byte sequence; its extension does not change transfer semantics. Upload and execution are separate operations, so Python, model and image data share one binary engine. Per-transfer open/hash/close replaces per-chunk open/append/close. Raw 16 KiB blocks reduce framing and round trips, and non-final blocks align to Flash's 4 KiB erase size. This reuses existing EV-MUX framing and ownership without another physical connection, public upload API or transfer window.
+
+On 2026-10-16, P4X-EYE revision 3.2 with ESP-IDF 6.1 firmware ``af41759`` and SDK 0.2.0 development sources produced the following application upload times on the existing Flash filesystem. Times include begin/data/verified commit; separate on-device full-file SHA-256 readback passed after every upload. These are observed samples, not board-independent throughput guarantees.
+
+.. list-table:: P4X-EYE Flash upload samples
+   :header-rows: 1
+   :widths: 25 25 25 25
+
+   * - Interface
+     - 256 KiB legacy writer
+     - 256 KiB binary upload
+     - 2 MiB binary upload
+   * - USB-Serial-JTAG
+     - 40.94 s
+     - 7.24 s
+     - 55.75 s
+   * - USB-OTG
+     - 40.75 s
+     - 7.01 s
+     - 55.55 s
+   * - TCP / Wi-Fi
+     - 92.33 s
+     - 9.26 s
+     - 62.17 s
+
+The 256 KiB transfer dropped from 292 data RPCs to 16 data RPCs plus begin/commit. TX+RX application bytes fell from roughly 2.14 to 1.04 times file size. The local Flash/FAT sequential-write baseline was about 55 KiB/s; it is a baseline for the current storage implementation, not a physical USB bandwidth limit. Small files still pay fixed begin/commit and FAT metadata costs. Improving further requires measuring storage and receive scheduling rather than increasing JSON chunk sizes.
+
 Public file API and wire implementation
 ---------------------------------------
 
@@ -98,7 +157,7 @@ Public file API and wire implementation
      - Wire implementation
      - Use case
    * - ``device.files.write({ path, data, overwrite, ... })``
-     - Core calls ``script.write`` on ``user.rpc`` with base64 chunks sized to the negotiated RX limit; firmware writes VFS through a temporary file.
+     - Core uses file.write control requests and raw binary blocks on user.rpc, with continuous native VFS writes and verified commit. See the binary contract above.
      - The application upload entry for strings and binary bytes. It does not automatically run Python.
    * - Device Core ``EvRepl.writeFile()``
      - Framed REPL Python ``open`` / ``binascii.unhexlify`` / ``write`` / ``rename``.
@@ -110,8 +169,10 @@ Public file API and wire implementation
      - ``debug.rpc`` with bounded JSON/base64 debug replies.
      - Quick diagnostics; current fs.read reads at most the first 384 bytes, not a complete paginated offset download API.
 
-script.write requests and chunks
---------------------------------
+Legacy script.write requests and chunks
+---------------------------------------
+
+The following contract is retained for SDK 0.1.x clients only; SDK 0.2.0 never uses it.
 
 .. code-block:: json
 

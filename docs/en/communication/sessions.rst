@@ -122,7 +122,7 @@ Four identity/correlation dimensions
      - Correlate a response within one request context.
      - An event, preview or old response with the same seq cannot complete this RPC.
 
-All non-discovery operations carry sessionId. VM-related ``script.write``/``script.run``, camera/object/VFS debugging and ``repl.stdin``/``repl.signal`` also carry current vmEpoch. Transport statistics, keepalive, release and background network controls do not require an idle VM, but still require appropriate owner authorization.
+All non-discovery operations carry sessionId. VM-scoped ``file.write``/``script.write``/``script.run``, camera/object/VFS debugging and ``repl.stdin``/``repl.signal`` also carry current vmEpoch. Transport statistics, keepalive, release and background network controls do not require an idle VM, but still require appropriate owner authorization.
 
 Startup VM readiness and soft reset
 -----------------------------------

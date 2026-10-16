@@ -47,7 +47,7 @@ Incremental byte parser with bounded partial frames, CRC checks, frame filtering
 makeEvMuxFrame
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``makeEvMuxFrame({ channel, type = 'data', method = null, payload = '', seq = 0, sid = 'web-ide', sessionId = undefined, vmEpoch = undefined, contentType = undefined, width = undefined, height = undefined, route = undefined })``
+``makeEvMuxFrame({ channel, type = 'data', method = null, payload = '', seq = 0, sid = 'web-ide', sessionId = undefined, vmEpoch = undefined, contentType = undefined, width = undefined, height = undefined, route = undefined, encoding = undefined })``
 
 Return Uint8Array wire bytes including metadata, binary/text payload and CRC. seq is correlation, sessionId/vmEpoch are ownership generations; encoding a frame does not send it or acquire a session.
 
@@ -149,7 +149,7 @@ Framed MicroPython REPL coordinator. io.writeEvmux(channel, type, method, payloa
     Create a path through the legacy REPL helper.
 
 ``EvRepl.writeFile(fn, data, chunk_size = EV_REPL_FILE_CHUNK_BYTES, direct = false, { signal = null } = {})``
-    Legacy REPL byte/chunk writer; application files.write uses the session RPC writer instead.
+    Legacy REPL byte/chunk helper; application files.write and script staging use the binary engine, never this helper.
 
 ``EvRepl.readSysInfoMD()``
     Return formatted system information as Markdown.
@@ -193,7 +193,7 @@ Low-level v4 interpreter. Inject transport, EvMuxParser, EvRepl and makeEvMuxFra
     Probe v4, validate identity/limits, acquire ownership and optionally prove REPL readiness.
 
 ``DeviceSession.writeFile(path, content, { encoding = 'utf-8', mode = 'overwrite', runAfterWrite = false, signal = null, onProgress = null, } = {})``
-    Write UTF-8/binary through bounded Base64/JSON script.write chunks; return final ACK.
+    Write UTF-8/binary through the shared reliable file.write binary engine; verify SHA-256 commit before returning. Requires file.write.binary; no upload fallback.
 
 ``DeviceSession.writeScript(path, content, { runAfterWrite = false, signal = null } = {})``
     UTF-8 compatibility wrapper over writeFile.
@@ -316,7 +316,7 @@ Features required by the v4 capability validator.
 EV_MUX_SCRIPT_CHUNK_BYTES
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Reference script chunk cap; actual chunks may be smaller to fit path/JSON metadata.
+Legacy script.write reference constant. SDK 0.2.0 uploads do not use it; binary chunk size comes from fileWriteChunkMax.
 
 .. code-block:: json
 
@@ -550,7 +550,7 @@ Inspect protocol state, device identity, filesystem, and recent logs.
 
 ``python.execute``
 
-Execute MicroPython through the shared interpreter using bounded REPL or chunked script transport.
+Execute MicroPython through the shared interpreter using bounded REPL or binary file staging.
 
 .. code-block:: json
 
