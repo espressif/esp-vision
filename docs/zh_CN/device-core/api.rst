@@ -3,7 +3,7 @@
 
 :link_to_translation:`en:[English]`
 
-本页覆盖 0.1.0 中 ``createDevice`` 返回对象的全部应用 API。除特别说明外，操作异步执行，失败时 reject。请求中的未知字段会被拒绝；不能给所有方法统一附加未声明的 ``timeout`` 等选项，应以各方法列出的字段为准。超时单位为毫秒，须为有限正数。
+本页覆盖 0.3.0 中 ``createDevice`` 返回对象的全部应用 API。除特别说明外，操作异步执行，失败时 reject。请求中的未知字段会被拒绝；不能给所有方法统一附加未声明的 ``timeout`` 等选项，应以各方法列出的字段为准。超时单位为毫秒，须为有限正数。
 
 .. list-table::
    :header-rows: 1
@@ -231,7 +231,7 @@ device.files.mkdir(request)
 
 返回 {ok:true}；递归模式创建父目录，允许目标已是目录，但不允许被同名文件占用。
 
-SDK 0.2.0 的所有文件（包括 Python 源码和模型）共用可靠的原始二进制 ``file.write`` 上传。固件须支持 ``file.write.binary`` 并提供有效 ``limits.fileWriteChunkMax``（4096..16384，按 4096 对齐）；不支持时返回 UNSUPPORTED_OPERATION 并提示更新固件，不回退到 Base64/JSON 或 REPL 上传。list/read/remove/mkdir 仍使用 framed REPL，无需另加 files.writeBinary 公开方法。进度是已确认接收的字节，最终 Promise 成功才代表完整长度/哈希校验和发布完成。取消/失败会尽力 abort，固件也会清理超时、旧会话或旧 VM 上传。传输、哈希和普通发布前失败保留原目标；FAT 覆盖使用旧文件备份与普通重命名失败回滚，不承诺掉电原子事务。线上契约见 :doc:`../communication/python-files`。应用更新使用 ``device.firmware.update()``，复用 ``/firmware`` 子路径的 ROM 烧写实现。
+SDK 0.2.0 及以上的所有文件（包括 Python 源码和模型）共用可靠的原始二进制 ``file.write`` 上传。固件须支持 ``file.write.binary`` 并提供有效 ``limits.fileWriteChunkMax``（4096..16384，按 4096 对齐）；不支持时返回 UNSUPPORTED_OPERATION 并提示更新固件，不回退到 Base64/JSON 或 REPL 上传。list/read/remove/mkdir 仍使用 framed REPL，无需另加 files.writeBinary 公开方法。进度是已确认接收的字节，最终 Promise 成功才代表完整长度/哈希校验和发布完成。取消/失败会尽力 abort，固件也会清理超时、旧会话或旧 VM 上传。传输、哈希和普通发布前失败保留原目标；FAT 覆盖使用旧文件备份与普通重命名失败回滚，不承诺掉电原子事务。线上契约见 :doc:`../communication/python-files`。应用更新使用 ``device.firmware.update()``，复用 ``/firmware`` 子路径的 ROM 烧写实现。
 
 device.capture(request)
 ----------------------------------------------
@@ -311,7 +311,7 @@ device.on(event, handler)
 固件检查与更新
 ------------------------------------------
 
-``device.firmware.check({ catalog?, identity?, version?, fetch = globalThis.fetch, signal? })``
+``device.firmware.check({ catalog?, identity?, version?, mode = 'update', fetch = globalThis.fetch, signal? })``
 
 返回 ``{ available, currentVersion, release, releases }``。已连接时使用真实设备身份；未连接时传入此前查询得到的 ``identity``，包含 ``board`` 与 ``firmwareVersion``。检查不会接管连接、复位或写入设备。``catalog`` 接受内存对象或绝对 HTTPS JSON 地址，下载失败会 reject；无匹配开发板时返回 ``release: null, available: false``。省略 catalog 时，Core 自动读取 dl.espressif.com 上的 ESP-VISION 官方目录及各版本更新元数据；自定义 catalog 只是高级覆盖。历史条目缺少更新元数据时仍可列出，但不可选为安装目标。
 
@@ -319,11 +319,11 @@ device.on(event, handler)
 
 ``image`` 包含 ``evMuxVersion: 4``、非负整数 ``chipFamily``、``offset``，以及精确 ``chipRevision`` 或整数范围 ``chipRevisionMin``/``chipRevisionMax``，正整数 ``bytes`` 与 ``partitionSize``（镜像须放得下），64 位小写十六进制 ``sha256``，以及 ``partitionTable: { offset, bytes, sha256 }``。需要下载镜像时增加绝对 HTTPS ``url``，直接指向 application bin；zip/artifact 下载不是原始 bin，Core 不负责解压。开发板名必须与固件身份完全一致，版本号是固件版本，不是 SDK/IDE 版本。SHA-256 用于校验与所选目录一致，不能证明恶意发布源可信。
 
-``device.firmware.update({ release, board?, data?, fetch = globalThis.fetch, openLoader, reset?, onProgress?, onPhase?, signal? })``
+``device.firmware.update({ release, board?, mode = 'update', data?, fetch = globalThis.fetch, openLoader, reset?, onProgress?, onPhase?, signal? })``
 
 ``release`` 为检查结果中选择的条目。已连接设备必须匹配该开发板；未连接时必须通过 ``board`` 显式指定实际选择的开发板。``data`` 为 Uint8Array application bin；省略时下载 ``release.image.url``。Core 先校验尺寸和哈希，再释放 EV-MUX 连接，随后调用宿主的 ``openLoader({ signal })`` 获取 ROM 下载端口。宿主适配器负责串口/WebUSB 选择及 ROM 进入操作，Core 不实现网络 OTA，也不另造第二套进入下载模式的线上指令。即使通过 TCP 发现/查询设备，更新仍需要本地下载连接。
 
-loader 契约沿用 :doc:`advanced` 中的 FirmwareFlashSession。可选 ``reset(loader)`` 替代其 hard-reset 策略，``onProgress(percent)`` 报告包含回读在内的 0–100 进度，``onPhase(text)`` 报告阶段。仅写 application 分区：写入前校验芯片/修订版本、安全状态及现有分区表，写入后完整回读并校验哈希。分区不匹配会拒绝；此接口不做整片迁移，不擦除 NVS 或用户文件。
+loader 契约沿用 :doc:`advanced` 中的 FirmwareFlashSession。可选 ``reset(loader)`` 替代其 hard-reset 策略，``onProgress(percent)`` 报告包含回读在内的 0–100 进度，``onPhase(text)`` 报告阶段。默认 update 模式仅写 application 分区：写入前校验芯片/修订版本、安全状态及现有分区表，写入后完整回读并校验哈希。分区不匹配会拒绝；默认更新不做整片迁移，不擦除 NVS 或用户文件；显式完整安装见下文。
 
 完整回读校验成功后返回 ``{ verified: true, needsReset, version, board, reconnected: false }``。``needsReset: true`` 要求宿主提示用户物理复位。不自动重连 EV-MUX，也不宣称新版本已运行，须另行重连并查询固件版本。取消信号在下载、获取 loader 以及写入前有效；开始烧写后延迟取消，确保完成回读。失败会 reject 并关闭已获取的 loader，不承诺回滚。更新期间连接、其它设备操作及并发更新以 DEVICE_BUSY 拒绝。未知字段会拒绝。交接后设备保持断开，包括交接之后发生失败的情况。
 
@@ -342,6 +342,29 @@ loader 契约沿用 :doc:`advanced` 中的 FirmwareFlashSession。可选 ``reset
      console.log(updated) // 另行重连/查询；needsReset 时提示复位。
    }
 
+空白设备首次安装
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+复用 ``firmware.check/update``，显式传入 ``mode: 'install'``。不需要 EV-MUX 连接或运行中的固件；用户必须选择真实开发板，使芯片进入 ROM 下载模式，并选择 ROM 支持的 USB-Serial-JTAG（USJ）或 UART 端口。空白设备不能依赖应用固件提供的 USB-OTG CDC 接口。浏览器宿主仍提供 ROM 适配器，CLI 内置 Node/esptool 适配器。此流程不是 TCP OTA。
+
+默认 ``mode: 'update'`` 保留原有只更新应用的行为；分区不匹配时拒绝，不会自动切换到 install。显式 install 将经过校验的完整合并镜像从地址 0 写入，包括 bootloader、分区表和应用。镜像覆盖范围内已有数据（包括可能存在的 NVS、文件系统数据）可能被替换，不承诺保留或回滚，也不会隐式执行整片擦除。宿主界面应明确区分首次安装与保留数据的应用更新。
+
+沿用 schemaVersion 1，发布条目新增可选 ``install: { offset: 0, bytes, flashSize, sha256, url, chipRevisionMin, chipRevisionMax, bootloader: { offset, bytes, sha256 } }``。flashSize 是布局要求的 Flash 容量（字节）；发布器取 bootloader 与应用芯片修订范围的交集。原有 image 仍是应用描述；安装会核验完整镜像中 bootloader、分区表和应用各自范围的哈希，范围必须有序、不重叠且不越界。发布流水线从现有合并镜像与实际 IDF 产物生成这些元数据；历史版本缺少合格安装元数据时不会推测兼容。
+
+``firmware.check({ mode: 'install', ... })`` 选择第一个具备安装元数据的版本，或精确选择指定版本。仅提供应用更新的版本仍显示在 releases 中，显式选择它安装时报 FIRMWARE_INSTALL_UNAVAILABLE；未知 mode 被拒绝。``firmware.update({ mode: 'install', ... })`` 在释放会话和获取 ROM 端口前校验镜像，随后检查真实芯片、修订、安全启动/加密状态及 JEDEC 实测容量，再开始写入。空白设备没有分区表，因此安装不要求旧表匹配。完整回读、复位策略、互斥、取消与返回结构沿用应用更新；是否已运行新固件仍须重新连接并 inspect 确认。
+
+.. code-block:: javascript
+
+   const device = createDevice() // 不需要运行态 transport 或 connect()。
+   const selected = await device.firmware.check({
+     identity: { board: 'ESP32_P4X_EYE', firmwareVersion: 'unknown' },
+     mode: 'install', version: selectedFirmwareVersion,
+   })
+   await device.firmware.update({
+     release: selected.release, board: 'ESP32_P4X_EYE', mode: 'install',
+     openLoader: ({ signal }) => host.openRomLoader({ signal }),
+   })
+
 列出并指定固件版本
 ------------------------------------------
 
@@ -357,4 +380,14 @@ loader 契约沿用 :doc:`advanced` 中的 FirmwareFlashSession。可选 ``reset
    await device.firmware.update({
      release: selected.release,
      openLoader: ({ signal }) => host.openRomLoader({ signal }),
+   })
+
+Node 宿主可直接复用随包提供的 ROM 适配器：
+
+.. code-block:: javascript
+
+   import { openNodeRom } from '@esp-vision/device-core/node'
+   await device.firmware.update({
+     release: selected.release, board: 'ESP32_P4X_EYE', mode: 'install',
+     openLoader: ({ signal }) => openNodeRom({ port: selectedRomPort, signal }),
    })

@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
-"""Publish qualified application updates beside existing full-flash binaries."""
+"""Publish qualified application updates and complete-install manifests."""
 import hashlib
 import json
 from pathlib import Path
@@ -10,7 +10,7 @@ import struct
 FAMILIES = {'esp32p4': 0x3280, 'esp32s3': 0x3253, 'esp32s31': 0x3231}
 
 
-def publish_update(board, target, tag, build_dir, output_dir):
+def publish_update(board, target, tag, build_dir, output_dir, full_image=None):
     from esptool.bin_image import LoadFirmwareImage
     build, output = Path(build_dir), Path(output_dir)
     args = json.loads((build / 'flasher_args.json').read_text())
@@ -46,6 +46,45 @@ def publish_update(board, target, tag, build_dir, output_dir):
             },
         },
     }
+    if full_image is not None:
+        full_path = Path(full_image)
+        full = full_path.read_bytes()
+        size_text = args['flash_settings']['flash_size']
+        if not size_text.endswith('MB') or not size_text[:-2].isdigit():
+            raise ValueError('Complete installation requires a fixed flash size in MB')
+        flash_size = int(size_text[:-2]) * 1024 * 1024
+        boot = args['bootloader']
+        boot_data = (build / boot['file']).read_bytes()
+        boot_offset = int(boot['offset'], 0)
+        if not (0 <= boot_offset < int(table['offset'], 0) < offset
+                and boot_offset + len(boot_data) <= int(table['offset'], 0)
+                and int(table['offset'], 0) + len(table_data) <= offset
+                and offset + len(data) <= len(full) <= flash_size):
+            raise ValueError('Complete image bounds do not cover bootloader, partition table and application')
+        # merge-bin can patch the bootloader flash mode/size/frequency header.
+        # Hash the actual merged bootloader, not the pre-merge header.
+        for part_offset, part_file in args['flash_files'].items():
+            if int(part_offset, 0) == boot_offset:
+                continue
+            part = (build / part_file).read_bytes()
+            start = int(part_offset, 0)
+            if full[start:start + len(part)] != part:
+                raise ValueError('Complete image differs from its declared flash inputs')
+        boot_image = LoadFirmwareImage(target, str(build / boot['file']))
+        minimum = max(image.min_rev_full, boot_image.min_rev_full)
+        maximum = min(image.max_rev_full, boot_image.max_rev_full)
+        if minimum > maximum:
+            raise ValueError('Bootloader and application silicon revision ranges do not overlap')
+        entry['install'] = {
+            'offset': 0, 'bytes': len(full), 'flashSize': flash_size,
+            'chipRevisionMin': minimum, 'chipRevisionMax': maximum,
+            'sha256': hashlib.sha256(full).hexdigest(),
+            'url': 'https://dl.espressif.com/AE/esp-vision/bin/' + full_path.name,
+            'bootloader': {
+                'offset': boot_offset, 'bytes': len(boot_data),
+                'sha256': hashlib.sha256(full[boot_offset:boot_offset + len(boot_data)]).hexdigest(),
+            },
+        }
     directory = output / 'firmware' / board
     directory.mkdir(parents=True, exist_ok=True)
     (directory / (tag + '.json')).write_text(json.dumps(entry, indent=2) + '\n')

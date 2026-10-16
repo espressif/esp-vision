@@ -12,12 +12,12 @@ Device Core npm 包对接
 
 Device Core 源码在 ESP-VISION 固件仓库的 ``host/device-core/`` 维护。``host/`` 表示运行在主机的代码，不是固件模块；IDE 与 Agent 是 npm 包的消费者，Agent 的 MCP、模型提供方和插件仍在独立项目维护。协议变更应在同一个 MR 对齐固件、Core、文档与测试。
 
-包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.2.0``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。确认公开 npm registry 已发布该版本后再安装；后续版本仍以实际发布结果为准，dry run 或创建 MR 不等于发布。
+包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.3.0``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。确认公开 npm registry 已发布该版本后再安装；后续版本仍以实际发布结果为准，dry run 或创建 MR 不等于发布。
 
 .. code-block:: console
 
-   npm view @esp-vision/device-core@0.2.0 version dist.integrity
-   npm install --save-exact @esp-vision/device-core@0.2.0
+   npm view @esp-vision/device-core@0.3.0 version dist.integrity
+   npm install --save-exact @esp-vision/device-core@0.3.0
 
 Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析包名，以及 Web Serial 或二进制 WebSocket 桥。包不附带串口驱动、网络桥、模型、IDE UI 或 Agent 运行时；Node mDNS 发现使用可选 peer ``multicast-dns``。发布前可安装本地 ``npm pack`` 产物验证，正式消费者应固定 npm 版本并更新 lockfile。
 
@@ -159,7 +159,7 @@ Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析�
 
 ``python.execute`` 的 ``source`` 与 ``path`` 二选一；``completion: 'wait'`` 等待结果，``'start'`` 返回包含 ``done`` Promise 的启动句柄。启动返回或上传成功不能替代执行完成证据。无限运行需 ``control({ action: 'stop' })``，保持接收并等待执行结果；停止 ACK 不能替代资源清理完成。
 
-``files.list/read/write/remove/mkdir`` 是唯一应用文件入口。``files.write`` 接收字符串或 ``Uint8Array``，SDK 0.2.0 均通过 ``file.write`` 原始二进制块、连续原生写入和 SHA-256 提交完成；固件须声明 ``file.write.binary``，缺少能力时须升级。读取和目录操作当前使用 framed REPL。文件系统必须已挂载、允许写入且有临时文件空间。终端输入、自动脚本和文件操作共用一个解释器；Core 对冲突的自动操作返回 ``DEVICE_BUSY``，应用不能同时向自动操作使用的 REPL 注入终端输入。详细边界见 :doc:`communication/python-files <../communication/python-files>`。
+``files.list/read/write/remove/mkdir`` 是唯一应用文件入口。``files.write`` 接收字符串或 ``Uint8Array``，SDK 0.3.0 均通过 ``file.write`` 原始二进制块、连续原生写入和 SHA-256 提交完成；固件须声明 ``file.write.binary``，缺少能力时须升级。读取和目录操作当前使用 framed REPL。文件系统必须已挂载、允许写入且有临时文件空间。终端输入、自动脚本和文件操作共用一个解释器；Core 对冲突的自动操作返回 ``DEVICE_BUSY``，应用不能同时向自动操作使用的 REPL 注入终端输入。详细边界见 :doc:`communication/python-files <../communication/python-files>`。
 
 Wi-Fi 配置与状态
 ----------------
@@ -246,3 +246,5 @@ ROM 烧写仍使用独立子路径 ``@esp-vision/device-core/firmware``；宿主
 ------------------------------------------
 
 应用调用 ``device.firmware.check()`` 自动获取官方发布目录及各版本元数据；``catalog`` 仅用于覆盖为自定义源。通过 ``device.firmware.update({ release, openLoader, ... })`` 安装选定的兼容版本。包内 CLI 已提供 Node ROM 适配器，命令行用户无需配置 loader 脚本；JavaScript 宿主通过 ``openLoader`` 适配其串口/Web Serial 环境。完整目录、取消与复位契约见 :doc:`api`，底层 loader 适配仍可直接使用 FirmwareFlashSession。
+
+Node 宿主可从 ``@esp-vision/device-core/node`` 导入 ``openNodeRom``，传入 ``openLoader: ({ signal }) => openNodeRom({ port, signal })``，无需自己实现烧写器。浏览器宿主提供 Web Serial ROM 适配器。空白设备在 check/update 中显式设置 ``mode: 'install'``，默认模式仅更新应用。

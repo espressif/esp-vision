@@ -10,7 +10,7 @@ Installation and platforms
 
 .. code-block:: console
 
-   npm install -g @esp-vision/device-core@0.2.0
+   npm install -g @esp-vision/device-core@0.3.0
    esp-vision-device --help
    esp-vision-device inspect
 
@@ -117,6 +117,13 @@ check reads https://dl.espressif.com/AE/esp-vision/config.toml automatically, th
 update requires a local --port and explicit --version. The built-in serial flasher internally calls separately installed Python esptool>=5.3,<6; install it once with python -m pip install "esptool>=5.3,<6". No JavaScript loader module or --loader argument is accepted. --python selects the interpreter, not a user adapter. An explicit --board allows qualified recovery without acquiring a live v4 session, but the physical chip/security/partition checks still apply. TCP is not OTA. Image download, application-only flashing, complete readback and reset handling reuse Core's update API. --image is an advanced local-bin override.
 
 The firmware release pipeline generates application bins plus SHA-256, actual partition bounds/table hashes and image-header silicon revision ranges from built artifacts. It publishes them additively beside the existing merged full-flash images; the website's existing flashing flow is unchanged. The six legacy releases present during this implementation lack this metadata; they can be listed, but no qualified official upgrade is available until the new firmware release is published. No fake successful update or guessed compatibility is reported.
+
+Blank-device installation uses the same command with explicit ``--mode install`` and ``--board``; no EV-MUX session is acquired. Select a ROM-capable USJ/UART port and enter download mode. The default mode is application-only update. Installation replaces existing data in the complete image's written range, validates chip/security/capacity and verifies every written byte. A release must include approved complete-install metadata; a legacy download URL alone is insufficient. ``--image`` overrides bytes for the selected mode, not its integrity checks. TCP OTA and application USB-OTG discovery on a blank device are not supported.
+
+.. code-block:: console
+
+   esp-vision-device firmware check --board ESP32_P4X_EYE --mode install --json
+   esp-vision-device firmware update --port COM3 --board ESP32_P4X_EYE --mode install --version <firmware-version>
 
 Output and cancellation
 ----------------------------------------

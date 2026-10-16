@@ -23,6 +23,7 @@ export async function loadOfficialFirmware({ board, fetch: fetcher = globalThis.
     if (metadata) {
       const entry = await metadata.json()
       if (entry.board !== name || entry.version !== version || new URL(entry.image?.url).origin !== 'https://dl.espressif.com') throw new TypeError('Official firmware metadata identity/URL mismatch')
+      if (entry.install && new URL(entry.install.url).origin !== 'https://dl.espressif.com') throw new TypeError('Official install URL mismatch')
       releases.push(entry)
     } else {
       const file = web.binaryNameTemplate.replace('{board}', name).replace('{tag}', version)

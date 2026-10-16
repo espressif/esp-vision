@@ -3,7 +3,7 @@
 
 :link_to_translation:`en:[English]`
 
-本参考按 package.json exports 覆盖全部 9 个导入路径、39 个命名导出，列出所有导出类不以下划线开头的公开原型方法。下划线方法及未通过包导出的 src/device_* 实现模块属于内部接口。应用从 :doc:`api` 开始，不应在同一连接并行创建多个所有者/解析器。以下签名使用 JavaScript 参数/默认值语法，异步方法返回 Promise。
+本参考按 package.json exports 覆盖全部 10 个导入路径、43 个命名导出，列出所有导出类不以下划线开头的公开原型方法。下划线方法及未通过包导出的 src/device_* 实现模块属于内部接口。应用从 :doc:`api` 开始，不应在同一连接并行创建多个所有者/解析器。以下签名使用 JavaScript 参数/默认值语法，异步方法返回 Promise。
 
 @esp-vision/device-core
 ----------------------------------------------
@@ -316,7 +316,7 @@ v4 能力校验要求的 feature 集合。
 EV_MUX_SCRIPT_CHUNK_BYTES
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-旧 script.write 的参考常量；SDK 0.2.0 上传不再使用，二进制块长取自 fileWriteChunkMax。
+旧 script.write 的参考常量；SDK 0.3.0 上传不再使用，二进制块长取自 fileWriteChunkMax。
 
 .. code-block:: json
 
@@ -1218,7 +1218,7 @@ bindSessionDeviceActions
 FirmwareFlashSession
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``new FirmwareFlashSession(loader, image, { reset = () => loader.hardReset() } = {})``
+``new FirmwareFlashSession(loader, image, { reset = () => loader.hardReset(), mode = 'update' } = {})``
 
 ROM 烧写器适配，与 EV-MUX 运行态会话分开，每个实例只使用一次。state 为 idle → connecting → connected → flashing → verified → closed，失败可经 error → closed；flash 最终会断开，单凭 closed 不能判定校验成功。
 
@@ -1231,7 +1231,12 @@ ROM 烧写器适配，与 EV-MUX 运行态会话分开，每个实例只使用�
 ``FirmwareFlashSession.disconnect()``
     关闭 loader 一次，重复调用不重复关闭。
 
-镜像描述包含 evMuxVersion=4、bytes、offset、partitionSize、sha256、chipFamily、chipRevision、partitionTable:{offset,bytes,sha256}。须提供可信构建元数据与精确 Uint8Array；此类不执行整片擦除或分区迁移。注入的 loader 提供 initialize()、chipFamily/chipRevision、getSecurityInfo()、runStub(true)、hardReset()、disconnect()；stub 提供 flashData()、readFlash()、readRegister()、writeRegister()。内置 P4 正常启动锁存处理。读回校验通过后的复位失败由 onPhase 提示，不会撤销校验或自动重写。
+镜像描述包含 evMuxVersion=4、bytes、offset、partitionSize、sha256、chipFamily、chipRevision、partitionTable:{offset,bytes,sha256}。须提供可信构建元数据与精确 Uint8Array；默认模式不执行整片擦除或分区迁移。注入的 loader 提供 initialize()、chipFamily/chipRevision、getSecurityInfo()、runStub(true)、hardReset()、disconnect()；stub 提供 flashData()、readFlash()、readRegister()、writeRegister()。内置 P4 正常启动锁存处理。读回校验通过后的复位失败由 onPhase 提示，不会撤销校验或自动重写。
+
+
+``mode: 'install'`` 使用完整合并镜像描述：原应用元数据放在 application 中，bytes/offset=0/sha256/flashSize/bootloader 描述完整镜像，partitionTable 保持原结构；芯片修订范围须同时覆盖 bootloader 与应用。安装跳过旧分区表匹配，要求返回的 stub 提供 flashId()，返回整数 JEDEC ID，位 16–23 为容量指数。现有应用更新适配器无需修改；内置 Node 适配器及官网 Web Serial loader 提供该方法。完整安装的数据覆盖语义见 :doc:`api`。
+
+``firmwareMode(mode = 'update')`` 校验并返回 update/install，其他值抛出 TypeError。``validateFirmwareImage(image, bytes, { mode = 'update' } = {})`` 在 install 模式下还会校验嵌入的 bootloader、分区表和应用范围及哈希。
 
 firmwareSha256
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1243,7 +1248,7 @@ Promise<string>，返回小写 SHA-256 十六进制摘要，要求 Web Crypto。
 validateFirmwareImage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``validateFirmwareImage(image, bytes)``
+``validateFirmwareImage(image, bytes, { mode = 'update' } = {})``
 
 Promise<Uint8Array>，校验 v4、精确字节数、应用分区边界和 SHA-256，返回输入字节；不推断或下载可信构建清单。
 
@@ -1255,6 +1260,10 @@ Promise<Uint8Array>，校验 v4、精确字节数、应用分区边界和 SHA-25
 
 ``serialTransport({ serial, python })``
     返回共用的 Node/Python 串口字节适配器。指定设备名称/路径及已安装 pyserial 的解释器（例如 ``python3``）；由 Core 打开和关闭，按实际接口选择 ``usj``、``usb`` 或 ``uart`` 角色。适配器只传字节，不维护另一套设备会话。此 Node 专用导出从 0.1.1 起可用。
+
+
+``openNodeRom({ port, python?, signal? })``
+    返回内置 ROM 适配器，创建时不打开端口。用于 ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })``，安装与应用更新共用。需要独立安装 Python esptool>=5.3,<6；Unix 默认 python3，Windows 默认 python。Core 负责初始化、校验、写入/回读、复位与释放。SDK 0.3.0 新增，仅用于 Node；区别于运行态 serialTransport，也不是 TCP OTA。
 
 @esp-vision/device-core/discovery
 ------------------------------------------------------------------

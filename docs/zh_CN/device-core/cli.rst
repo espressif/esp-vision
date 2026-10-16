@@ -10,7 +10,7 @@ npm 包安装 ``esp-vision-device`` 管理工具，共有 inspect、configure、
 
 .. code-block:: console
 
-   npm install -g @esp-vision/device-core@0.2.0
+   npm install -g @esp-vision/device-core@0.3.0
    esp-vision-device --help
    esp-vision-device inspect
 
@@ -114,9 +114,16 @@ CLI 显式目标的 --timeout 默认为 30000 毫秒，传给 connect/inspect/co
 
 check 默认读取 https://dl.espressif.com/AE/esp-vision/config.toml，再获取 firmware/<board>/<version>.json 中的版本更新信息，无需用户准备 JSON。列出全部目录版本；旧版本缺少合格更新元数据时仍显示 compatible:false、reason UPDATE_METADATA_UNAVAILABLE，不能直接通过应用分区更新接口写入。--version 精确选择合格版本。--catalog 仅作高级自定义源覆盖，不是必填项。离线检查只需 --board，--current-version 可省略，默认 unknown。
 
-update 需要本地 --port 和明确 --version。内置串口烧写器在内部调用独立安装的 Python esptool>=5.3,<6，一次安装依赖即可：python -m pip install "esptool>=5.3,<6"。不再接受 --loader，也不要求用户编写 JS。--python 只是选择解释器，不是配置适配器。显式 --board 可用于不接管 v4 会话的恢复操作，但仍校验真实芯片、安全状态和分区。TCP 不等于 OTA。镜像下载、仅写 application、完整回读和复位处理均复用 Core 更新 API；--image 仅作为高级本地镜像覆盖。
+update 需要本地 --port 和明确 --version。内置串口烧写器在内部调用独立安装的 Python esptool>=5.3,<6，一次安装依赖即可：python -m pip install "esptool>=5.3,<6"。不再接受 --loader，也不要求用户编写 JS。--python 只是选择解释器，不是配置适配器。显式 --board 可用于不接管 v4 会话的恢复操作，但仍校验真实芯片、安全状态和分区。TCP 不等于 OTA。默认 update 模式的镜像下载、仅写 application、完整回读和复位处理均复用 Core 更新 API；--image 仅作为高级本地镜像覆盖。
 
 固件发布流水线根据实际构建产物自动生成 application bin、SHA-256、真实分区大小/表哈希及镜像头中的芯片修订范围，随原有整片镜像增量发布，不改变官网原有烧写方式。本次实现时 dl 上六个历史版本缺少这些元数据，因此可列举但没有可直接安全更新的官方版本；新固件发布后自动生效，不猜测兼容性或模拟更新成功。
+
+空白设备首次安装使用同一个命令，显式指定 ``--mode install`` 与 ``--board``，不获取 EV-MUX 会话。选择 ROM 支持的 USJ/UART 端口并进入下载模式。默认模式仍是只更新应用。安装会替换完整镜像覆盖范围内的已有数据，写前校验芯片、安全状态与实际容量，写后完整回读。版本必须具备合格的 install 元数据，不能仅凭历史下载地址安装。``--image`` 提供对应模式的本地镜像，但不跳过完整性检查。不支持 TCP OTA，也不能依赖空白设备具有应用 USB-OTG 串口。
+
+.. code-block:: console
+
+   esp-vision-device firmware check --board ESP32_P4X_EYE --mode install --json
+   esp-vision-device firmware update --port COM3 --board ESP32_P4X_EYE --mode install --version <firmware-version>
 
 输出与取消
 ----------------------------------------

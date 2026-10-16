@@ -109,3 +109,5 @@ MicroPython Overlay
 ESP-VISION 以 MicroPython v1.28.0 作为固定上游基线。ESP32 port 的项目增量维护在 ``overlay/micropython/`` 下。``prepare-micropython`` 构建步骤会将其应用到 ``build/micropython/idf<ESP_IDF_VERSION>/micropython/`` 下的生成副本； ``lib/micropython`` 子模块保持为干净的上游参考。
 
 ESP-VISION 与上游项目的关系见 :doc:`../project-relationship/index`；各组件的许可证见 :doc:`../license/index`\ 。
+
+Device Core 的同一 firmware API 提供两种显式 ROM 操作：默认匹配现有分区表、只更新应用；首次安装则使用包含 bootloader、分区表与应用的完整镜像清单。两者均不通过 EV-MUX 传输固件；IDE、Agent、CLI 复用同一校验与回读逻辑，无需各自实现烧写流程。
