@@ -1,8 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.1.1
+
+### Fixed
+
+- Expose `tcpTransport` and `serialTransport` through `@esp-vision/device-core/node`.
+- Include unit tests, hardware checks, fixtures and npm script targets in the tarball. Fail when no unit tests are found; validate imports, discovery and runnable checks from an isolated installed package.
+- Clarify `device.discover()` versus the provider's `list()` contract and document the shipped Node adapters and installed test commands.
+
+## 0.1.0 — Initial public release
 
 ### Added
+
+- Added browser-safe and optional Node LAN discovery interfaces, TTL-aware DNS-SD collection, and selection-time device identity validation before EV-MUX acquisition.
+
+- Standalone, UI-independent EV-MUX v4 sessions, strict ownership/epoch filtering, framed REPL, files, execution, Wi-Fi controls and device-action contracts.
+- Verified firmware-flash adapter with injected ROM loader, image/security/partition checks, complete readback and masked P4 download-latch reset.
+- Public npm metadata, protected default-branch publishing, isolated tarball checks and verified/idempotent release retries. The package has no Agent/IDE runtime dependency or bundle; the official firmware index uses a small TOML parser, and Node discovery optionally uses multicast-dns.
 
 - Default official firmware discovery reads dl.espressif.com config and per-version metadata; legacy unqualified releases remain visible without enabling unsafe writes. CLI uses --port and a built-in esptool process adapter, removing the user-supplied JavaScript loader requirement.
 
@@ -23,26 +37,14 @@
 
 ### Fixed
 
+- Preserve split mDNS address announcements during cache flush, reclaim expired cache entries, bound packet retention, and close discovery sockets when cancellation occurs during setup.
+- Soft reset requires a newer ready epoch and a real REPL barrier within one deadline; caller cancellation reaches all stages and device-action adapters.
+- Bounded file reads reject incomplete/changing content; serial startup drain, TCP frame deadlines and keepalive recovery follow the v4 contract.
+
 - Align discovery output by Unicode display width instead of tabs; fall back to aligned, wrapped device blocks on narrow terminals without truncating identifiers.
 
 - Generate script completion inside the executing statement so `input()` receives only user input; retain output arriving in the same frame as completion.
 - Return binary image results correlated to the requesting sequence instead of a shared last-image slot. LCD capture uses the dedicated `debug.capture_screen` capability and never falls back to the camera; this refactor does not implement the planned high-throughput binary firmware protocol.
 - Clean up subscriptions, pending work and transports on connection failure or session loss, and isolate event-listener exceptions from protocol delivery.
-
-## 0.1.0 — Initial public release
-
-### Added
-
-- Added browser-safe and optional Node LAN discovery interfaces, TTL-aware DNS-SD collection, and selection-time device identity validation before EV-MUX acquisition.
-
-- Standalone, UI-independent EV-MUX v4 sessions, strict ownership/epoch filtering, framed REPL, files, execution, Wi-Fi controls and device-action contracts.
-- Verified firmware-flash adapter with injected ROM loader, image/security/partition checks, complete readback and masked P4 download-latch reset.
-- Public npm metadata, protected default-branch publishing, isolated tarball checks and verified/idempotent release retries. The package has no Agent/IDE runtime dependency or bundle; the official firmware index uses a small TOML parser, and Node discovery optionally uses multicast-dns.
-
-### Fixed
-
-- Preserve split mDNS address announcements during cache flush, reclaim expired cache entries, bound packet retention, and close discovery sockets when cancellation occurs during setup.
-- Soft reset requires a newer ready epoch and a real REPL barrier within one deadline; caller cancellation reaches all stages and device-action adapters.
-- Bounded file reads reject incomplete/changing content; serial startup drain, TCP frame deadlines and keepalive recovery follow the v4 contract.
 
 The earlier v3 extraction existed only inside repository development history; it was not an npm release of this package. Version 0.1.0 is the first public v4-only package.

@@ -12,12 +12,12 @@ Device Core npm 包对接
 
 Device Core 源码在 ESP-VISION 固件仓库的 ``host/device-core/`` 维护。``host/`` 表示运行在主机的代码，不是固件模块；IDE 与 Agent 是 npm 包的消费者，Agent 的 MCP、模型提供方和插件仍在独立项目维护。协议变更应在同一个 MR 对齐固件、Core、文档与测试。
 
-包使用独立版本，不与固件版本或 IDE 版本绑定。已发布的 ``@esp-vision/device-core@0.1.0`` 只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。该版本可直接从公开 npm registry 安装；后续版本仍以实际发布结果为准，dry run 或创建 MR 不等于发布。
+包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.1.1``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。确认公开 npm registry 已发布该版本后再安装；后续版本仍以实际发布结果为准，dry run 或创建 MR 不等于发布。
 
 .. code-block:: console
 
-   npm view @esp-vision/device-core@0.1.0 version dist.integrity
-   npm install --save-exact @esp-vision/device-core@0.1.0
+   npm view @esp-vision/device-core@0.1.1 version dist.integrity
+   npm install --save-exact @esp-vision/device-core@0.1.1
 
 Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析包名，以及 Web Serial 或二进制 WebSocket 桥。包不附带串口驱动、网络桥、模型、IDE UI 或 Agent 运行时；Node mDNS 发现使用可选 peer ``multicast-dns``。发布前可安装本地 ``npm pack`` 产物验证，正式消费者应固定 npm 版本并更新 lockfile。
 
@@ -191,13 +191,19 @@ Node 安装可选 ``multicast-dns`` peer 后使用：
 
    import { createDevice } from '@esp-vision/device-core'
    import { createNodeDiscovery } from '@esp-vision/device-core/discovery/node'
+   import { tcpTransport } from '@esp-vision/device-core/node'
 
    const device = createDevice({ discovery: createNodeDiscovery() })
    const devices = await device.discover({ timeout: 3000 })
-   const selected = devices.find(item => item.compatible)
+   const selected = devices.find(item => item.compatible && item.addresses.length)
    if (!selected) throw new Error('No compatible device found')
-   // Build tcpAdapter from selected.addresses and selected.port in the host.
-   await device.connect({ transport: tcpAdapter, role: 'tcp', expectedDevice: selected })
+   const tcpAdapter = tcpTransport({ host: selected.addresses[0], port: selected.port })
+   try {
+       await device.connect({ transport: tcpAdapter, role: 'tcp', expectedDevice: selected })
+       console.log(await device.inspect({ fields: ['identity'] }))
+   } finally { await device.disconnect() }
+
+应用调用 ``device.discover()``。``createNodeDiscovery()`` 和 ``createBridgeDiscovery()`` 返回 provider，契约为 ``list({ timeout, signal })``，不提供 ``discover()``；通过 ``createDevice({ discovery: provider })`` 注入。0.1.1 起，官方 ``tcpTransport({ host, port })`` 和 ``serialTransport({ serial, python })`` 适配器由 ``@esp-vision/device-core/node`` 导出，构造时不打开连接；串口所选解释器需安装 pyserial。见 :doc:`advanced`。
 
 浏览器使用 ``@esp-vision/device-core/discovery`` 中的 ``createBridgeDiscovery('ws://127.0.0.1:8766/device')`` 注入本地桥。浏览器没有原生 DNS-SD 枚举能力。结果包含 ``deviceId``、``hostname``、``board``、``firmwareVersion``、``addresses``、``port``、``compatible``，桥接结果还可能有 ``connectionUrl``。宿主据此构造连接适配器，使用 ``expectedDevice`` 在获取会话前核验 ID 与主机名，防止 DHCP 地址陈旧；这不是认证。VLAN、组播过滤和 AP 隔离可能需要手动地址，过期桥接句柄需要重新发现。
 

@@ -1247,6 +1247,15 @@ validateFirmwareImage
 
 Promise<Uint8Array>: validate v4, exact byte size, application partition bounds and SHA-256; returns the supplied bytes. It does not infer or download an approved manifest.
 
+@esp-vision/device-core/node
+------------------------------------------------------------------
+
+``tcpTransport({ host, port })``
+    Return a passive Node TCP byte adapter. Core opens it during ``device.connect({ role: 'tcp' })``.
+
+``serialTransport({ serial, python })``
+    Return the shared Node/Python serial byte adapter. Use an explicit serial device name/path and an interpreter with pyserial (for example ``python3``). Core opens/closes it; choose role ``usj``, ``usb`` or ``uart`` for the actual interface. The adapters carry bytes, not another device session. This Node-only export is available starting in 0.1.1.
+
 @esp-vision/device-core/discovery
 ------------------------------------------------------------------
 

@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Device Core 0.1.1 exports passive Node TCP/serial adapters at `/node` and ships its unit/hardware check assets; installed-package validation executes the tests and provider-backed discovery from a clean consumer.
+
 - Official release artifacts now include application-only update images and per-board/version metadata (SHA-256, partition layout and silicon revision bounds) for automatic Device Core/CLI updates from dl.espressif.com.
 
 - Added a bilingual Device Core host SDK chapter with the complete application API, events/errors, all package exports and public advanced class methods, discovery and ROM flashing contracts.

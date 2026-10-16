@@ -1,6 +1,6 @@
 {
   "name": "@esp-vision/device-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared EV-MUX, framed REPL, device session, and action contracts for ESP Vision clients.",
   "type": "module",
   "exports": {
@@ -12,7 +12,8 @@
     "./bindings": "./src/device_bindings.js",
     "./firmware": "./src/firmware_flash.js",
     "./discovery": "./src/network_discovery.js",
-    "./discovery/node": "./src/network_discovery_node.js"
+    "./discovery/node": "./src/network_discovery_node.js",
+    "./node": "./src/node_transport.js"
   },
   "files": [
     "src/*.js",
@@ -21,11 +22,14 @@
     "CHANGELOG.md",
     "README.md",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "tests/*.mjs",
+    "tests/fixtures/*.py",
+    "scripts/*.mjs"
   ],
   "license": "Apache-2.0",
   "scripts": {
-    "test": "node --test tests/test-device-*.mjs tests/test-cli*.mjs tests/test-firmware-flash.mjs tests/test-network-discovery.mjs",
+    "test": "node scripts/run-tests.mjs",
     "check:schema": "node scripts/generate-action-schema.mjs --check",
     "schema:actions": "node scripts/generate-action-schema.mjs",
     "check:package": "node tests/check-package.mjs",

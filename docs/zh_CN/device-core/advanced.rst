@@ -1247,6 +1247,15 @@ validateFirmwareImage
 
 Promise<Uint8Array>，校验 v4、精确字节数、应用分区边界和 SHA-256，返回输入字节；不推断或下载可信构建清单。
 
+@esp-vision/device-core/node
+------------------------------------------------------------------
+
+``tcpTransport({ host, port })``
+    返回被动构造的 Node TCP 字节适配器。由 Core 在 ``device.connect({ role: 'tcp' })`` 时打开。
+
+``serialTransport({ serial, python })``
+    返回共用的 Node/Python 串口字节适配器。指定设备名称/路径及已安装 pyserial 的解释器（例如 ``python3``）；由 Core 打开和关闭，按实际接口选择 ``usj``、``usb`` 或 ``uart`` 角色。适配器只传字节，不维护另一套设备会话。此 Node 专用导出从 0.1.1 起可用。
+
 @esp-vision/device-core/discovery
 ------------------------------------------------------------------
 

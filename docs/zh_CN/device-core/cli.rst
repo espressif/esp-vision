@@ -10,7 +10,7 @@ npm 包安装 ``esp-vision-device`` 管理工具，共有 inspect、configure、
 
 .. code-block:: console
 
-   npm install -g @esp-vision/device-core@0.1.0
+   npm install -g @esp-vision/device-core@0.1.1
    esp-vision-device --help
    esp-vision-device inspect
 
