@@ -34,6 +34,7 @@ device_core_checks:
     - export TMPDIR="$CI_PROJECT_DIR/.cache/device-core-tmp" TMP="$CI_PROJECT_DIR/.cache/device-core-tmp" TEMP="$CI_PROJECT_DIR/.cache/device-core-tmp"
     - mkdir -p "$TMPDIR"
     - npm install --ignore-scripts --no-audit --no-fund --package-lock=false --registry=https://registry.npmjs.org/
+    - cmp LICENSE ../../LICENSE
     - npm test
     - npm run check:schema
     - npm run check:package

@@ -37,7 +37,7 @@ try {
   }
   const [packed] = JSON.parse(npm(['pack', '--json', '--ignore-scripts', '--pack-destination', temporary]))
   for (const required of ['LICENSE', 'NOTICE']) assert.ok(packed.files.some(({ path }) => path === required), `Missing ${required}`)
-  assert.ok(packed.files.every(({ path }) => /^(src\/|schemas\/|package\.json$|README\.md$|LICENSE$|NOTICE$|CHANGELOG\.md$)/.test(path)),
+  assert.ok(packed.files.every(({ path }) => /^(src\/|schemas\/|tests\/|scripts\/|package\.json$|README\.md$|LICENSE$|NOTICE$|CHANGELOG\.md$)/.test(path)),
     'Only the standalone library may be published')
   if (dryRun) {
     npm(['publish', join(temporary, packed.filename), '--dry-run', '--ignore-scripts', '--access', 'public', '--registry', registry])

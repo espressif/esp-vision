@@ -19,10 +19,10 @@
 | Visibility | Public; installation needs no npm login |
 | Source location | `host/device-core` in the ESP-VISION firmware repository |
 
-The npm page and installation become available only after the first publication succeeds. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
+The `/node` export and bundled checks below require 0.1.1, the next patch release prepared by this source tree; 0.1.0 remains the published baseline until the release pipeline succeeds. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
 
 ```sh
-npm install --save-exact @esp-vision/device-core@0.1.0 --registry=https://registry.npmjs.org/
+npm install --save-exact @esp-vision/device-core@0.1.1 --registry=https://registry.npmjs.org/
 ```
 
 EV-MUX v4 firmware is required. A v3 hello is rejected with `VERSION_MISMATCH`; applications should ask the user to update firmware. Core has no runtime dependency on the IDE, Agent, DOM or Node serial libraries. The host supplies the physical byte transport and discovery adapter; Core owns protocol parsing, session negotiation, REPL coordination and device operations.
@@ -41,7 +41,7 @@ Documentation source lives in this repository under `docs/en/device-core/` and `
 The npm package installs `esp-vision-device`. `inspect` combines passive wired/LAN enumeration and targeted queries. By default it lists USB serial candidates; `--all-ports` also includes native UART/Bluetooth ports. Explicit `--port` bypasses discovery filtering; `configure`, `control`, and `firmware check/update` cover management. See the [CLI guide](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/cli.html) ([中文](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/cli.html)).
 
 ```sh
-npm install -g @esp-vision/device-core@0.1.0
+npm install -g @esp-vision/device-core@0.1.1
 esp-vision-device inspect
 esp-vision-device inspect --all-ports
 esp-vision-device inspect --interface usj,usb --probe --json
@@ -49,7 +49,7 @@ esp-vision-device inspect --port COM3 --fields identity,capabilities
 esp-vision-device inspect --tcp 192.168.1.100:3232 --fields network,storage --json
 ```
 
-Wired access/enumeration requires Python with pyserial (`--python` overrides the interpreter); LAN discovery uses optional `multicast-dns`, normally installed by npm. Windows/Linux/macOS paths are accepted. Passive enumeration never opens a serial port; `--probe` and targeted queries acquire a session and may interrupt Python. Unidentified ports, ROM candidates and USB-to-UART adapters remain numbered and visible. Board names are unknown until firmware identification; USB descriptors are hints only. Firmware versions are fetched automatically from dl.espressif.com. Firmware flashing uses the built-in serial adapter with separately installed Python esptool>=5.3,<6; no user loader module is required. Historical releases without qualified update metadata remain listed but cannot be installed by this flow. Installation becomes available after first npm publication.
+Wired access/enumeration requires Python with pyserial (`--python` overrides the interpreter); LAN discovery uses optional `multicast-dns`, normally installed by npm. Windows/Linux/macOS paths are accepted. Passive enumeration never opens a serial port; `--probe` and targeted queries acquire a session and may interrupt Python. Unidentified ports, ROM candidates and USB-to-UART adapters remain numbered and visible. Board names are unknown until firmware identification; USB descriptors are hints only. Firmware versions are fetched automatically from dl.espressif.com. Firmware flashing uses the built-in serial adapter with separately installed Python esptool>=5.3,<6; no user loader module is required. Historical releases without qualified update metadata remain listed but cannot be installed by this flow. Check the registry version before installing a newly prepared release.
 
 ## Public device API
 
@@ -110,14 +110,39 @@ try {
 }
 ```
 
+### Official Node adapters
+
+The Node-only `@esp-vision/device-core/node` subpath exports `tcpTransport({ host, port })` and `serialTransport({ serial, python })`. Constructors are passive; Core opens/closes the link during `connect()`/`disconnect()`. Serial needs pyserial in the selected Python interpreter, and uses role `usj`, `usb` or `uart` for the actual interface. The root/browser entry points do not load Node networking/process modules.
+
+```js
+import { createDevice } from '@esp-vision/device-core';
+import { tcpTransport, serialTransport } from '@esp-vision/device-core/node';
+
+const tcpDevice = createDevice({ transport: tcpTransport({ host: '192.168.1.100', port: 3232 }) });
+const usbDevice = createDevice({ transport: serialTransport({ serial: '/dev/ttyACM0', python: 'python3' }) });
+// Connect only the selected device, and always disconnect() in finally.
+```
+
 A discovery-only instance can receive a transport later:
 
 ```js
-const [selected] = await device.discover({ timeout: 3000 });
-await device.connect({ transport: tcpAdapter, role: 'tcp', expectedDevice: selected });
+import { createDevice } from '@esp-vision/device-core';
+import { tcpTransport } from '@esp-vision/device-core/node';
+import { createNodeDiscovery } from '@esp-vision/device-core/discovery/node';
+
+const provider = createNodeDiscovery();
+const device = createDevice({ discovery: provider });
+const selected = (await device.discover({ timeout: 3000 })).find(item => item.compatible && item.addresses.length);
+if (!selected) throw new Error('No compatible device found');
+try {
+  await device.connect({ transport: tcpTransport({ host: selected.addresses[0], port: selected.port }), role: 'tcp', expectedDevice: selected });
+  console.log(await device.inspect({ fields: ['identity'] }));
+} finally { await device.disconnect(); }
 ```
 
-Opening `tcpAdapter` from the selected address/bridge URL remains the host's responsibility. Supported query fields are `identity`, `capabilities`, `runtime`, `network` and `storage`. The default is identity/capabilities/runtime; `inspect` reads only the requested fields and does not change configuration. Network/storage queries require the corresponding firmware capabilities. `connect()` returns that default inspection result after negotiation.
+Application discovery is `device.discover()`. `createNodeDiscovery()` and `createBridgeDiscovery()` return providers whose adapter contract is `list({ timeout, signal })`; they do not expose `discover()`. Inject a provider into `createDevice({ discovery: provider })` rather than calling `provider.discover()`. `list()` is the lower-level integration method, not another device API.
+
+Supported query fields are `identity`, `capabilities`, `runtime`, `network` and `storage`. The default is identity/capabilities/runtime; `inspect` reads only the requested fields and does not change configuration. Network/storage queries require the corresponding firmware capabilities. `connect()` returns that default inspection result after negotiation.
 
 ### Events
 
@@ -284,14 +309,24 @@ The package includes library source, schemas, license and documentation, with no
 
 ## Hardware acceptance
 
-Run the checked-out SDK against one idle device using Node.js 22. These checks use the public `createDevice()` API and release the session and transport afterwards. The default check reads identity/capabilities/runtime and executes a short `print()` without creating a device file. Connecting negotiates the REPL, so use a device whose running Python application may safely be interrupted. The check does not configure Wi-Fi, reset the board or erase storage.
+The package ships its unit suite and hardware runner. From your application directory, target the installed dependency explicitly:
+
+```sh
+npm --prefix node_modules/@esp-vision/device-core test
+npm --prefix node_modules/@esp-vision/device-core run test:hardware -- --help
+npm --prefix node_modules/@esp-vision/device-core run test:hardware -- --tcp 192.168.1.100:3232
+```
+
+Inside the source or installed package directory, use `npm test` and `npm run test:hardware -- ...`. Unit tests require no device. The runner explicitly enumerates tests and fails when the suite is absent or empty, rather than passing zero cases. The management CLI uses `--port`; the dedicated hardware runner uses `--serial`, as shown in its help.
+
+Run the source or installed SDK against one idle device using Node.js 22. These checks use the public `createDevice()` API and release the session and transport afterwards. The default check reads identity/capabilities/runtime and executes a short `print()` without creating a device file. Connecting negotiates the REPL, so use a device whose running Python application may safely be interrupted. The check does not configure Wi-Fi, reset the board or erase storage.
 
 ```sh
 npm run test:hardware -- --tcp 192.168.1.100:3232
-npm run test:hardware -- --port /dev/serial/by-id/YOUR_DEVICE --role usj
-npm run test:hardware -- --port /dev/serial/by-id/YOUR_USB_OTG_DEVICE --role usb --write
+npm run test:hardware -- --serial /dev/serial/by-id/YOUR_DEVICE --role usj
+npm run test:hardware -- --serial /dev/serial/by-id/YOUR_USB_OTG_DEVICE --role usb --write
 npm run test:hardware -- --tcp 192.168.1.100 --write --capture --timeout 90000
-npm run test:hardware -- --port /dev/serial/by-id/YOUR_DEVICE --role usj --checks all --frames 30 --output camera.jpg
+npm run test:hardware -- --serial /dev/serial/by-id/YOUR_DEVICE --role usj --checks all --frames 30 --output camera.jpg
 npm run test:hardware -- --tcp 192.168.1.100 --checks display --display-hold 2 --screen-output screen.jpg
 ```
 
@@ -303,7 +338,7 @@ These functional checks intentionally exercise sensor settings, image processing
 
 `--screen-output PATH` explicitly requests an LCD screenshot: it adds the `display` check when needed, draws red/green/blue/white bars with `ESP-VISION CI` text, validates backlight changes, captures that same display with `capture({ source: 'screen' })`, verifies JPEG completeness and panel dimensions, and writes the JPEG on the host before releasing the display. Missing LCD or screen capture support makes this explicit request fail instead of skip. Camera capture stays a separate source. Output images and logs should be placed under your project-local artifact directory when running this suite.
 
-TCP needs only Node.js. Serial additionally needs a Python interpreter with the optional [pyserial](https://pyserial.readthedocs.io/) dependency installed in your environment (`python3 -m pip install pyserial`, BSD-3-Clause; not vendored or included in the npm package). Select another interpreter with `--python /path/to/python`. The Apache-2.0-licensed serial adapter in `src/node_serial.py` is shared by the CLI and hardware runner; it enumerates ports without opening them, forwards bytes and configures RTS/DTR before opening; serial control-line behavior still depends on the board and OS driver. Hardware-check scripts and their tests stay in the source tree and are excluded from the published package.
+TCP needs only Node.js. Serial additionally needs a Python interpreter with the optional [pyserial](https://pyserial.readthedocs.io/) dependency installed in your environment (`python3 -m pip install pyserial`, BSD-3-Clause; not vendored or included in the npm package). Select another interpreter with `--python /path/to/python`. The Apache-2.0-licensed serial adapter in `src/node_serial.py` is shared by the CLI and hardware runner; it enumerates ports without opening them, forwards bytes and configures RTS/DTR before opening; serial control-line behavior still depends on the board and OS driver. The same hardware runner, unit tests and Python fixture ship in the source tree and npm tarball; no firmware/build outputs or device credentials are included.
 
 ## License
 

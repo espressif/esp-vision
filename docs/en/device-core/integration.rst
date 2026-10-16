@@ -12,12 +12,12 @@ Source, versions and installation
 
 Device Core is maintained in ``host/device-core/`` in the ESP-VISION firmware repository. ``host/`` contains code running on the host, not firmware modules. IDE and Agent are npm consumers; Agent MCP mappings, model providers and plugins remain in their independent project. Protocol changes should align firmware, Core, documentation and tests in one MR.
 
-The package has its own version, independent of firmware and IDE versions. The published ``@esp-vision/device-core@0.1.0`` release supports EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Install this version directly from the public npm registry; a dry run or an open MR alone does not establish publication of future versions.
+The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.1.1`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Install the version after the public npm registry confirms publication; a dry run or an open MR alone does not publish it.
 
 .. code-block:: console
 
-   npm view @esp-vision/device-core@0.1.0 version dist.integrity
-   npm install --save-exact @esp-vision/device-core@0.1.0
+   npm view @esp-vision/device-core@0.1.1 version dist.integrity
+   npm install --save-exact @esp-vision/device-core@0.1.1
 
 Node.js 22 is the Node host baseline. Browsers need a bundler/import map for package specifiers and Web Serial or a binary WebSocket bridge. The package contains no serial driver, network bridge, model, IDE UI or Agent runtime. Node mDNS discovery uses the optional ``multicast-dns`` peer. Before publication, install a local ``npm pack`` tarball for verification; production consumers should pin npm versions and update lockfiles.
 
@@ -191,13 +191,19 @@ Install the optional ``multicast-dns`` peer for Node discovery:
 
    import { createDevice } from '@esp-vision/device-core'
    import { createNodeDiscovery } from '@esp-vision/device-core/discovery/node'
+   import { tcpTransport } from '@esp-vision/device-core/node'
 
    const device = createDevice({ discovery: createNodeDiscovery() })
    const devices = await device.discover({ timeout: 3000 })
-   const selected = devices.find(item => item.compatible)
+   const selected = devices.find(item => item.compatible && item.addresses.length)
    if (!selected) throw new Error('No compatible device found')
-   // Build tcpAdapter from selected.addresses and selected.port in the host.
-   await device.connect({ transport: tcpAdapter, role: 'tcp', expectedDevice: selected })
+   const tcpAdapter = tcpTransport({ host: selected.addresses[0], port: selected.port })
+   try {
+       await device.connect({ transport: tcpAdapter, role: 'tcp', expectedDevice: selected })
+       console.log(await device.inspect({ fields: ['identity'] }))
+   } finally { await device.disconnect() }
+
+Applications call ``device.discover()``. ``createNodeDiscovery()`` and ``createBridgeDiscovery()`` return providers with ``list({ timeout, signal })``, not ``discover()``; inject them through ``createDevice({ discovery: provider })``. Starting in 0.1.1, official ``tcpTransport({ host, port })`` and ``serialTransport({ serial, python })`` adapters are exported by ``@esp-vision/device-core/node``. Constructors do not open links; serial requires pyserial in the selected interpreter. See :doc:`advanced`.
 
 Browsers inject ``createBridgeDiscovery('ws://127.0.0.1:8766/device')`` from ``@esp-vision/device-core/discovery`` using a local bridge. Browsers cannot natively enumerate DNS-SD. Results contain ``deviceId``, ``hostname``, ``board``, ``firmwareVersion``, ``addresses``, ``port`` and ``compatible``; bridge results may also contain ``connectionUrl``. The host builds a transport from the selection and passes ``expectedDevice`` to match ID and hostname before acquisition, protecting against stale DHCP addresses. This is not authentication. VLANs, multicast filtering and AP isolation may require manual addresses; refresh expired bridge handles.
 
