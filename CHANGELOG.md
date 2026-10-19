@@ -6,6 +6,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Prepare Device Core 0.4.0 with immutable publication-manifest readers and verified application extraction from one complete firmware BIN, preserving layout checks, explicit installation, multi-file model groups and legacy feed compatibility, with bilingual API documentation and safe immutable-download browser cache reuse and normalized model source boundaries.
+
+- Add the unreleased Device Core `/browser` ROM adapter using pinned tasmota 9.4.2, centralizing P4/S31 browser compatibility and verified install/update workflows in the SDK with browser bundle and package isolation checks.
+
 - Device Core 0.3.0 adds explicit complete-firmware installation for blank devices through the existing firmware API/CLI and ROM adapters. Release metadata qualifies the merged bootloader, partition table, application, flash capacity and silicon revision; existing application-only updates remain the default.
 
 - Add reliable EV-MUX binary file upload shared by Device Core files, script staging and action bindings: bounded 16 KiB chunks, continuous native VFS writes, SHA-256 commit and session/VM/timeout cleanup. Keep small control messages separate from payloads and allocate receive buffers only for authorized active frames.

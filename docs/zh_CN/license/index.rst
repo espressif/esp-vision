@@ -20,6 +20,10 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - 本地路径
      - 在 ESP-VISION 中的作用
      - 许可证
+   * - tasmota-webserial-esptool 9.4.2
+     - ``host/device-core/package.json`` 依赖，仅 ``src/browser_rom.js`` 加载
+     - 浏览器 Web Serial ROM 后端；上游 ``src/stubs/README.md`` 标明 stub 来源为 esp-flasher-stub v1.4.0
+     - MIT（上游 package manifest）；stub 二进制双许可 Apache-2.0/MIT。作为依赖安装，本仓库不复制或修改其源文件。
    * - Device Core 主机 SDK
      - ``host/device-core``
      - EV-MUX v4 主机通信、Python、资源文件、发现及图像接入

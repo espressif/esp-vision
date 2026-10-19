@@ -3,7 +3,7 @@
 
 :link_to_translation:`en:[English]`
 
-本参考按 package.json exports 覆盖全部 10 个导入路径、43 个命名导出，列出所有导出类不以下划线开头的公开原型方法。下划线方法及未通过包导出的 src/device_* 实现模块属于内部接口。应用从 :doc:`api` 开始，不应在同一连接并行创建多个所有者/解析器。以下签名使用 JavaScript 参数/默认值语法，异步方法返回 Promise。
+本参考按 package.json exports 覆盖全部公开导入路径和命名导出，列出所有导出类不以下划线开头的公开原型方法。下划线方法及未通过包导出的 src/device_* 实现模块属于内部接口。应用从 :doc:`api` 开始，不应在同一连接并行创建多个所有者/解析器。以下签名使用 JavaScript 参数/默认值语法，异步方法返回 Promise。
 
 @esp-vision/device-core
 ----------------------------------------------
@@ -1320,3 +1320,19 @@ FirmwareFlashSession.flash 返回值
 ------------------------------------------
 
 回读校验后，flash 返回 ``{ verified: true, needsReset: boolean }``。复位失败时 needsReset 为 true；仅凭 closed 状态不能证明校验成功。应用通常使用 ``device.firmware.update()`` 完成发布目录校验与端口交接。
+
+
+@esp-vision/device-core/browser
+------------------------------------------------------------------
+
+``openBrowserRom({ port, logger = {}, signal? })``
+    此 API 尚未发布，npm 0.3.0 不含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载锁定的 tasmota 9.4.2，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、完整回读和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化，不中断已开始的写入与回读。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块，根与 Node 入口也不加载浏览器后端。
+
+@esp-vision/device-core/firmware 发布读取器（0.4.0）
+------------------------------------------------------
+
+``loadOfficialFirmware({ board?, version?, fetch = globalThis.fetch, signal? })``
+    通过 publication 引用加载官方当前或精确指定版本的快照，返回 manifest 及 publication 历史；可选板型筛选前校验整份快照。无 publication 的配置保留旧元数据兼容。
+
+``loadReleaseManifest({ url, sha256, version?, sourceCommit?, boards?, fetch = globalThis.fetch, signal? })``
+    只加载一份不可变官方 manifest，校验原始字节 SHA-256、身份、完整板集、所有固件描述及 website/model/MCP 来源边界，返回 manifest 对象，不下载固件也不打开 ROM。字段、限制与单 BIN 升级行为见 :doc:`api`。

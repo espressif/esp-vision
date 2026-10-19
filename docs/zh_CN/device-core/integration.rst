@@ -12,12 +12,12 @@ Device Core npm 包对接
 
 Device Core 源码在 ESP-VISION 固件仓库的 ``host/device-core/`` 维护。``host/`` 表示运行在主机的代码，不是固件模块；IDE 与 Agent 是 npm 包的消费者，Agent 的 MCP、模型提供方和插件仍在独立项目维护。协议变更应在同一个 MR 对齐固件、Core、文档与测试。
 
-包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.3.0``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。确认公开 npm registry 已发布该版本后再安装；后续版本仍以实际发布结果为准，dry run 或创建 MR 不等于发布。
+包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.4.0``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。确认公开 npm registry 已发布该版本后再安装；后续版本仍以实际发布结果为准，dry run 或创建 MR 不等于发布。
 
 .. code-block:: console
 
-   npm view @esp-vision/device-core@0.3.0 version dist.integrity
-   npm install --save-exact @esp-vision/device-core@0.3.0
+   npm view @esp-vision/device-core@0.4.0 version dist.integrity
+   npm install --save-exact @esp-vision/device-core@0.4.0
 
 Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析包名，以及 Web Serial 或二进制 WebSocket 桥。包不附带串口驱动、网络桥、模型、IDE UI 或 Agent 运行时；Node mDNS 发现使用可选 peer ``multicast-dns``。发布前可安装本地 ``npm pack`` 产物验证，正式消费者应固定 npm 版本并更新 lockfile。
 
@@ -248,3 +248,28 @@ ROM 烧写仍使用独立子路径 ``@esp-vision/device-core/firmware``；宿主
 应用调用 ``device.firmware.check()`` 自动获取官方发布目录及各版本元数据；``catalog`` 仅用于覆盖为自定义源。通过 ``device.firmware.update({ release, openLoader, ... })`` 安装选定的兼容版本。包内 CLI 已提供 Node ROM 适配器，命令行用户无需配置 loader 脚本；JavaScript 宿主通过 ``openLoader`` 适配其串口/Web Serial 环境。完整目录、取消与复位契约见 :doc:`api`，底层 loader 适配仍可直接使用 FirmwareFlashSession。
 
 Node 宿主可从 ``@esp-vision/device-core/node`` 导入 ``openNodeRom``，传入 ``openLoader: ({ signal }) => openNodeRom({ port, signal })``，无需自己实现烧写器。浏览器宿主提供 Web Serial ROM 适配器。空白设备在 check/update 中显式设置 ``mode: 'install'``，默认模式仅更新应用。
+
+浏览器 ROM 烧录（尚未发布）
+-----------------------------
+
+新 ``/browser`` 入口尚未包含在 npm 0.3.0；请从此分支构建或等待下一个 SDK。须使用 webpack、Vite 或 esbuild 打包，在支持 Web Serial 的浏览器中通过 HTTPS 或 localhost 运行。无需 Python、主机端 tasmota 适配器或包管理器补丁。
+
+.. code-block:: javascript
+
+   import { createDevice } from '@esp-vision/device-core'
+   import { openBrowserRom } from '@esp-vision/device-core/browser'
+
+   // 在点击处理函数内申请端口，再等待其他异步任务。
+   const port = await navigator.serial.requestPort()
+   // 打开 ROM 适配器前先释放已有运行时串口连接。
+   const result = await createDevice().firmware.update({
+     release: selectedRelease, board: selectedRelease.board,
+     mode: 'update', // 显式 install 需要合格的完整镜像元数据。
+     openLoader: ({ signal }) => openBrowserRom({ port, signal, logger: console }),
+     onProgress: percent => updateProgress(percent),
+   })
+   if (result.needsReset) showManualReset()
+
+``selectedRelease`` 来自针对物理板型的 ``firmware.check``。Core 在获取 ROM 端口前下载与校验镜像，在启动 stub 前校验芯片、修订和安全模式，检查既有分区（update）或实测容量（install），完整回读每个写入字节。不可用猜测偏移替代缺失元数据，也不自动切换安装模式。Promise 完成前保持页面与端口可用；写入前可取消，开始写入后不允许中断写入与回读。单独的芯片识别界面可保留一个适配器、先 ``initialize()``，再把同一对象作为 ``openLoader`` 返回；应在 ``finally`` 关闭，即使镜像校验失败早于 Core 获取端口。原生 USB 烧录后可能需要物理复位。此 ROM 适配器与 EV-MUX 运行时串口、TCP OTA 分开。
+
+锁定的 tasmota 9.4.2 提供 P4 修订 301/302 电源/eFuse 处理、S31 支持、兼容打包器的 stub JSON 及官方双许可 esp-flasher-stub v1.4.0。Core 在实例级保留有界 SLIP 前导日志容错、原生 USB MEM_END 超时后仍须上游确认 OHAI 的 stub 启动，以及按大小缩放的擦除超时。不支持的 stub 或损坏的 SLIP 帧仍明确失败。包的根与 Node 入口不加载浏览器后端。

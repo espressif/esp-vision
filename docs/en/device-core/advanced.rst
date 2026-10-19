@@ -3,7 +3,7 @@ Advanced export API reference
 
 :link_to_translation:`zh_CN:[中文]`
 
-This reference follows every entry of package.json exports: 10 import paths and 43 named exports. It lists every non-underscore public prototype method of the exported classes. Underscore methods and src/device_* implementation modules without a package export are internal. Application developers should start with :doc:`api`, not combine multiple owners/parsers on one connection. Signatures below use JavaScript parameter/default syntax; asynchronous methods return Promises.
+This reference follows every entry of package.json exports: the public import paths and named exports. It lists every non-underscore public prototype method of the exported classes. Underscore methods and src/device_* implementation modules without a package export are internal. Application developers should start with :doc:`api`, not combine multiple owners/parsers on one connection. Signatures below use JavaScript parameter/default syntax; asynchronous methods return Promises.
 
 @esp-vision/device-core
 ----------------------------------------------
@@ -1234,7 +1234,7 @@ ROM-loader adapter, separate from a live EV-MUX session. Each instance has one l
 Image descriptor: evMuxVersion=4, bytes, offset, partitionSize, sha256, chipFamily, chipRevision and partitionTable:{offset,bytes,sha256}. Supply trusted build metadata and an exact Uint8Array; default mode never performs whole-chip erase or partition migration. The injected loader provides initialize(), chipFamily/chipRevision, getSecurityInfo(), runStub(true), hardReset(), disconnect(). The returned stub provides flashData(), readFlash(), readRegister() and writeRegister(). P4 normal-boot latch handling is built in. A reset failure after verified readback is reported through onPhase; it does not undo verification or automatically flash again.
 
 
-``mode: 'install'`` uses a merged image descriptor: application metadata remains under ``application``, while ``bytes/offset=0/sha256/flashSize/bootloader`` describe the complete image. The partitionTable descriptor remains unchanged. Chip revision bounds must cover both bootloader and application. Install skips existing-layout matching and requires the returned stub to implement ``flashId()`` returning the integer JEDEC ID (capacity exponent in bits 16–23). Existing application-update adapters need no changes; the bundled Node adapter and the website's Web Serial loader provide flashId. Full installation and data replacement semantics are defined in :doc:`api`.
+``mode: 'install'`` uses a merged image descriptor: application metadata remains under ``application``, while ``bytes/offset=0/sha256/flashSize/bootloader`` describe the complete image. The partitionTable descriptor remains unchanged. Chip revision bounds must cover both bootloader and application. Install skips existing-layout matching and requires the returned stub to implement ``flashId()`` returning the integer JEDEC ID (capacity exponent in bits 16–23). Existing application-update adapters need no changes; the bundled Node and browser ROM adapters provide flashId. Full installation and data replacement semantics are defined in :doc:`api`.
 
 ``firmwareMode(mode = 'update')`` validates and returns update/install; other values throw TypeError. ``validateFirmwareImage(image, bytes, { mode = 'update' } = {})`` also validates embedded bootloader/partition/application ranges and hashes for install mode.
 
@@ -1320,3 +1320,19 @@ FirmwareFlashSession.flash result
 ------------------------------------------
 
 After verified readback, flash returns ``{ verified: true, needsReset: boolean }``. Reset failure sets needsReset; closed state alone is not verification evidence. Application integrations normally use ``device.firmware.update()`` to include release checks and port handoff.
+
+
+@esp-vision/device-core/browser
+------------------------------------------------------------------
+
+``openBrowserRom({ port, logger = {}, signal? })``
+    Unreleased API; absent from npm 0.3.0. Return a passive browser ROM adapter for a selected Web Serial ``SerialPort``. Request the port in the user gesture and release any runtime connection first. ``initialize()`` lazily loads pinned tasmota 9.4.2, opens/detects the chip and exposes ``chipName/chipFamily/chipRevision``; it does not start a stub. The adapter implements ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` for ``firmware.update``. Core checks the approved image and ROM security before starting the stub and owns all write/readback/reset semantics. ``logger`` optionally provides ``log/error/debug`` functions. ``signal`` cancels initialization; it never closes a started write/readback. ``disconnect()`` is idempotent and releases the port; initialization failures also close acquired resources. A disconnected adapter cannot be reused. Use a browser bundler; direct upstream native ESM loading is unsupported. See :doc:`integration` for the complete example. This subpath imports no Node modules; the root and Node paths do not load this browser backend.
+
+Release readers in @esp-vision/device-core/firmware (0.4.0)
+------------------------------------------------------------------
+
+``loadOfficialFirmware({ board?, version?, fetch = globalThis.fetch, signal? })``
+    Load the official current or exact selected version snapshot through the publication reference; return the manifest with publication history. Validate the entire snapshot before optional board filtering. Configs without publication retain legacy metadata compatibility.
+
+``loadReleaseManifest({ url, sha256, version?, sourceCommit?, boards?, fetch = globalThis.fetch, signal? })``
+    Load exactly one immutable official manifest, validate raw-byte SHA-256, identities, complete board set, every firmware descriptor and website/model/MCP source boundaries. Return the manifest object without downloading firmware or opening ROM. Limits, fields and single-BIN update behavior are specified in :doc:`api`.

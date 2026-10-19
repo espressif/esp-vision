@@ -3,6 +3,8 @@
  */
 import { loadOfficialFirmware } from './firmware_feed.js'
 import { FirmwareFlashSession, validateFirmwareImage, firmwareMode } from './firmware_flash.js'
+import { validateFirmwareRelease as release } from './firmware_release.js'
+import { downloadBytes, MAX_FIRMWARE_BYTES } from './firmware_io.js'
 
 function record(value, keys, name) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${name} must be an object`)
@@ -16,38 +18,7 @@ function identity(value) {
   if (!value || typeof value.board !== 'string' || !value.board || typeof value.firmwareVersion !== 'string' || !value.firmwareVersion) throw new TypeError('An inspected identity with board and firmwareVersion is required')
   return structuredClone(value)
 }
-function release(value, mode = 'update') {
-  if (!value || typeof value.board !== 'string' || !value.board || typeof value.version !== 'string' || !value.version) throw new TypeError('Release requires board and version')
-  const image = value.image
-  const revisionValid = image?.chipRevision !== undefined
-    ? Number.isSafeInteger(image.chipRevision) && image.chipRevision >= 0
-    : Number.isSafeInteger(image?.chipRevisionMin) && image.chipRevisionMin >= 0
-      && Number.isSafeInteger(image?.chipRevisionMax) && image.chipRevisionMax >= image.chipRevisionMin
-  if (!image || image.evMuxVersion !== 4 || !Number.isSafeInteger(image.chipFamily)
-      || image.chipFamily < 0 || !revisionValid || !Number.isSafeInteger(image.offset) || image.offset < 0
-      || !Number.isSafeInteger(image.bytes) || image.bytes <= 0 || !Number.isSafeInteger(image.partitionSize) || image.bytes > image.partitionSize
-      || !/^[a-f0-9]{64}$/.test(image.sha256 ?? '') || !Number.isSafeInteger(image.partitionTable?.offset) || image.partitionTable.offset < 0
-      || !Number.isSafeInteger(image.partitionTable?.bytes) || image.partitionTable.bytes <= 0
-      || !/^[a-f0-9]{64}$/.test(image.partitionTable?.sha256 ?? '')) throw new TypeError('Release requires complete EV-MUX v4 application/chip/partition/SHA-256 metadata')
-  if (mode === 'install') {
-    const install = value.install
-    if (!install || install.offset !== 0 || !Number.isSafeInteger(install.bytes) || install.bytes <= 0
-        || !Number.isSafeInteger(install.flashSize) || install.flashSize < install.bytes || install.flashSize > 2 ** 30
-        || !Number.isInteger(Math.log2(install.flashSize)) || install.flashSize < 2 ** 18
-        || !/^[a-f0-9]{64}$/.test(install.sha256 ?? '') || !install.bootloader
-        || !Number.isSafeInteger(install.chipRevisionMin) || !Number.isSafeInteger(install.chipRevisionMax)
-        || install.chipRevisionMin < (image.chipRevision ?? image.chipRevisionMin) || install.chipRevisionMax > (image.chipRevision ?? image.chipRevisionMax)
-        || install.chipRevisionMin < 0 || install.chipRevisionMax < install.chipRevisionMin) throw Object.assign(new TypeError('Release lacks qualified complete-install metadata'), { code: 'FIRMWARE_INSTALL_UNAVAILABLE' })
-    let end = 0
-    for (const part of [install.bootloader, image.partitionTable, image]) {
-      if (!Number.isSafeInteger(part.offset) || !Number.isSafeInteger(part.bytes) || part.bytes <= 0
-          || part.offset < end || part.offset + part.bytes > install.bytes
-          || !/^[a-f0-9]{64}$/.test(part.sha256 ?? '')) throw new TypeError('Invalid complete-install segment bounds or hashes')
-      end = part.offset + part.bytes
-    }
-  }
-  return structuredClone(value)
-}
+
 async function download(url, fetcher, signal) {
   if (typeof url !== 'string' || new URL(url).protocol !== 'https:') throw new TypeError('Firmware URLs must use HTTPS')
   if (typeof fetcher !== 'function') throw new TypeError('Provide fetch or an in-memory catalog/image')
@@ -64,7 +35,7 @@ export async function checkFirmware(request = {}, connectedIdentity) {
   if (request.version !== undefined && (typeof request.version !== 'string' || !request.version.trim())) throw new TypeError('version must be a non-empty firmware version string')
   const mode = firmwareMode(request.mode)
   const current = identity(connectedIdentity ?? request.identity)
-  const catalog = request.catalog === undefined ? await loadOfficialFirmware({ board: current.board, fetch: fetcher, signal }) : typeof request.catalog === 'string' ? await (await download(request.catalog, fetcher, signal)).json() : structuredClone(request.catalog)
+  const catalog = request.catalog === undefined ? await loadOfficialFirmware({ board: current.board, version: request.version, fetch: fetcher, signal }) : typeof request.catalog === 'string' ? await (await download(request.catalog, fetcher, signal)).json() : structuredClone(request.catalog)
   abort(signal)
   if (catalog?.schemaVersion !== 1 || !Array.isArray(catalog.releases)) throw new TypeError('Catalog requires schemaVersion 1 and releases ordered newest first')
   // Feed ordering is authoritative: firmware versions may be calendar/git labels.
@@ -88,15 +59,25 @@ export async function updateFirmware(request, connectedIdentity, disconnect) {
   if (typeof openLoader !== 'function' || typeof onProgress !== 'function' || typeof onPhase !== 'function' || (reset !== undefined && typeof reset !== 'function')) throw new TypeError('Firmware update requires openLoader and valid callbacks')
   const mode = firmwareMode(request.mode)
   const target = release(request.release, mode)
-  const image = mode === 'install' ? {
+  const installation = target.install ? {
     ...target.image, offset: target.install.offset, bytes: target.install.bytes,
     flashSize: target.install.flashSize, sha256: target.install.sha256, url: target.install.url,
     bootloader: target.install.bootloader, application: target.image,
     chipRevision: undefined, chipRevisionMin: target.install.chipRevisionMin, chipRevisionMax: target.install.chipRevisionMax,
-  } : target.image
+  } : null
+  const image = mode === 'install' ? installation : target.image
   const board = connectedIdentity?.board ?? request.board
   if (!board || board !== target.board || (request.board !== undefined && request.board !== board)) throw new TypeError('Firmware release does not match the connected or explicitly selected board')
-  const bytes = request.data === undefined ? new Uint8Array(await (await download(image.url, fetcher, signal)).arrayBuffer()) : request.data instanceof Uint8Array ? request.data.slice() : request.data
+  const source = mode === 'update' ? image.source : undefined
+  const descriptor = source ?? image
+  let bytes = request.data === undefined
+    ? await downloadBytes(descriptor.url, { fetch: fetcher, signal, maxBytes: MAX_FIRMWARE_BYTES, expectedBytes: descriptor.bytes, immutable: target.image.source !== undefined })
+    : request.data instanceof Uint8Array ? request.data.slice() : request.data
+  if (source) {
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength !== source.bytes) throw new Error('Complete BIN source size does not match the approved build')
+    await validateFirmwareImage(installation, bytes, { mode: 'install' })
+    bytes = bytes.slice(source.offset, source.offset + image.bytes)
+  }
   await validateFirmwareImage(image, bytes, { mode })
   abort(signal)
   // Validate everything before releasing EV-MUX or acquiring a download port.

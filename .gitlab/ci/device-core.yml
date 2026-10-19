@@ -37,6 +37,7 @@ device_core_checks:
     - cmp LICENSE ../../LICENSE
     - npm test
     - npm run check:schema
+    - npm run check:browser
     - npm run check:package
     - node scripts/release-npm.mjs --dry-run
 

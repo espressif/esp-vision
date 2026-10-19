@@ -3,7 +3,7 @@
 
 :link_to_translation:`en:[English]`
 
-本页覆盖 0.3.0 中 ``createDevice`` 返回对象的全部应用 API。除特别说明外，操作异步执行，失败时 reject。请求中的未知字段会被拒绝；不能给所有方法统一附加未声明的 ``timeout`` 等选项，应以各方法列出的字段为准。超时单位为毫秒，须为有限正数。
+本页覆盖正在准备、此改动尚不发布的 0.4.0 中 ``createDevice`` 返回对象的全部应用 API。除特别说明外，操作异步执行，失败时 reject。请求中的未知字段会被拒绝；不能给所有方法统一附加未声明的 ``timeout`` 等选项，应以各方法列出的字段为准。超时单位为毫秒，须为有限正数。
 
 .. list-table::
    :header-rows: 1
@@ -391,3 +391,20 @@ Node 宿主可直接复用随包提供的 ROM 适配器：
      release: selected.release, board: 'ESP32_P4X_EYE', mode: 'install',
      openLoader: ({ signal }) => openNodeRom({ port: selectedRomPort, signal }),
    })
+
+尚未发布的浏览器 ROM 适配器为 ``@esp-vision/device-core/browser`` 的 ``openBrowserRom({ port, logger?, signal? })``，复用上述安装/升级契约；用户手势串口授权和打包器要求见 :doc:`integration`。npm 0.3.0 尚不含此 API。
+
+不可变发布快照与单 BIN 升级（0.4.0）
+------------------------------------
+
+此源码正在准备 SDK 0.4.0；发布是单独步骤。``loadOfficialFirmware`` 与 ``loadReleaseManifest`` 从 ``@esp-vision/device-core/firmware`` 导入；根入口仍只导出 ``createDevice``。
+
+``loadOfficialFirmware({ board?, version?, fetch = globalThis.fetch, signal? })`` 优先读取 ``config.toml`` 的 ``[publication]``：``schemaVersion: 1``、``version``、40 位 ``sourceCommit``、``manifestUrl``、原始字节 ``manifestSha256`` 及 ``releases: [{ version, manifestUrl, manifestSha256, boards }]``。历史版本不重复，各板集非空且唯一；发布器的其他事务字段保留但不改变读取逻辑。指定板型/版本必须存在于该引用。仅下载所选版本的一份 manifest，不遍历历史板型 × 版本矩阵；``firmware.check({ version })`` 会传递版本给 reader。显式 publication、引用或 manifest 无效时明确失败，包括 404 或哈希不匹配，不作回退。只有完全不含 ``publication`` 的配置保留旧 feed；指定版本也会约束旧元数据请求范围。
+
+``loadReleaseManifest({ url, sha256, version?, sourceCommit?, boards?, fetch = globalThis.fetch, signal? })`` 不读取可变 config，只读取引用的快照。SHA-256 覆盖 UTF-8 JSON 原始字节。结果包含 ``schemaVersion: 1``、``version``、``sourceCommit``、正整数 ``pipelineId``、``layout: 'legacy' | 'single-bin'``、现有合格 ``releases`` 数组、完整 ``website`` 快照及可选 ``mcp``（null 表示明确缺失）。可选身份/板集参数须完全匹配；返回前校验所有 release 与来源。官方 URL 限定在 ``https://dl.espressif.com/AE/esp-vision/``；模型下载固定到 ``raw.githubusercontent.com/espressif/esp-vision/<sourceCommit>/models/...``。MCP 描述含 ``url/bytes/sha256/version/sourceCommit``，使用官方 ``bin/mcp/`` 来源；website 版本/板型/模型也须有效，隐藏固件板型不要求出现在可视化板列表。读取限制为最多 64 个发布板型、256 个版本/模型记录、4 MiB manifest 字节。固定哈希检测相对可信发布引用的漂移，不等于为不可信发布者提供签名认证。
+
+``loadOfficialFirmware`` 在 manifest 快照外返回 ``publication``；可选 ``board`` 只在整份 manifest 校验后筛选返回的固件条目。``publication.releases`` 提供合格历史版本/板型引用；``website.releases`` 可以保留缺少合格元数据的旧版本下载列表，不能因为可以拼出 BIN URL 就开放烧录。网站从固定引用构建后，应直接将该引用交给 ``loadReleaseManifest`` 选择版本，使界面与固件始终来自同一快照。
+
+``layout: 'single-bin'`` 中每个 release 含 ``image.source: { url, bytes, sha256, offset }``；URL 同时等于 ``image.url`` 与完整镜像的 ``install.url``，长度/哈希等于 ``install.bytes/sha256``。``source.offset`` 等于 ``image.offset``，应用范围须在完整容器内；``image.bytes/sha256`` 仍仅描述应用。Core 一次下载整个 source，在获取 ROM 前拒绝长度/哈希/内部 bootloader、分区表或应用哈希不符，切出应用后复用设备安全、分区检查、写入与完整回读流程。分区布局变化仍拒绝默认升级，不自动改为安装。显式 ``mode: 'install'`` 写入并校验完整镜像；传入 ``data`` 也遵循描述，存在 ``image.source`` 时必须是完整容器，否则沿用原始应用 BIN。继续支持 ``legacy`` manifest 与旧应用独立描述。下载受合格精确长度及 256 MiB 上限约束，使用 HTTPS、拒绝重定向，暂不使用 HTTP Range。浏览器调用方无需自行下载、切片或实现校验。
+
+固定哈希的 manifest 和完整 BIN source 使用浏览器 HTTP 缓存（``cache: default``）；可变 config 与旧独立应用 BIN 保持 ``no-store``。固定资产在 fetch 阶段遇到 TypeError 时，仅一次 ``no-store`` 重试以恢复缺少 CORS 头的旧缓存。HTTP、读取响应、SHA-256 或元数据错误均不重试、不降级。

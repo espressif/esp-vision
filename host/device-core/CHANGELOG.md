@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 (unreleased)
+
+### Added
+
+- Reuse browser cache only for hash-pinned release manifests and complete-BIN sources; retry a fetch-stage TypeError once with no-store for cached CORS recovery, while hash/HTTP/metadata failures and legacy app-only downloads retain strict failure/cache behavior.
+
+- Export immutable official release-manifest readers with publication/version/board/hash pinning and bounded, source-constrained validation of firmware, website, models and MCP snapshots; model files are unique by path while a group may share one slug, and normalized paths cannot escape the pinned source commit.
+- Support application updates from the qualified complete BIN through `image.source`, verifying the whole container and embedded segments before extracting the application; preserve explicit full installation and legacy app-only descriptors.
+
+- Export passive `openBrowserRom({ port, logger?, signal? })` at `/browser` with a lazily loaded, pinned tasmota browser backend; share verified Core firmware install/update workflows without host-maintained ROM patches.
+- Validate the real browser bundle, P4/S31 stub assets, adapter cleanup/cancellation and isolated package imports.
+
 ## 0.3.0
 
 ### Added

@@ -19,10 +19,10 @@
 | Visibility | Public; installation needs no npm login |
 | Source location | `host/device-core` in the ESP-VISION firmware repository |
 
-The `/node` byte transports and bundled checks require 0.1.1; complete installation and `/node` `openNodeRom` are introduced in 0.3.0. Check the registry for the published version. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
+This source prepares **0.4.0 (not published by this change)** with browser ROM flashing, immutable release-manifest readers and application updates from a single complete BIN. npm 0.3.0 does not contain these APIs. The `/node` byte transports and bundled checks require 0.1.1; complete installation and `/node` `openNodeRom` are introduced in 0.3.0. Check the registry before using the 0.4.0 install examples; until publication, use a tarball packed from an exact reviewed source commit. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
 
 ```sh
-npm install --save-exact @esp-vision/device-core@0.3.0 --registry=https://registry.npmjs.org/
+npm install --save-exact @esp-vision/device-core@0.4.0 --registry=https://registry.npmjs.org/
 ```
 
 EV-MUX v4 firmware is required. A v3 hello is rejected with `VERSION_MISMATCH`; applications should ask the user to update firmware. Core has no runtime dependency on the IDE, Agent, DOM or Node serial libraries. The host supplies the physical byte transport and discovery adapter; Core owns protocol parsing, session negotiation, REPL coordination and device operations.
@@ -41,7 +41,7 @@ Documentation source lives in this repository under `docs/en/device-core/` and `
 The npm package installs `esp-vision-device`. `inspect` combines passive wired/LAN enumeration and targeted queries. By default it lists USB serial candidates; `--all-ports` also includes native UART/Bluetooth ports. Explicit `--port` bypasses discovery filtering; `configure`, `control`, and `firmware check/update` cover management. See the [CLI guide](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/cli.html) ([中文](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/cli.html)).
 
 ```sh
-npm install -g @esp-vision/device-core@0.3.0
+npm install -g @esp-vision/device-core@0.4.0
 esp-vision-device inspect
 esp-vision-device inspect --all-ports
 esp-vision-device inspect --interface usj,usb --probe --json
@@ -109,6 +109,47 @@ try {
   unsubscribeState();
 }
 ```
+
+### Immutable release snapshots and a single firmware BIN (0.4.0, unpublished)
+
+The `/firmware` entry exports `loadOfficialFirmware({ board?, version?, fetch?, signal? })` and `loadReleaseManifest({ url, sha256, version?, sourceCommit?, boards?, fetch?, signal? })`. The official reader prioritizes `[publication]` in `config.toml`, selects exactly one version reference and verifies its raw manifest SHA-256 before returning `{ schemaVersion: 1, version, sourceCommit, pipelineId, layout, releases, website, mcp?, publication }`. History references include exact board sets; unsupported board/version combinations and malformed explicit publication data reject without falling back to guessed URLs or old metadata. Configs without `[publication]` keep the legacy feed; an explicit version limits old metadata requests too.
+
+For a website built from a verified snapshot, keep its selected publication reference rather than re-reading mutable `config.toml` when the user clicks:
+
+```js
+import { loadReleaseManifest } from '@esp-vision/device-core/firmware';
+const snapshot = await loadReleaseManifest({
+  url: reference.manifestUrl, sha256: reference.manifestSha256,
+  version: reference.version, boards: reference.boards,
+});
+const release = snapshot.releases.find(entry => entry.board === selectedBoard);
+// Pass release to createDevice().firmware.update(); the website never slices BINs.
+```
+
+In `layout: 'single-bin'`, `image.source = { url, bytes, sha256, offset }` describes the complete BIN; `image.url` equals its URL, while `image.bytes/sha256` still describe only the application. The source URL/length/hash must match `install`, and its offset must equal the application's flash offset. Core downloads the full container once (no Range request), validates its whole hash and embedded bootloader/partition/application hashes, then extracts and writes only the application in default update mode. Existing partition checks and full application readback remain mandatory; `mode: 'install'` writes the qualified complete BIN. With `image.source`, supplied `data` must also be the complete BIN; old application-only metadata keeps its existing raw-app `data` semantics. Manifests are bounded at 4 MiB, firmware downloads at 256 MiB and their approved exact size. Official manifest/artifact sources are confined to the ESP-VISION CDN root; model URLs use their full source commit and MCP has a version/commit/hash descriptor. No npm, firmware tag or CDN publication is performed by preparing this source version.
+
+To validate before npm publication, check out an exact reviewed commit, run `npm install --ignore-scripts --no-audit --no-fund --package-lock=false` and `npm run release:check` in `host/device-core`, then `npm pack --ignore-scripts --pack-destination <project-local-output>`. Install that locally produced tarball or use a source archive pinned to that exact commit. Do not claim that an unpublished 0.4.0 is available in the registry.
+
+### Browser ROM flashing (unreleased)
+
+`@esp-vision/device-core/browser` exports `openBrowserRom({ port, logger?, signal? })`. Build from this branch until a new SDK release is published; installing 0.3.0 does not enable this API. The constructor is passive, and `initialize()` lazily loads the pinned `tasmota-webserial-esptool` browser backend. Use a browser bundler such as webpack, Vite or esbuild; direct native ESM loading of the upstream backend is not supported. No Python installation or consumer-side tasmota patch is needed. The root and `/node` entry points do not load browser modules.
+
+```js
+import { createDevice } from '@esp-vision/device-core';
+import { openBrowserRom } from '@esp-vision/device-core/browser';
+
+// Request permission directly in the user's click handler (HTTPS or localhost).
+const port = await navigator.serial.requestPort();
+// release comes from firmware.check(), selected for the physical board.
+const result = await createDevice().firmware.update({
+  release, board: release.board, mode: 'update', // Explicit 'install' for complete images.
+  openLoader: ({ signal }) => openBrowserRom({ port, signal, logger: console }),
+  onProgress: percent => updateProgress(percent),
+});
+if (result.needsReset) showManualReset();
+```
+
+Core owns downloads, chip/revision/security and partition/capacity checks, write, full readback and reset. The adapter owns the selected port until Core disconnects it; the UI must first release any runtime serial connection. It starts no stub during construction or chip initialization: Core checks the approved image and ROM security before calling `runStub`. P4 revision 301/302 flash power and S31 support come from pinned upstream 9.4.2; Core retains bounded SLIP-prefix tolerance, native USB stub startup confirmation and size-scaled erase timeouts. Unsupported stubs fail explicitly. Keep the page and port alive until the update Promise settles; cancellation is accepted before writing, never used to interrupt a started write/readback. This ROM adapter does not provide runtime EV-MUX serial transport or Wi-Fi/TCP OTA.
 
 ### Official Node adapters
 
@@ -343,3 +384,5 @@ TCP needs only Node.js. Serial additionally needs a Python interpreter with the 
 ## License
 
 The npm package and ESP-VISION contributions use [Apache-2.0](LICENSE), matching the firmware. [NOTICE](NOTICE) retains the original copyright and MIT permission text for historical and upstream-derived portions. Third-party dependencies retain their own licenses; neither package metadata nor the project license overrides them.
+
+Hash-pinned manifests and complete-BIN sources use the browser HTTP cache (`cache: default`); mutable config and legacy app-only BINs retain `no-store`. A fetch-stage TypeError on a pinned asset gets one `no-store` retry to recover from an older cached response lacking CORS headers. HTTP, body-read, SHA-256 and metadata failures are not retried or downgraded.

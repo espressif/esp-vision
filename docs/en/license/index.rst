@@ -20,6 +20,10 @@ The following table lists the direct dependencies most relevant to redistributio
      - Local path
      - Role in ESP-VISION
      - License
+   * - tasmota-webserial-esptool 9.4.2
+     - ``host/device-core/package.json`` dependency; loaded only by ``src/browser_rom.js``
+     - Browser Web Serial ROM backend; upstream ``src/stubs/README.md`` identifies esp-flasher-stub v1.4.0
+     - MIT (upstream package manifest); stub binaries dual Apache-2.0/MIT. Installed as a dependency, not copied or patched in this repository.
    * - Device Core host SDK
      - ``host/device-core``
      - EV-MUX v4 host communication, Python, resource files, discovery and images

@@ -37,8 +37,11 @@ try {
   const api = await import('@esp-vision/device-core');
   if (Object.keys(api).sort().join(',') !== 'createDevice') throw new Error('Root must expose only the application API');
   const { DeviceSession } = await import('@esp-vision/device-core/session');
-  const { FirmwareFlashSession } = await import('@esp-vision/device-core/firmware');
+  const { FirmwareFlashSession, loadOfficialFirmware, loadReleaseManifest } = await import('@esp-vision/device-core/firmware');
+  if (typeof loadOfficialFirmware !== 'function' || typeof loadReleaseManifest !== 'function') throw new Error('Missing public release manifest readers');
   const { tcpTransport, serialTransport, openNodeRom } = await import('@esp-vision/device-core/node');
+  const { openBrowserRom } = await import('@esp-vision/device-core/browser');
+  if (typeof openBrowserRom !== 'function' || typeof openBrowserRom({ port: { open() { throw new Error('Not opened'); }, close() {} } }).initialize !== 'function') throw new Error('Missing passive browser ROM adapter');
   if (typeof tcpTransport !== 'function' || typeof serialTransport !== 'function') throw new Error('Missing public Node transports');
   const { createNodeDiscovery } = await import('@esp-vision/device-core/discovery/node');
   const { EventEmitter } = await import('node:events');

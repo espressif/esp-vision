@@ -18,11 +18,11 @@ Device Core 主机 SDK
 
 .. code-block:: console
 
-   npm install --save-exact @esp-vision/device-core@0.3.0
+   npm install --save-exact @esp-vision/device-core@0.4.0
    # Optional Node LAN discovery adapter:
    npm install multicast-dns
 
-本页示例面向 SDK ``0.3.0``；确认 registry 已发布后再安装该版本，源码、MR 和 dry run 不等于发布。Node 主机基线为 Node.js 22；浏览器需要打包器/import map，并由宿主提供 Web Serial 或二进制 WebSocket 字节连接。仅支持 EV-MUX v4，v3 设备必须升级固件。包版本、固件版本与 IDE 版本相互独立。
+本页示例面向 SDK ``0.4.0``；确认 registry 已发布后再安装该版本，源码、MR 和 dry run 不等于发布。Node 主机基线为 Node.js 22；浏览器需要打包器/import map，并由宿主提供 Web Serial 或二进制 WebSocket 字节连接。仅支持 EV-MUX v4，v3 设备必须升级固件。包版本、固件版本与 IDE 版本相互独立。
 
 架构与使用入口
 --------------------------------
@@ -58,4 +58,4 @@ Device Core 主机 SDK
 
 npm 包及 ESP-VISION 自有贡献采用 Apache-2.0，与固件一致。包内包含 LICENSE 与 NOTICE；NOTICE 保留历史 MIT 版权与许可原文，第三方依赖仍遵守各自许可证。项目清单见 :doc:`../license/index`。
 
-0.1.1 新增 ``@esp-vision/device-core/node`` 适配器，并随包提供单元测试和真机检查。本源码正在准备带完整镜像安装及可靠二进制上传的 0.3.0；发布后安装，也可先验证本地 tarball。0.1.0 缺少这些导出/检查资源。安装后可执行 ``npm --prefix node_modules/@esp-vision/device-core test`` 和 ``npm --prefix node_modules/@esp-vision/device-core run test:hardware -- --help``；缺少测试或空测试集将失败。应用 ``discover()`` 与 provider ``list()`` 的关系见 :doc:`integration`。
+0.1.1 新增 ``@esp-vision/device-core/node`` 适配器，并随包提供单元测试和真机检查。本源码正在准备尚未发布的 0.4.0，新增浏览器 ROM、不可变发布快照和单 BIN 应用升级；发布后安装，也可先验证本地 tarball。0.1.0 缺少这些导出/检查资源。安装后可执行 ``npm --prefix node_modules/@esp-vision/device-core test`` 和 ``npm --prefix node_modules/@esp-vision/device-core run test:hardware -- --help``；缺少测试或空测试集将失败。应用 ``discover()`` 与 provider ``list()`` 的关系见 :doc:`integration`。

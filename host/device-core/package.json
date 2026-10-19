@@ -1,6 +1,6 @@
 {
   "name": "@esp-vision/device-core",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Shared EV-MUX, framed REPL, device session, and action contracts for ESP Vision clients.",
   "type": "module",
   "exports": {
@@ -10,10 +10,11 @@
     "./session": "./src/device_session.js",
     "./actions": "./src/device_actions.js",
     "./bindings": "./src/device_bindings.js",
-    "./firmware": "./src/firmware_flash.js",
+    "./firmware": "./src/firmware.js",
     "./discovery": "./src/network_discovery.js",
     "./discovery/node": "./src/network_discovery_node.js",
-    "./node": "./src/node.js"
+    "./node": "./src/node.js",
+    "./browser": "./src/browser.js"
   },
   "files": [
     "src/*.js",
@@ -33,10 +34,11 @@
     "check:schema": "node scripts/generate-action-schema.mjs --check",
     "schema:actions": "node scripts/generate-action-schema.mjs",
     "check:package": "node tests/check-package.mjs",
-    "release:check": "npm test && npm run check:schema && npm run check:package && node scripts/release-npm.mjs --dry-run",
+    "release:check": "npm test && npm run check:schema && npm run check:browser && npm run check:package && node scripts/release-npm.mjs --dry-run",
     "release:npm": "node scripts/release-npm.mjs",
     "prepublishOnly": "npm run release:check",
-    "test:hardware": "node tests/hardware-check.mjs"
+    "test:hardware": "node tests/hardware-check.mjs",
+    "check:browser": "node tests/check-browser.mjs"
   },
   "repository": {
     "type": "git",
@@ -74,6 +76,10 @@
   },
   "dependencies": {
     "smol-toml": "^1.7.0",
-    "string-width": "^7.2.0"
+    "string-width": "^7.2.0",
+    "tasmota-webserial-esptool": "9.4.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
   }
 }

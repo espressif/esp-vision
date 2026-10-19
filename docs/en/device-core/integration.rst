@@ -12,12 +12,12 @@ Source, versions and installation
 
 Device Core is maintained in ``host/device-core/`` in the ESP-VISION firmware repository. ``host/`` contains code running on the host, not firmware modules. IDE and Agent are npm consumers; Agent MCP mappings, model providers and plugins remain in their independent project. Protocol changes should align firmware, Core, documentation and tests in one MR.
 
-The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.3.0`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Install the version after the public npm registry confirms publication; a dry run or an open MR alone does not publish it.
+The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.4.0`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Install the version after the public npm registry confirms publication; a dry run or an open MR alone does not publish it.
 
 .. code-block:: console
 
-   npm view @esp-vision/device-core@0.3.0 version dist.integrity
-   npm install --save-exact @esp-vision/device-core@0.3.0
+   npm view @esp-vision/device-core@0.4.0 version dist.integrity
+   npm install --save-exact @esp-vision/device-core@0.4.0
 
 Node.js 22 is the Node host baseline. Browsers need a bundler/import map for package specifiers and Web Serial or a binary WebSocket bridge. The package contains no serial driver, network bridge, model, IDE UI or Agent runtime. Node mDNS discovery uses the optional ``multicast-dns`` peer. Before publication, install a local ``npm pack`` tarball for verification; production consumers should pin npm versions and update lockfiles.
 
@@ -248,3 +248,28 @@ Firmware update application entry
 Use ``device.firmware.check()`` to fetch the official release feed and per-version metadata automatically; ``catalog`` is an optional override for custom sources. Use ``device.firmware.update({ release, openLoader, ... })`` to install a selected compatible release. The packaged CLI supplies its Node ROM adapter internally; CLI users do not configure a loader script. See :doc:`api` for complete catalog, cancellation and reset contracts; direct FirmwareFlashSession remains available to loader adapters.
 
 Node hosts import ``openNodeRom`` from ``@esp-vision/device-core/node`` and pass ``openLoader: ({ signal }) => openNodeRom({ port, signal })``; no custom loader implementation is needed. Browser hosts provide ``openLoader`` for their Web Serial environment. Set ``mode: 'install'`` on check and update to provision a blank board; the default updates only the application.
+
+Browser ROM flashing (unreleased)
+---------------------------------
+
+The new ``/browser`` entry point is not present in npm 0.3.0; build this branch or wait for the next SDK release. Use webpack, Vite or esbuild in a Web Serial-capable browser over HTTPS or localhost. No Python installation, host-maintained tasmota adapter or package-manager patch is needed.
+
+.. code-block:: javascript
+
+   import { createDevice } from '@esp-vision/device-core'
+   import { openBrowserRom } from '@esp-vision/device-core/browser'
+
+   // Request permission inside the click handler, before unrelated awaits.
+   const port = await navigator.serial.requestPort()
+   // Release any runtime serial connection before opening the ROM adapter.
+   const result = await createDevice().firmware.update({
+     release: selectedRelease, board: selectedRelease.board,
+     mode: 'update', // Explicit install requires qualified complete-image metadata.
+     openLoader: ({ signal }) => openBrowserRom({ port, signal, logger: console }),
+     onProgress: percent => updateProgress(percent),
+   })
+   if (result.needsReset) showManualReset()
+
+``selectedRelease`` comes from ``firmware.check`` for the physical board. Core downloads and validates before acquiring the ROM port, validates chip/revision/security before stub startup, checks existing layout (update) or measured capacity (install), and verifies every written byte. Never replace missing metadata with guessed offsets or silently switch update to install. Keep the page and port alive until the Promise settles: cancellation applies before writing and cannot interrupt a started write/readback. For a separate chip-detection UI, retain one adapter, await ``initialize()``, then pass that adapter as ``openLoader``; close it in ``finally`` even if download/metadata validation fails before Core acquires it. Native USB may require physical reset after verified flashing. This ROM adapter is separate from runtime EV-MUX serial transport and TCP OTA.
+
+Pinned tasmota 9.4.2 supplies P4 revision 301/302 power/eFuse handling, S31 support, bundler-compatible stub JSON and official dual-licensed esp-flasher-stub v1.4.0. Core adds per-instance bounded pre-SLIP log tolerance, native USB MEM_END timeout recovery that still requires upstream OHAI confirmation, and size-scaled stub erase timeouts. Unsupported stubs and malformed SLIP packets remain explicit errors. The package root and Node entry points do not load this browser backend.
