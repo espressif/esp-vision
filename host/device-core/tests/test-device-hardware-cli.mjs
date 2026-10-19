@@ -54,7 +54,7 @@ function fakeDevice({ mismatch = false, collision = false, writeFails = false } 
   return {
     calls, files,
     async connect() { calls.push('connect') },
-    async inspect() { return { identity: { board: 'TEST' }, network: { password: 'NEVER_PRINT' } } },
+    async inspect() { return { identity: { board: 'TEST', firmwareVersion: 'test' }, storage: { flash: { present: true, mounted: true, writable: true } }, network: { password: 'NEVER_PRINT' } } },
     python: { async execute() { return { ok: true, output: 'EV_HARDWARE_abc123\n' } } },
     files: Object.assign(files, {
       async list() { return [...files.keys()].map(path => ({ path })) },
@@ -100,4 +100,23 @@ test('missing optional Python executable fails cleanly without opening a port', 
   try {
     await assert.rejects(transport.connect({ signal: AbortSignal.timeout(1000) }), { code: 'SERIAL_ERROR' })
   } finally { unsubscribe(); await transport.disconnect() }
+})
+
+
+test('expected board and firmware must match before any Python or file operations', async () => {
+  for (const args of [['--expect-board', 'OTHER'], ['--expect-firmware-version', 'stale']]) {
+    const device = fakeDevice()
+    device.python.execute = async () => assert.fail('Wrong device must not execute Python')
+    await assert.rejects(checkHardware(parseArgs(['--tcp', 'localhost', ...args]), { device, report() {} }), { code: args[0] === '--expect-board' ? 'BOARD_MISMATCH' : 'FIRMWARE_MISMATCH' })
+    assert.deepEqual(device.calls, ['connect', 'disconnect'])
+  }
+})
+
+test('explicit file acceptance reports unmounted storage and fails without writing or formatting', async () => {
+  const device = fakeDevice(), inspect = device.inspect, reports = []
+  device.inspect = async request => ({ ...await inspect(request), storage: { flash: { present: true, mounted: false, writable: true, reason: 'HOST_WRITER_ACTIVE' } } })
+  await assert.rejects(checkHardware(parseArgs(['--tcp', 'localhost', '--write']), { device, nonce: 'abc123', report: value => reports.push(value) }), { code: 'STORAGE_UNAVAILABLE' })
+  assert.deepEqual(device.calls, ['connect', 'disconnect'])
+  assert.equal(reports.find(result => result.check === 'storage').flash.mounted, false)
+  assert.equal(reports.find(result => result.check === 'storage').ok, false)
 })

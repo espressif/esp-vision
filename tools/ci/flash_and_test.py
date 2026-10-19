@@ -240,13 +240,20 @@ def serial_role(port: str, explicit: Optional[str] = None) -> str:
 def hardware_check_command(args: argparse.Namespace, port: str, *, probe: bool = False,
                            timeout_ms: int = 12000) -> list[str]:
     command = [args.node, str(HARDWARE_CHECK), "--serial", port,
-               "--role", serial_role(port, args.role), "--python", sys.executable]
+               "--role", serial_role(port, args.role), "--python", sys.executable,
+               "--expect-board", args.board]
+    if args.expected_version:
+        command += ["--expect-firmware-version", args.expected_version]
     if probe:
         return command + ["--timeout", str(timeout_ms)]
     command += ["--checks", args.checks, "--frames", str(args.frames),
                 "--display-hold", str(args.display_hold)]
+    if args.require_all:
+        command += ["--require-all"]
     if args.output:
         command += ["--output", str(args.output)]
+    if args.screen_output:
+        command += ["--screen-output", str(args.screen_output)]
     return command
 
 
@@ -303,8 +310,10 @@ def main() -> int:
     parser.add_argument("--node", default=os.environ.get("NODE", "node"), help="Node.js 22+ executable")
     parser.add_argument("--erase", action="store_true", help="erase the whole flash before writing")
     parser.add_argument("--output", help="path for the JPEG captured by the checks")
+    parser.add_argument("--screen-output", help="path for the LCD test-pattern JPEG captured through Core")
     parser.add_argument("--log", help="path for the full text log; defaults to logs/<BOARD>-target-test.log")
     parser.add_argument("--checks", default="all", help="all or comma-separated checks forwarded to the SDK hardware CLI")
+    parser.add_argument("--require-all", action="store_true", help="fail if any selected check is unsupported instead of accepting a skip")
     parser.add_argument("--frames", type=int, default=30, help="frames used by the timing checks")
     parser.add_argument("--display-hold", type=int, default=0,
                         help="seconds to hold each LCD backlight state for visual inspection (default: 0)")
@@ -343,6 +352,12 @@ def main() -> int:
     try:
         build_dir = resolve_build_dir(args.board, args.build_dir)
         flasher = json.loads((build_dir / "flasher_args.json").read_text())
+        description = build_dir / "project_description.json"
+        args.expected_version = None
+        if description.is_file():
+            args.expected_version = json.loads(description.read_text()).get("project_version")
+        if os.environ.get("CI") and not args.expected_version:
+            raise SystemExit("CI requires project_description.json with the expected firmware version")
         print_context(args, build_dir, flasher)
 
         # Fail with a readable message when the board is simply not visible

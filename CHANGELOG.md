@@ -4,6 +4,18 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Fixed
+
+- Separate the Chinese hardware-guide inline REPL limit literal from its following parenthesis so strict HTML/PDF documentation builds accept the new CI contract section.
+- Retain a Core-captured LCD test-pattern JPEG alongside the camera JPEG in CI hardware artifacts and require its dimensions to match the live display.
+- Preserve camera allocation, timeout and unexpected mode-switch errors as hardware-test failures; only explicit unsupported capabilities may be reported as unsupported. Keep identity checks compatible with firmware that does not advertise optional storage inspection.
+- Keep SDK-only hardware-fixture regression tests independent of an installed Python interpreter; verify bounded source reconstruction in Node and execute the fixture through real Core hardware acceptance.
+- Load hardware-test fixtures in RAM within the negotiated REPL input limit instead of requiring Flash file uploads for memory/camera/display checks. Report storage state separately and fail explicit file acceptance on unmounted volumes without formatting. Bind target-test startup and runtime checks to the selected board/build identity and require every selected CI check to pass. Ship the updated packaged hardware tools as Device Core 0.4.1 to avoid republishing changed 0.4.0 content.
+
+### Changed
+
+- Qualify ESP32-P4/S3 firmware and hardware CI on pinned ESP-IDF v5.5.6, retain release/v6.1 for ESP32-S31, and align release packaging dependencies with this board-specific matrix. Document the required IDF environments and possible build/runtime/Python API changes with other versions in English and Chinese.
+
 ## [2026.10.19]
 
 This release introduces EV-MUX v4, prepares Device Core 0.4.0 browser flashing and release-manifest support, and adds NanoTrack, camera IPA/ISP controls and LCD touch input. Firmware release numbers, npm SDK versions and IDE versions are independent.

@@ -65,7 +65,7 @@ class DeviceCorePipelineRulesTests(unittest.TestCase):
             "CI_PIPELINE_SOURCE": "push", "CI_COMMIT_BRANCH": "feat/sdk",
             "CI_DEFAULT_BRANCH": "master", "CI_COMMIT_BEFORE_SHA": "1" * 40,
             "CI_COMMIT_REF_PROTECTED": "false", "BOARD": "ESP32_P4X_EYE",
-            "IDF_IMAGE": "release-v5.5", **overrides,
+            "IDF_IMAGE": "v5.5.6", **overrides,
         }
 
     def jobs(self, variables, changes, branch_changes=None):
@@ -134,7 +134,7 @@ class DeviceCorePipelineRulesTests(unittest.TestCase):
 
     def test_targeted_bin_omits_other_boards_and_hil(self):
         variables = self.variables(ESP_VISION_TEST_BOARD="ESP32_P4X_EYE",
-                                   ESP_VISION_TEST_IDF_IMAGE="release-v5.5")
+                                   ESP_VISION_TEST_IDF_IMAGE="v5.5.6")
         actual = self.jobs(variables, [])
         self.assertTrue(actual["firmware"])
         self.assertFalse(actual["hil"])
@@ -199,14 +199,35 @@ class LaunchpadSdkTagIsolationTests(unittest.TestCase):
 
 @unittest.skipIf(yaml is None, "PyYAML required")
 class FirmwarePublicationGateTests(unittest.TestCase):
+    def test_board_idf_pairs_and_consumers_resolve(self):
+        config = list(yaml.safe_load_all((ROOT / ".gitlab-ci.yml").read_text()))[-1]
+        pairs = [(board, image)
+                 for entry in config["firmware"]["parallel"]["matrix"]
+                 for board in entry["BOARD"] for image in entry["IDF_IMAGE"]]
+        boards = {path.parent.name for path in (ROOT / "boards").glob("*/port")}
+        self.assertEqual({board for board, _ in pairs}, boards)
+        self.assertEqual(len(pairs), len(boards), "Each board must have one qualified IDF")
+        for board, image in pairs:
+            self.assertEqual(image, "release-v6.1" if board.startswith("ESP32_S31_") else "v5.5.6")
+        firmware_jobs = {f"firmware: [{image}, {board}]" for board, image in pairs}
+        hil = yaml.safe_load((ROOT / ".gitlab/ci/target_test.yml").read_text())
+        deploy = yaml.safe_load((ROOT / ".gitlab/ci/deploy.yml").read_text())
+        for name, job in {**hil, **deploy}.items():
+            if not isinstance(job, dict):
+                continue
+            for need in job.get("needs", []):
+                dependency = need["job"] if isinstance(need, dict) else need
+                if dependency.startswith("firmware: ["):
+                    self.assertIn(dependency, firmware_jobs, name)
+                elif dependency.startswith("target_test_"):
+                    self.assertIn(dependency, hil, name)
+
     def test_upload_waits_for_package_and_required_qualification(self):
         jobs = yaml.safe_load((ROOT / ".gitlab/ci/deploy.yml").read_text())
         gate = jobs["qualify_firmware_release"]
         needs = {item["job"] for item in gate["needs"]}
         self.assertTrue({"pack_launchpad", "firmware", "device_core_checks",
-                         "target_test_p4x_function_ev_board_idf5.5",
-                         "target_test_p4x_function_ev_board_idf6.0",
-                         "target_test_p4x_function_ev_board_idf6.1"} <= needs)
+                         "target_test_p4x_function_ev_board_idf5.5.6"} <= needs)
         self.assertTrue(all(not item.get("optional") for item in gate["needs"]))
         self.assertFalse(gate.get("allow_failure", False))
         upload_needs = {item["job"] for item in jobs["upload-dl-trigger"]["needs"]}

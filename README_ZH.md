@@ -51,7 +51,7 @@ IDE、Agent、CLI 和自定义工具共用 Device Core，通过 EV-MUX 与设备
 
 ## 快速开始
 
-环境要求：ESP-IDF release/v5.5、release/v6.0 或 release/v6.1（已 source `export.sh`，`idf.py` 可用），以及一块 [受支持的开发板](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/target-support/index.html)。
+环境要求：ESP32-P4/S3 使用 ESP-IDF v5.5.6，ESP32-S31 使用 release/v6.1（已 source `export.sh`，`idf.py` 可用），以及一块 [受支持的开发板](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/target-support/index.html)。
 
 ```bash
 git clone --recursive https://github.com/espressif/esp-vision.git esp-vision
@@ -69,11 +69,16 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 
 ## ESP-IDF 兼容性
 
-| ESP-IDF 分支 | 支持状态 | 标准 MicroPython 功能 | 说明 |
-| --- | --- | --- | --- |
-| `release/v5.5` | 支持 | 提供更完整的功能集，包括 SSL/TLS、`cryptolib`、WebSocket、WebREPL、socket events，以及受支持芯片上的 `machine.I2S`、ESP32 PCNT 和 I2C target 模式。 | 需要上述可选 MicroPython 功能时推荐使用。 |
-| `release/v6.0` | 支持 | 提供 `network`、WLAN 和 socket；使用当前 ESP-VISION overlay 时，`release/v5.5` 中列出的可选功能仍保持关闭。 | 当前不支持构建 ESP32-S31。 |
-| `release/v6.1` | 支持 | 提供 `network`、WLAN 和 socket；使用当前 ESP-VISION overlay 时，`release/v5.5` 中列出的可选功能仍保持关闭。 | 支持构建 ESP32-S31。 |
+CI 构建和发布固件使用以下开发板与 IDF 组合：
+
+| 开发板 | ESP-IDF 依赖 | CI 镜像 |
+| --- | --- | --- |
+| ESP32-P4 和 ESP32-S3 开发板（包括 `TEMPLATE`） | **v5.5.6** | `espressif/idf:v5.5.6` |
+| ESP32-S31 开发板（`ESP32_S31_CHATBOT`、`ESP32_S31_KORVO`、`ESP32_S31_MOSAICO`） | **release/v6.1** | `espressif/idf:release-v6.1` |
+
+运行 `idf.py` 前，请使用对应的 ESP-IDF checkout 并 source 其 `export.sh`。v5.5.6 固定到补丁版本；`release/v6.1` 跟随 S31 所需的 6.1 维护分支。其它 IDF 版本（包括更新的补丁版本、release/v6.0 和 master）不在此 CI 验证矩阵内。ESP-IDF 或托管组件的 API 变更可能导致配置/编译失败、运行行为变化，或改变 MicroPython 暴露的 Python API；使用这些版本时，可能需要适配源码、overlay 或依赖，并单独进行硬件验证。
+
+当前 overlay 在 v5.5.6 下提供 SSL/TLS、`cryptolib`、WebSocket、WebREPL、socket events，以及芯片支持时的 `machine.I2S`、PCNT 和 I2C target 模式。这些可选功能在 6.1 构建中仍保持关闭；使用前应检查实际固件。
 
 ## 效果演示
 

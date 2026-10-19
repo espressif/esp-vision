@@ -7,7 +7,7 @@ export { tcpTransport, serialTransport } from '../src/node_transport.js'
 import { createDevice } from '../src/index.js'
 import { DEVICE_CHECKS, runDeviceChecks, saveJpeg } from './device-checks.mjs'
 
-export const usage = 'Usage: npm run test:hardware -- (--tcp HOST[:PORT] | --serial PATH) [--role usj|usb|uart] [--python PYTHON] [--write] [--capture] [--checks all|CSV] [--frames N] [--framesize QVGA] [--pixformat RGB565] [--quality 60] [--frame-timeout SECONDS] [--display-hold SECONDS] [--output CAMERA.jpg] [--screen-output LCD.jpg] [--timeout MILLISECONDS]'
+export const usage = 'Usage: npm run test:hardware -- (--tcp HOST[:PORT] | --serial PATH) [--role usj|usb|uart] [--python PYTHON] [--expect-board BOARD] [--expect-firmware-version VERSION] [--write] [--capture] [--checks all|CSV] [--require-all] [--frames N] [--framesize QVGA] [--pixformat RGB565] [--quality 60] [--frame-timeout SECONDS] [--display-hold SECONDS] [--output CAMERA.jpg] [--screen-output LCD.jpg] [--timeout MILLISECONDS]'
 const fail = (code, message) => Object.assign(new Error(message), { code })
 
 export function parseArgs(args) {
@@ -16,8 +16,8 @@ export function parseArgs(args) {
   for (let index = 0; index < args.length; index++) {
     const option = args[index]
     if (option === '--help') return { help: true }
-    if (option === '--write' || option === '--capture') { options[option.slice(2)] = true; continue }
-    if (!['--tcp', '--serial', '--role', '--python', '--timeout', '--checks', '--screen-output', '--output', '--frames', '--display-hold', '--framesize', '--pixformat', '--quality', '--frame-timeout'].includes(option)) throw fail('ARGUMENT', 'Unknown argument')
+    if (['--write', '--capture', '--require-all'].includes(option)) { options[option === '--require-all' ? 'requireAll' : option.slice(2)] = true; continue }
+    if (!['--tcp', '--serial', '--role', '--python', '--timeout', '--checks', '--screen-output', '--output', '--frames', '--display-hold', '--framesize', '--pixformat', '--quality', '--frame-timeout', '--expect-board', '--expect-firmware-version'].includes(option)) throw fail('ARGUMENT', 'Unknown argument')
     const value = args[++index]
     if (!value || value.startsWith('--')) throw fail('ARGUMENT', 'Missing argument value')
     const key = option.slice(2).replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase())
@@ -75,13 +75,20 @@ export async function checkHardware(options, { device = createDevice({ transport
     await device.connect({ role: options.role, timeout: Math.min(options.timeout, 30000), signal: controller.signal })
     cancelled()
     const status = await device.inspect({ fields: ['identity', 'capabilities', 'runtime'], signal: controller.signal })
+    if (options.expectBoard && status.identity?.board !== options.expectBoard) throw fail('BOARD_MISMATCH', 'Connected board does not match the requested board')
+    if (options.expectFirmwareVersion && status.identity?.firmwareVersion !== options.expectFirmwareVersion) throw fail('FIRMWARE_MISMATCH', 'Running firmware does not match the selected build artifact')
     // Only selected public identity fields are logged; never network credentials or Python output.
-    report({ check: 'inspect', ok: true, identity: { deviceId: status.identity?.deviceId ?? null, board: status.identity?.board ?? null, hostname: status.identity?.hostname ?? null } })
+    report({ check: 'inspect', ok: true, identity: { deviceId: status.identity?.deviceId ?? null, board: status.identity?.board ?? null, hostname: status.identity?.hostname ?? null, firmwareVersion: status.identity?.firmwareVersion ?? null } })
     const marker = `EV_HARDWARE_${nonce}`
     const execution = await device.python.execute({ source: `print('${marker}')`, timeout: 10000, maxOutputChars: 1024, signal: controller.signal })
     if (!execution.ok || !execution.output.split(/\r?\n/).some(line => line.trim() === marker)) throw fail('PYTHON_CHECK', 'Python marker was not received')
     report({ check: 'python', ok: true })
     if (options.write) {
+      const storage = await device.inspect({ fields: ['storage'], signal: controller.signal })
+      const flash = storage.storage?.flash
+      const ready = flash?.present === true && flash?.mounted === true && flash?.writable === true
+      report({ check: 'storage', ok: ready, flash: { present: flash?.present ?? null, mounted: flash?.mounted ?? null, writable: flash?.writable ?? null, reason: flash?.reason ?? null } })
+      if (!ready) throw fail('STORAGE_UNAVAILABLE', 'File acceptance requires a mounted writable Flash filesystem; no formatting was attempted')
       const entries = await device.files.list({ path: '/', signal: controller.signal })
       if (entries.some(entry => entry.path === path || entry.path === `${path}.tmp`)) throw fail('TEST_PATH_EXISTS', 'Test path already exists; refusing to modify it')
       ownedPath = path

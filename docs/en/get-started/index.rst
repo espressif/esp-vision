@@ -6,8 +6,12 @@ Get Started
 Prerequisites
 -------------
 
-- A supported ESP-IDF environment with its export script sourced so that ``idf.py`` is on ``PATH``; see the project README for the maintained branch compatibility.
+- ESP-IDF **v5.5.6** for ESP32-P4/S3 boards, or **release/v6.1** for ESP32-S31 boards. Source the matching checkout's ``export.sh`` so that ``idf.py`` is on ``PATH``.
 - A board listed in :doc:`../target-support/index` for the selected chip.
+
+.. warning::
+
+   CI and released firmware qualify only these board/IDF combinations. v5.5.6 is a pinned patch release; S31 follows the maintained ``release/v6.1`` branch. Other IDF versions may change ESP-IDF or managed-component APIs, fail to build, or change runtime behavior and the available MicroPython APIs. Adapting source, overlays or dependencies and repeating hardware verification may be necessary. The project README describes the optional MicroPython feature differences.
 
 .. note::
 

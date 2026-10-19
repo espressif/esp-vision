@@ -3,6 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { EV_REPL_INPUT_MAX_BYTES, evReplExecInputBytes } from '../src/evrepl.js'
 import { tmpdir } from 'node:os'
 import { parseArgs } from './hardware-check.mjs'
 import { DEVICE_CHECKS, parseCheckResult, runDeviceChecks, saveJpeg } from './device-checks.mjs'
@@ -11,11 +12,11 @@ function devicePeer({ results = {}, board = 'TEST', screenFails = false } = {}) 
   const files = new Map(), calls = [], listeners = new Map()
   return {
     calls, files, listeners,
-    async inspect({ fields }) { calls.push(['inspect', fields]); return { identity: { board, firmwareVersion: 'test' }, capabilities: { protocol: { evMuxVersion: 4 }, features: [] }, runtime: { vmReady: true } } },
+    async inspect({ fields }) { calls.push(['inspect', fields]); return { identity: { board, firmwareVersion: 'test' }, capabilities: { protocol: { evMuxVersion: 4 }, features: ['storage.writer.lease'], limits: { replInputMax: EV_REPL_INPUT_MAX_BYTES } }, runtime: { vmReady: true }, storage: { flash: { present: true, mounted: false, writable: false } } } },
     files: Object.assign(files, {
-      async list() { return [...files.keys()].map(path => ({ path })) },
-      async write({ path, data, overwrite }) { calls.push(['write', path]); assert.equal(overwrite, false); files.set(path, data) },
-      async remove({ path }) { calls.push(['remove', path]); files.delete(path) },
+      async list() { throw new Error('Runtime checks must not access storage') },
+      async write() { throw Object.assign(new Error('Flash unmounted'), { code: 'FILE_OPEN_FAILED' }) },
+      async remove() { throw new Error('Runtime checks must not access storage') },
     }),
     python: { async execute({ source }) {
       calls.push(['execute', source])
@@ -48,10 +49,15 @@ test('device check reports reject stale, duplicated and malformed markers', () =
   for (const output of ['', valid + '\n' + valid, '__EVDEVICECHECK__bad', valid.replace('memory', 'camera'), valid.replace('PASS', 'UNKNOWN')]) assert.throws(() => parseCheckResult(output, 'memory'), { code: 'CHECK_REPORT_INVALID' })
 })
 
-test('functional checks stage their shared fixture once and consume preview via public events', async () => {
+test('functional checks load fixtures in RAM despite unmounted storage and consume public preview events', async () => {
   const device = devicePeer(), reports = []
   await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'memory,preview,orientation']), { nonce: 'abc123', report: value => reports.push(value) })
-  assert.equal(device.calls.filter(call => call[0] === 'write').length, 1)
+  const commands = device.calls.filter(call => call[0] === 'execute').map(call => call[1])
+  assert.ok(commands.every(source => evReplExecInputBytes(source) <= EV_REPL_INPUT_MAX_BYTES))
+  assert.equal(commands.filter(source => source.startsWith("exec(''.join(")).length, 1)
+  const loader = commands.filter(source => source.includes("['_source']") || source.includes("={'_source':"))
+  const uploaded = loader.filter(source => source.includes("['_source'].append(")).map(source => JSON.parse(source.slice(source.indexOf('.append(') + 8, -1))).join('')
+  assert.equal(uploaded, await readFile(new URL('./fixtures/device-checks.py', import.meta.url), 'utf8'))
   assert.equal(device.files.size, 0)
   assert.equal(device.listeners.size, 0)
   assert.equal(reports.find(result => result.check === 'preview').data.received, 1)
@@ -95,4 +101,37 @@ test('screen JPEG is captured while display fixture is alive and saved on host',
 test('truncated JPEG and missing dimensions are refused before host artifact is written', async () => {
   await assert.rejects(saveJpeg({ data: new Uint8Array([255, 216]), mimeType: 'image/jpeg', metadata: { width: 1, height: 1 } }), { code: 'CAPTURE_INVALID' })
   await assert.rejects(saveJpeg({ data: new Uint8Array([255, 216, 255, 217]), mimeType: 'image/jpeg' }), { code: 'CAPTURE_INVALID' })
+})
+
+
+test('strict acceptance fails unsupported selected checks without preventing independent identity evidence', async () => {
+  const device = devicePeer({ results: { memory: { name: 'memory', status: 'SKIP', error: { message: 'ESP_ERR_NOT_SUPPORTED' } } } }), reports = []
+  await assert.rejects(runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'memory,identity', '--require-all']), { nonce: 'abc123', report: value => reports.push(value) }), { code: 'DEVICE_CHECKS_FAILED' })
+  assert.equal(reports.find(result => result.check === 'memory').status, 'FAIL')
+  assert.equal(reports.find(result => result.check === 'identity').status, 'PASS')
+  assert.equal(reports.find(result => result.check === 'identity').data.storage.flash.mounted, false)
+})
+
+test('failed partial RAM loading still releases its namespace without filesystem cleanup', async () => {
+  const device = devicePeer(), reports = [], execute = device.python.execute
+  let failed = false
+  device.python.execute = async request => {
+    if (!failed && request.source.includes("['_source'].append")) { failed = true; throw new Error('fixture load failed') }
+    return execute(request)
+  }
+  await assert.rejects(runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'memory']), { nonce: 'abc123', report: value => reports.push(value) }), { code: 'DEVICE_CHECKS_FAILED' })
+  assert.ok(device.calls.some(call => call[0] === 'execute' && call[1].includes('del _evhil_abc123')))
+  assert.equal(reports.at(-1).failed, 1)
+})
+
+test('identity and RAM checks do not require optional storage inspection support', async () => {
+  const device = devicePeer(), inspect = device.inspect, reports = []
+  device.inspect = async request => {
+    assert.ok(!request.fields.includes('storage'))
+    const info = await inspect(request)
+    info.capabilities.features = []
+    return info
+  }
+  await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'identity,memory']), { nonce: 'abc123', report: value => reports.push(value) })
+  assert.deepEqual(reports.at(-1), { check: 'summary', passed: 2, failed: 0, skipped: 0 })
 })

@@ -51,7 +51,7 @@ The [license inventory](docs/en/license/index.rst) records upstream components a
 
 ## Quickstart
 
-Prerequisites: ESP-IDF release/v5.5, release/v6.0, or release/v6.1 with the export script sourced (`idf.py` on `PATH`), and a [supported board](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/target-support/index.html).
+Prerequisites: ESP-IDF v5.5.6 for ESP32-P4/S3, or release/v6.1 for ESP32-S31 with the export script sourced (`idf.py` on `PATH`), and a [supported board](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/target-support/index.html).
 
 ```bash
 git clone --recursive https://github.com/espressif/esp-vision.git esp-vision
@@ -69,11 +69,16 @@ idf.py --board ESP32_P4X_EYE -p /dev/ttyACM0 build flash monitor
 
 ## ESP-IDF Compatibility
 
-| ESP-IDF branch | Support | Standard MicroPython features | Notes |
-| --- | --- | --- | --- |
-| `release/v5.5` | Supported | Provides the more complete feature set, including SSL/TLS, `cryptolib`, WebSocket, WebREPL, socket events, and, on supported chips, `machine.I2S`, ESP32 PCNT, and I2C target mode. | Recommended when these optional MicroPython features are required. |
-| `release/v6.0` | Supported | Provides `network`, WLAN, and sockets; the optional features listed for `release/v5.5` remain disabled with the current ESP-VISION overlay. | Does not currently support ESP32-S31 builds. |
-| `release/v6.1` | Supported | Provides `network`, WLAN, and sockets; the optional features listed for `release/v5.5` remain disabled with the current ESP-VISION overlay. | Supports ESP32-S31 builds. |
+CI builds and published firmware use the following board/IDF combinations:
+
+| Boards | ESP-IDF dependency | CI image |
+| --- | --- | --- |
+| ESP32-P4 and ESP32-S3 boards (including `TEMPLATE`) | **v5.5.6** | `espressif/idf:v5.5.6` |
+| ESP32-S31 boards (`ESP32_S31_CHATBOT`, `ESP32_S31_KORVO`, `ESP32_S31_MOSAICO`) | **release/v6.1** | `espressif/idf:release-v6.1` |
+
+Use the matching ESP-IDF checkout and source its `export.sh` before invoking `idf.py`. v5.5.6 is pinned to a patch release; `release/v6.1` follows the maintained 6.1 branch required by S31. Other ESP-IDF versions, including newer patches, release/v6.0 and master, are outside this CI qualification matrix. ESP-IDF or managed-component API changes can cause configuration/build failures, change runtime behavior or alter the Python APIs exposed by MicroPython. Such builds may need source, overlay or dependency adjustments and require their own hardware verification.
+
+With the current overlay, v5.5.6 provides SSL/TLS, `cryptolib`, WebSocket, WebREPL, socket events and, where the chip supports them, `machine.I2S`, PCNT and I2C target mode. These optional features remain disabled on the 6.1 build; inspect the actual firmware before relying on them.
 
 ## Demos
 

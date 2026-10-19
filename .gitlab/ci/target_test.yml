@@ -36,18 +36,18 @@
     - mkdir -p logs
     - |
       python3 tools/ci/flash_and_test.py --board "$BOARD" \
+        --require-all \
         --log "logs/$BOARD-$IDF_LABEL-target-test.log" \
-        --output "logs/$BOARD-$IDF_LABEL-frame.jpg"
+        --output "logs/$BOARD-$IDF_LABEL-frame.jpg" \
+        --screen-output "logs/$BOARD-$IDF_LABEL-screen.jpg"
   artifacts:
     when: always
     expire_in: 1 week
     paths:
       - logs/
 
-# One IDF release per job, all on the same board: they share a resource_group
-# so they run one at a time. `needs` cannot expand variables, hence the literal
-# job names; it also picks the firmware, since only that job's artifacts land
-# in build/<BOARD>/. IDF_LABEL only keeps the three runs' artifacts apart.
+# Test the same pinned IDF image used for P4 release firmware. `needs` cannot
+# expand variables, so keep its literal job name aligned with the build matrix.
 .target_test_p4x_function_ev_board:
   extends: .target_test_base
   tags:
@@ -56,26 +56,10 @@
   variables:
     BOARD: ESP32_P4X_FUNCTION_EV_BOARD
 
-target_test_p4x_function_ev_board_idf5.5:
+target_test_p4x_function_ev_board_idf5.5.6:
   extends: .target_test_p4x_function_ev_board
   needs:
-    - job: "firmware: [release-v5.5, ESP32_P4X_FUNCTION_EV_BOARD]"
+    - job: "firmware: [v5.5.6, ESP32_P4X_FUNCTION_EV_BOARD]"
       artifacts: true
   variables:
-    IDF_LABEL: idf5.5
-
-target_test_p4x_function_ev_board_idf6.0:
-  extends: .target_test_p4x_function_ev_board
-  needs:
-    - job: "firmware: [release-v6.0, ESP32_P4X_FUNCTION_EV_BOARD]"
-      artifacts: true
-  variables:
-    IDF_LABEL: idf6.0
-
-target_test_p4x_function_ev_board_idf6.1:
-  extends: .target_test_p4x_function_ev_board
-  needs:
-    - job: "firmware: [release-v6.1, ESP32_P4X_FUNCTION_EV_BOARD]"
-      artifacts: true
-  variables:
-    IDF_LABEL: idf6.1
+    IDF_LABEL: idf5.5.6

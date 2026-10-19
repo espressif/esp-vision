@@ -20,7 +20,8 @@ import flash_and_test
 class FlashAndTestTests(unittest.TestCase):
     def args(self, **changes):
         return argparse.Namespace(node="node22", role="usj", port="/dev/fake", baudrate=115200,
-                                  checks="all", frames=30, display_hold=0, output="logs/frame.jpg",
+                                  board="TEST", expected_version="build-version", require_all=True,
+                                  checks="all", frames=30, display_hold=0, output="logs/frame.jpg", screen_output="logs/screen.jpg",
                                   boot_timeout=5, **changes)
 
     def test_port_descriptors_select_usb_or_usj_without_protocol_probes(self):
@@ -43,10 +44,16 @@ class FlashAndTestTests(unittest.TestCase):
             self.assertEqual(command[command.index("--serial") + 1], "/dev/fake")
             self.assertEqual(command[command.index("--python") + 1], sys.executable)
             self.assertEqual(command[command.index("--role") + 1], "usj")
+            self.assertEqual(command[command.index("--expect-board") + 1], "TEST")
+            self.assertEqual(command[command.index("--expect-firmware-version") + 1], "build-version")
         self.assertNotIn("--checks", probe)
+        self.assertNotIn("--require-all", probe)
+        self.assertNotIn("--screen-output", probe)
+        self.assertIn("--require-all", full)
         self.assertEqual(probe[-2:], ["--timeout", "2000"])
         for option, value in (("--checks", "all"), ("--frames", "30"),
-                              ("--display-hold", "0"), ("--output", "logs/frame.jpg")):
+                              ("--display-hold", "0"), ("--output", "logs/frame.jpg"),
+                              ("--screen-output", "logs/screen.jpg")):
             self.assertEqual(full[full.index(option) + 1], value)
 
     def test_wait_retries_sdk_failures_and_preserves_diagnostic_output(self):
@@ -86,6 +93,7 @@ class FlashAndTestTests(unittest.TestCase):
         tee = SimpleNamespace(console=io.StringIO(), close=lambda: None)
         build = MagicMock()
         (build / "flasher_args.json").read_text.return_value = "{}"
+        (build / "project_description.json").read_text.return_value = '{"project_version":"test"}'
         commands = []
 
         def run(command):

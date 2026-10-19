@@ -6,6 +6,11 @@ All transport, ownership and cleanup are supplied by the public JS SDK.
 """
 
 
+def is_unsupported(exc):
+    message = str(exc).lower()
+    return any(token in message for token in ('esp_err_not_supported', 'esp_err_not_found', 'no module named', 'enodev'))
+
+
 def framesizes(opts):
     import sensor
     sensor.reset()
@@ -18,8 +23,10 @@ def framesizes(opts):
             img = sensor.snapshot()
             results.append(dict(name=name, supported=True, width=img.width(), height=img.height(),
                                 reportedWidth=sensor.width(), reportedHeight=sensor.height()))
-        except Exception:
-            results.append(dict(name=name, supported=False))
+        except Exception as exc:
+            if not is_unsupported(exc):
+                raise
+            results.append(dict(name=name, supported=False, reason=str(exc)))
     working = [item for item in results if item['supported']]
     assert working, 'no framesize produced a frame'
     for item in working:
@@ -39,8 +46,10 @@ def pixformats(opts):
             img = sensor.snapshot()
             results.append(dict(name=name, supported=True, width=img.width(), height=img.height(),
                                 actualBytes=img.size(), expectedBytes=img.width() * img.height() * depth))
-        except Exception:
-            results.append(dict(name=name, supported=False))
+        except Exception as exc:
+            if not is_unsupported(exc):
+                raise
+            results.append(dict(name=name, supported=False, reason=str(exc)))
     working = [item for item in results if item['supported']]
     assert working, 'no pixel format produced a frame'
     for item in working:
@@ -311,7 +320,6 @@ def run_check(name, opts):
         result = dict(name=name, status='PASS', data=data)
     except Exception as exc:
         message = str(exc)
-        unsupported = ('ESP_ERR_NOT_SUPPORTED', 'ESP_ERR_NOT_FOUND', 'no module named', 'ENODEV')
-        status = 'SKIP' if any(token.lower() in message.lower() for token in unsupported) else 'FAIL'
+        status = 'SKIP' if is_unsupported(exc) else 'FAIL'
         result = dict(name=name, status=status, error=dict(type=type(exc).__name__, message=message))
     print('__EVDEVICECHECK__' + json.dumps(result))

@@ -75,6 +75,15 @@ Use Node.js 22. Serial mode needs Python with ``pyserial``; ``--python`` selects
 
 ``--checks`` accepts ``all`` or comma-separated check names. Existing camera/display checks remain: ``identity``, ``memory``, ``camera``, ``framesizes``, ``pixformats``, ``orientation``, ``ipa_stats``, ``snapshot_rate``, ``preview``, ``image_ops``, ``display`` and ``display_stream``. ``all`` selects the full suite, not a promise that every board has the required hardware. Reports must distinguish passes, failures and unsupported-capability skips; a skip is not a pass. During experimentation test only the current hardware; run the full firmware matrix in CI for final submission.
 
+CI target-test contract
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The current CI hardware gate runs all twelve runtime checks on the P4 Function EV Board with ESP-IDF v5.5.6. CI retains both the camera JPEG and the LCD test-pattern JPEG, with dimensions validated against the live display. All selected checks must pass (``--require-all``); an unsupported-capability skip fails this board's gate. Camera-mode loops tolerate only explicit unsupported errors; allocation failures, timeouts and unexpected mode-switch errors fail the check. This proves the selected board/IDF pair, not the other boards in the compilation matrix. The driver passes ``--expect-board`` and the exact ``project_version`` from the downloaded build's ``project_description.json`` to both startup probes and the full suite, rejecting the wrong board or stale firmware before Python/camera/display tests.
+
+Runtime fixtures load into an isolated RAM namespace using bounded ``python.execute()`` calls. Each encoded command fits the firmware's advertised ``replInputMax`` (at most 511 bytes); a larger request would otherwise use Device Core's temporary-file execution path. The fixture namespace and LCD resources are released after success, failure or cancellation. Memory, camera and display checks therefore do not require a writable filesystem.
+
+Storage is separate evidence. The identity check reports volume presence/mount/writer state; a runtime pass does not prove file upload works. Use ``--write`` on a provisioned board to require mounted writable Flash, perform a unique binary file write/readback and remove only the test's own files. Unmounted or unavailable storage fails that explicit check with ``STORAGE_UNAVAILABLE``. Neither CI nor the hardware CLI formats storage, erases data to hide a mount failure, or substitutes an SD volume for Flash.
+
 Camera closed-loop evidence requires a new complete stdout marker or validated JPEG in the current session. Core handles upload, execution and correlation. Checks still cover pixel formats, frame sizes, orientation, IPA state, snapshot rate, preview, image operations and display. Handshake, upload ACK, queued execution or a REPL prompt alone do not prove application completion. Keep receiving during long operations and handle ``VM_BUSY`` / ``VM_TIMEOUT``.
 
 LCD screenshots and test patterns
@@ -89,7 +98,7 @@ LCD screenshots and test patterns
 
 Capture invokes firmware ``debug.capture_screen`` in the VM task and reads the display buffer without camera calls. Verify JPEG decoding, dimensions and expected pattern, then compare with the actual device screen. An uninitialized display returns ``DISPLAY_NOT_READY``; absent LCD or unsupported firmware returns ``NOT_SUPPORTED``. Never substitute camera capture to hide failure. The screenshot represents the last software-submitted display frame; it does not prove physical panel, cable or backlight operation.
 
-Checks stop current Python programs and may change display content. Schedule exclusive device use rather than sharing ownership with an IDE or another test. Release a valid owner or wait for its lease; switching interfaces does not bypass it. Tests use unique temporary files and clean their own files. Save reports, JPEGs and logs with actual installed firmware, board and interface. Preserve unknown business completion after reset, disconnection or cancellation instead of replaying writes.
+Checks stop current Python programs and may change display content. Schedule exclusive device use rather than sharing ownership with an IDE or another test. Release a valid owner or wait for its lease; switching interfaces does not bypass it. Runtime tests clean their RAM namespace; explicit file tests use unique temporary files and clean their own files. Save reports, JPEGs and logs with actual installed firmware, board and interface. Preserve unknown business completion after reset, disconnection or cancellation instead of replaying writes.
 
 Test entry points and responsibilities
 --------------------------------------

@@ -6,8 +6,12 @@
 前置条件
 --------
 
-- 受支持的 ESP-IDF 环境，并已 source 导出脚本，使 ``idf.py`` 位于 ``PATH`` 中；当前分支兼容性请查看项目 README。
+- ESP32-P4/S3 开发板使用 ESP-IDF **v5.5.6**，ESP32-S31 开发板使用 **release/v6.1**；请 source 对应 checkout 的 ``export.sh``，使 ``idf.py`` 位于 ``PATH`` 中。
 - 一块列在 :doc:`../target-support/index` 中且与所选芯片对应的开发板。
+
+.. warning::
+
+   CI 和发布固件仅验证上述开发板与 IDF 组合。v5.5.6 固定到补丁版本；S31 跟随 ``release/v6.1`` 维护分支。其它 IDF 版本可能涉及 ESP-IDF 或托管组件 API 变更，导致编译失败、运行行为变化，或改变可用的 MicroPython API；可能需要适配源码、overlay 或依赖，并重新进行硬件验证。可选 MicroPython 功能差异见项目 README。
 
 .. note::
 
