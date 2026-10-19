@@ -21,6 +21,7 @@ device_core_checks:
   rules:
     - if: '$ESP_VISION_DEVICE_CORE_ONLY == "1"'
     - if: '$CI_COMMIT_TAG =~ /^device-core-v[0-9]+\.[0-9]+\.[0-9]+$/'
+    - if: '$CI_COMMIT_TAG =~ /^(v\d+\.\d+(\.\d+)?|\d{4}\.\d{1,2}\.\d{1,2})($|[-.])/'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: *device_core_changes
     - if: '$CI_COMMIT_BRANCH && $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BEFORE_SHA != "0000000000000000000000000000000000000000"'

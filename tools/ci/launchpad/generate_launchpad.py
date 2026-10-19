@@ -2,48 +2,14 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
-"""Merge per-board ESP-VISION firmware and emit an esp-launchpad config.toml.
+"""Merge qualified firmware and write a hash-bound immutable publication.
 
-In the tag-gated ``pack_launchpad`` CI job this reuses the artifacts produced by
-the ``firmware`` build matrix (``build/<BOARD>/idf*/``) rather than rebuilding,
-merges each board into a single flashable image whose name is suffixed with the
-release tag, and writes ``binaries/config.toml``.
-
-The config.toml carries two regions in one file:
-
-  * the standard esp-launchpad schema (``firmware_images_url`` / ``image.*`` /
-    ``developKits.*``) — drives the online flasher, lists only boards that were
-    actually merged this release. Still openable by espressif.github.io/esp-launchpad.
-  * a ``[website]`` table (ignored by esp-launchpad) — the ESP-VISION marketing
-    site's board matrix, versioned by ``schemaVersion`` (semver; consumers pin
-    the major). Lists boards in boards.yml unless they set ``website: false``,
-    with capability data from docs/board_model.board_info (the single source of
-    derived truth), plus ``flashable`` / ``bin`` linking each board to the
-    standard region. It also carries ``[[website.models]]``: the bundled
-    ``.espdl`` models shipped under ``models/``, read straight from each model's
-    same-named ``.json`` sidecar, with size/architecture/task/download URLs so
-    the site can list and link them. Finally it carries ``releases`` (every
-    published tag, newest first) plus
-    ``binaryNameTemplate``: because every image is named
-    ``esp-vision-<board>-<tag>.bin``, the site can offer *all* historical
-    versions by templating the URL itself (``firmware_images_url`` + filled
-    template), without the config listing each version's bins explicitly.
-
-Because every published binary carries the tag in its filename and the uploader
-copies additively (``aws s3 cp --recursive``, no ``--delete``), older releases
-remain downloadable; only ``config.toml`` is overwritten to point launchpad at
-the newest tag.
-
-Usage:
-    generate_launchpad.py <tag>              # real release: merge bins + config
-    generate_launchpad.py --dry-run <tag>    # config only (no IDF / no bins)
-
-``--dry-run`` skips ``merge-bin`` entirely and predicts bin names from the
-deterministic ``esp-vision-<BOARD>-<tag>.bin`` pattern. It needs neither build
-artifacts nor esptool, so it runs locally and in non-release CI. Its output is
-used to (a) seed the website's committed config.toml snapshot for build-time
-SSG, and (b) catch board-config drift early. Optional boards (best-effort, may
-be absent from a real release) are marked ``flashable = false`` in dry-run.
+The standard launchpad fields and website snapshot remain for compatibility.
+Real releases also write releases/<tag>/manifest.json and a [publication]
+pointer with published-only history and a previous-config SHA for uploader CAS.
+The default legacy layout retains full/app bins and per-board JSON. Explicit
+single-bin mode binds application slices to complete containers instead.
+Dry runs predict compatibility config only; they never qualify a publication.
 """
 
 import argparse
@@ -72,7 +38,7 @@ from board_model import board_info  # noqa: E402
 
 # Bundled .espdl models live here, each with a same-named .json metadata sidecar.
 MODELS_DIR = os.path.join(REPO_ROOT, "models")
-MODEL_DOWNLOAD_BASE_URL = "https://raw.githubusercontent.com/espressif/esp-vision/master/"
+MODEL_DOWNLOAD_BASE_URL = "https://raw.githubusercontent.com/espressif/esp-vision/"
 
 # Keys every model sidecar must define (see models/README.md). sizeBytes is
 # authored but cross-checked against the actual .espdl below.
@@ -189,37 +155,15 @@ def load_merge_args(build_dir: str) -> list:
     return args
 
 
-def collect_release_tags(current_tag: str) -> list:
-    """Every published firmware release tag, newest first.
-
-    Releases are git tags (the pipeline is tag-gated and uploads are additive,
-    so each tag's bins stay downloadable). Sorted by tag creation date so the
-    order is stable regardless of the tag naming scheme. ``current_tag`` is
-    always included and placed first: at release time it is the tag being built,
-    and in --dry-run it seeds the snapshot even though it is not a real tag.
-    Independent ``device-core-v*`` SDK tags never name firmware images and are
-    excluded, including when an SDK-only pipeline dry-runs this generator.
-    """
-    try:
-        out = subprocess.run(
-            ["git", "tag", "--sort=-creatordate"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout
-        tags = [line.strip() for line in out.splitlines()
-                if line.strip() and not line.strip().startswith("device-core-v")]
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        tags = []
-    if current_tag.startswith("device-core-v"):
-        return tags
-    if current_tag in tags:
-        tags.remove(current_tag)
-    return [current_tag] + tags
+def collect_release_tags(current_tag: str, previous=None) -> list:
+    """Download labels from the published config; git tags do not prove upload."""
+    tags = (previous or {}).get("website", {}).get("releases", [])
+    values = ([] if current_tag.startswith("device-core-v") else [current_tag]) + tags
+    return list(dict.fromkeys(tag for tag in values
+                              if isinstance(tag, str) and tag and not tag.startswith("device-core-v")))
 
 
-def merge_board(board: str, target: str, tag: str, build_dir: str) -> str:
+def merge_board(board: str, target: str, tag: str, build_dir: str, layout="legacy", entries=None) -> str:
     """Merge a single board's firmware into binaries/ and return the bin name."""
     bin_name = bin_name_for(board, tag)
     print(f"[{board}] merging {build_dir} -> {bin_name}")
@@ -231,11 +175,13 @@ def merge_board(board: str, target: str, tag: str, build_dir: str) -> str:
     )
     shutil.move(os.path.join(build_dir, bin_name), os.path.join(OUTPUT_DIR, bin_name))
     from firmware_metadata import publish_update
-    publish_update(board, target, tag, build_dir, OUTPUT_DIR, os.path.join(OUTPUT_DIR, bin_name))
+    entry = publish_update(board, target, tag, build_dir, OUTPUT_DIR, os.path.join(OUTPUT_DIR, bin_name), layout=layout)
+    if entries is not None:
+        entries.append(entry)
     return bin_name
 
 
-def collect_images(cfg: dict, tag: str, dry_run: bool) -> dict:
+def collect_images(cfg: dict, tag: str, dry_run: bool, layout="legacy", entries=None) -> dict:
     """Return board -> (target, bin_name) for boards with a (real/predicted) bin.
 
     Real run: merge each board's artifacts. Dry run: predict bin names without
@@ -261,11 +207,11 @@ def collect_images(cfg: dict, tag: str, dry_run: bool) -> dict:
                 f"no build dir with flash_args for {board}; "
                 f"is the firmware:[...,{board}] job a dependency?"
             )
-        images[board] = (target, merge_board(board, target, tag, build_dir))
+        images[board] = (target, merge_board(board, target, tag, build_dir, layout, entries))
     return images
 
 
-def collect_models() -> list:
+def collect_models(source_commit=None) -> list:
     """Scan every models/ subfolder for valid model sidecars -> [[website.models]].
 
     Discovery is driven by the .json description files (not the model binaries),
@@ -276,6 +222,7 @@ def collect_models() -> list:
     same-stem sibling of any extension. slug/file/path/downloadUrl come from
     the file location so the listing can never drift from what ships.
     """
+    source_commit = source_commit or subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
     records = []
     for sidecar in glob.glob(os.path.join(MODELS_DIR, "**", "*.json"), recursive=True):
         with open(sidecar, encoding="utf-8") as f:
@@ -310,7 +257,7 @@ def collect_models() -> list:
         rec["slug"] = "-".join(os.path.dirname(model_rel).split(os.sep))
         rec["file"] = os.path.basename(model_path)
         rec["path"] = "models/" + model_rel.replace(os.sep, "/")
-        rec["downloadUrl"] = MODEL_DOWNLOAD_BASE_URL + rec["path"]
+        rec["downloadUrl"] = MODEL_DOWNLOAD_BASE_URL + source_commit + "/" + rec["path"]
         records.append(rec)
     records.sort(key=lambda r: r["slug"])
     return records
@@ -403,6 +350,10 @@ def main() -> None:
         action="store_true",
         help="config only: skip merge-bin, predict bin names (no IDF/esptool)",
     )
+    parser.add_argument("--layout", choices=("legacy", "single-bin"), default="legacy")
+    parser.add_argument("--previous-config", help="previous published config bytes; default: fetch official config")
+    parser.add_argument("--pipeline-id", type=int, default=int(os.environ.get("CI_PIPELINE_ID", "0")))
+    parser.add_argument("--allow-missing-mcp", action="store_true", help="record mcp:null rather than referencing a stale pack")
     args = parser.parse_args()
     if not args.tag:
         parser.error("tag must be non-empty")
@@ -412,11 +363,19 @@ def main() -> None:
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    images = collect_images(cfg, args.tag, args.dry_run)
+    entries = []
+    images = collect_images(cfg, args.tag, args.dry_run, args.layout, entries)
     if not images and not args.dry_run:
         raise RuntimeError("no boards merged; refusing to write an empty config.toml")
 
     toml_obj = build_toml(cfg, images, args.tag)
+    if not args.dry_run:
+        from pathlib import Path
+        from publication import ROOT_URL, fetch_public, write_publication
+        previous = Path(args.previous_config).read_bytes() if args.previous_config else fetch_public(ROOT_URL + "config.toml")
+        source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
+        write_publication(OUTPUT_DIR, toml_obj, entries, args.tag, source_commit, args.pipeline_id,
+                          previous, layout=args.layout, allow_missing_mcp=args.allow_missing_mcp)
     text = unquote_keys(rtoml.dumps(toml_obj))
     out = os.path.join(OUTPUT_DIR, "config.toml")
     with open(out, "w") as f:

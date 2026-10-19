@@ -4,11 +4,20 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct English release-guide title underlines so strict HTML/PDF documentation builds pass.
+
+- Retain the project description in firmware CI artifacts so tag release metadata generation can read its build version. Gate firmware release packages before upload on complete install/update metadata, matching build versions, image hashes and actual partition bounds. Document the uploader root `firmware/` contract and release ordering; historical releases without qualified metadata remain unavailable for Core flashing.
+
 ### Added
 
 - Prepare Device Core 0.4.0 with immutable publication-manifest readers and verified application extraction from one complete firmware BIN, preserving layout checks, explicit installation, multi-file model groups and legacy feed compatibility, with bilingual API documentation and safe immutable-download browser cache reuse and normalized model source boundaries.
 
 - Add the unreleased Device Core `/browser` ROM adapter using pinned tasmota 9.4.2, centralizing P4/S31 browser compatibility and verified install/update workflows in the SDK with browser bundle and package isolation checks.
+
+- Publish immutable per-version firmware manifests with hash-bound current/history pointers, actual board membership, commit-pinned website/model/MCP snapshots and compiler-derived Wi-Fi capabilities. Keep compatibility images by default, support explicitly enabled single-bin application slices, and gate upload on the complete firmware/HIL/SDK/package qualification contract.
+  Evaluate all CMake compiler contexts for repeated network-service sources and require their Wi-Fi capability results to agree.
 
 - Device Core 0.3.0 adds explicit complete-firmware installation for blank devices through the existing firmware API/CLI and ROM adapters. Release metadata qualifies the merged bootloader, partition table, application, flash capacity and silicon revision; existing application-only updates remain the default.
 
