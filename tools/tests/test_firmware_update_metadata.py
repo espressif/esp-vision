@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location('firmware_metadata', ROOT / 'tools/ci/launchpad/firmware_metadata.py')
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+VALIDATOR_SPEC = importlib.util.spec_from_file_location('validate_release', ROOT / 'tools/ci/launchpad/validate_release.py')
+VALIDATOR = importlib.util.module_from_spec(VALIDATOR_SPEC)
+VALIDATOR_SPEC.loader.exec_module(VALIDATOR)
 
 
 class FirmwareMetadataTests(unittest.TestCase):
@@ -76,6 +79,27 @@ class FirmwareMetadataTests(unittest.TestCase):
                 self.assertEqual(entry['install']['sha256'], hashlib.sha256(full).hexdigest())
                 self.assertEqual(entry['install']['bootloader']['sha256'], hashlib.sha256(full[8192:8192 + len(boot)]).hexdigest())
                 self.assertEqual(entry['image']['sha256'], hashlib.sha256(app).hexdigest())
+                config = {'website': {'release': 'v1'}, 'firmware_images_url': VALIDATOR.ROOT_URL + 'bin/',
+                          'supported_apps': ['esp-vision'], 'esp-vision': {'image': {'BOARD': 'full.bin'}}}
+                self.assertEqual(VALIDATOR.validate_release(root, 'v1', config), 1)
+                identity = {'board': 'BOARD', 'firmwareVersion': 'v1', 'sourceCommit': 'a' * 40,
+                            'appSha256': hashlib.sha256(app).hexdigest(), 'capabilities': {'wifi': False}}
+                (root / 'release-build-identity.json').write_text(json.dumps(identity))
+                single = root / 'single'
+                single.mkdir()
+                single_entry = MODULE.publish_update('BOARD', 'esp32p4', 'v1', root, single,
+                                                     full_path, layout='single-bin')
+                self.assertFalse((single / 'esp-vision-BOARD-v1-app.bin').exists())
+                self.assertFalse((single / 'firmware/BOARD/v1.json').exists())
+                self.assertEqual(single_entry['capabilities'], {'wifi': False})
+                self.assertEqual(single_entry['sourceCommit'], 'a' * 40)
+                self.assertEqual(single_entry['image']['source']['sha256'], entry['install']['sha256'])
+                self.assertEqual(single_entry['image']['sha256'], entry['image']['sha256'])
+                identity['appSha256'] = '0' * 64
+                (root / 'release-build-identity.json').write_text(json.dumps(identity))
+                with self.assertRaisesRegex(ValueError, 'Build identity'):
+                    MODULE.publish_update('BOARD', 'esp32p4', 'v1', root, single, full_path, layout='single-bin')
+                (root / 'release-build-identity.json').unlink()
                 full[65536] ^= 1
                 full_path.write_bytes(full)
                 with self.assertRaisesRegex(ValueError, 'flash inputs'):

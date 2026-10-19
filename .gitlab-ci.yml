@@ -165,6 +165,7 @@ check_readme_links:
     - echo "ninja wrapper active -> $REAL_NINJA -j ${NINJA_MAX_JOBS:-2}"
   script:
     - idf.py --board "$BOARD" build
+    - python tools/ci/launchpad/build_identity.py "$BOARD" "$CI_COMMIT_SHA"
   after_script:
     - |
       if [ -d "build/$BOARD" ]; then
@@ -208,6 +209,9 @@ check_readme_links:
       # flasher_args.json carries the same offsets plus the chip and reset
       # behaviour; the hardware test jobs flash straight from it.
       - build/$BOARD/idf*/flasher_args.json
+      # Release metadata binds the published tag to this exact build version.
+      - build/$BOARD/idf*/project_description.json
+      - build/$BOARD/idf*/release-build-identity.json
 
 # Stable release lines (blocking): every board on every supported IDF release.
 firmware:

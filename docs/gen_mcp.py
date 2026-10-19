@@ -505,7 +505,7 @@ def build_capabilities() -> List[dict]:
 def build_pack(version: str) -> dict:
     try:
         sha = subprocess.check_output(
-            ['git', '-C', REPO_ROOT, 'rev-parse', '--short', 'HEAD']
+            ['git', '-C', REPO_ROOT, 'rev-parse', 'HEAD']
         ).decode().strip()
     except Exception:
         sha = 'unknown'

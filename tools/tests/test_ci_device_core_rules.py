@@ -104,6 +104,7 @@ class DeviceCorePipelineRulesTests(unittest.TestCase):
             actual = self.jobs(self.variables(CI_COMMIT_BRANCH="", CI_COMMIT_TAG=tag), [])
             self.assertTrue(actual["firmware"])
             self.assertTrue(actual["hil"])
+            self.assertTrue(actual["sdk"])
             self.assertFalse(actual["publish"])
 
     def test_sdk_ci_changes_only_run_sdk_checks(self):
@@ -181,25 +182,35 @@ class LaunchpadSdkTagIsolationTests(unittest.TestCase):
         exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), "exec"), namespace)
         cls.collect = staticmethod(namespace["collect_release_tags"])
 
-    def test_sdk_tags_are_excluded_without_narrowing_historical_firmware_tags(self):
-        history = "device-core-v0.2.0\n2026.10.15\nv1.2.3-rc1\nlegacy-release\ndevice-core-v0.1.0\n"
-        with patch.object(subprocess, "run", return_value=SimpleNamespace(stdout=history)):
-            self.assertEqual(self.collect("2026.10.15"),
+    def test_only_previous_published_labels_are_carried_forward(self):
+        previous = {"website": {"releases": ["v1.2.3-rc1", "legacy-release", "device-core-v0.2.0"]}}
+        with patch.object(subprocess, "run", side_effect=AssertionError("git tags cannot prove publication")):
+            self.assertEqual(self.collect("2026.10.15", previous),
                              ["2026.10.15", "v1.2.3-rc1", "legacy-release"])
 
-    def test_sdk_tag_dry_run_does_not_seed_a_fake_firmware_release(self):
-        with patch.object(subprocess, "run", return_value=SimpleNamespace(
-                stdout="device-core-v0.1.0\nv1.0.0\n2026.08.27\n")):
-            self.assertEqual(self.collect("device-core-v0.2.0"), ["v1.0.0", "2026.08.27"])
+    def test_sdk_dry_run_cannot_seed_a_fake_firmware_release(self):
+        self.assertEqual(self.collect("device-core-v0.3.0", {"website": {"releases": ["2026.08.27"]}}),
+                         ["2026.08.27"])
 
-    def test_unpublished_firmware_dry_run_still_seeds_current_tag(self):
-        with patch.object(subprocess, "run", return_value=SimpleNamespace(stdout="v1.0.0\n")):
-            self.assertEqual(self.collect("v0.0.0-dev"), ["v0.0.0-dev", "v1.0.0"])
+    def test_unpublished_dry_run_only_seeds_current_label(self):
+        self.assertEqual(self.collect("v0.0.0-dev"), ["v0.0.0-dev"])
+        self.assertEqual(self.collect("device-core-v0.3.0"), [])
 
-    def test_missing_git_keeps_firmware_seed_but_never_adds_sdk_seed(self):
-        with patch.object(subprocess, "run", side_effect=FileNotFoundError):
-            self.assertEqual(self.collect("v0.0.0-dev"), ["v0.0.0-dev"])
-            self.assertEqual(self.collect("device-core-v0.1.0"), [])
+
+@unittest.skipIf(yaml is None, "PyYAML required")
+class FirmwarePublicationGateTests(unittest.TestCase):
+    def test_upload_waits_for_package_and_required_qualification(self):
+        jobs = yaml.safe_load((ROOT / ".gitlab/ci/deploy.yml").read_text())
+        gate = jobs["qualify_firmware_release"]
+        needs = {item["job"] for item in gate["needs"]}
+        self.assertTrue({"pack_launchpad", "firmware", "device_core_checks",
+                         "target_test_p4x_function_ev_board_idf5.5",
+                         "target_test_p4x_function_ev_board_idf6.0",
+                         "target_test_p4x_function_ev_board_idf6.1"} <= needs)
+        self.assertTrue(all(not item.get("optional") for item in gate["needs"]))
+        self.assertFalse(gate.get("allow_failure", False))
+        upload_needs = {item["job"] for item in jobs["upload-dl-trigger"]["needs"]}
+        self.assertTrue({"pack_launchpad", "qualify_firmware_release"} <= upload_needs)
 
 
 if __name__ == "__main__":

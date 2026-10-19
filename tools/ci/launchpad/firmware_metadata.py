@@ -10,7 +10,7 @@ import struct
 FAMILIES = {'esp32p4': 0x3280, 'esp32s3': 0x3253, 'esp32s31': 0x3231}
 
 
-def publish_update(board, target, tag, build_dir, output_dir, full_image=None):
+def publish_update(board, target, tag, build_dir, output_dir, full_image=None, layout="legacy"):
     from esptool.bin_image import LoadFirmwareImage
     build, output = Path(build_dir), Path(output_dir)
     args = json.loads((build / 'flasher_args.json').read_text())
@@ -29,7 +29,10 @@ def publish_update(board, target, tag, build_dir, output_dir, full_image=None):
         raise ValueError('Application does not fit a declared app partition')
     image = LoadFirmwareImage(target, str(app_path))
     name = f'esp-vision-{board}-{tag}-app.bin'
-    (output / name).write_bytes(data)
+    if layout not in ('legacy', 'single-bin'):
+        raise ValueError('Unknown firmware publication layout')
+    if layout == 'legacy':
+        (output / name).write_bytes(data)
     entry = {
         'board': board, 'version': tag,
         'firmwareVersion': json.loads((build / 'project_description.json').read_text())['project_version'],
@@ -85,7 +88,23 @@ def publish_update(board, target, tag, build_dir, output_dir, full_image=None):
                 'sha256': hashlib.sha256(full[boot_offset:boot_offset + len(boot_data)]).hexdigest(),
             },
         }
-    directory = output / 'firmware' / board
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / (tag + '.json')).write_text(json.dumps(entry, indent=2) + '\n')
+    identity_path = build / 'release-build-identity.json'
+    if identity_path.is_file():
+        identity = json.loads(identity_path.read_text())
+        if (identity['board'] != board or identity['firmwareVersion'] != entry['firmwareVersion']
+                or identity['appSha256'] != entry['image']['sha256']
+                or type(identity['capabilities']['wifi']) is not bool):
+            raise ValueError('Build identity does not match application/capabilities')
+        entry['capabilities'] = identity['capabilities']
+        entry['sourceCommit'] = identity['sourceCommit']
+    if layout == 'single-bin':
+        if full_image is None:
+            raise ValueError('Single-bin publication requires the complete container')
+        entry['image']['source'] = {key: entry['install'][key] for key in ('url', 'bytes', 'sha256')}
+        entry['image']['source']['offset'] = entry['image']['offset']
+        entry['image']['url'] = entry['install']['url']
+    else:
+        directory = output / 'firmware' / board
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / (tag + '.json')).write_text(json.dumps(entry, indent=2) + '\n')
     return entry
