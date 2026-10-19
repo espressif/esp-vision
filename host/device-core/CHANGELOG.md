@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## 0.4.1 (unreleased)
+
+### Fixed
+
+- Fail camera mode checks on allocation, timeout and unexpected errors instead of silently classifying those modes as unsupported; inspect optional storage state only when advertised.
+- Keep hardware-check fixtures in bounded RAM-only Python calls, independent of filesystem availability. Add expected board/firmware and required-check validation, report storage mount state, and reject explicit file acceptance on unmounted Flash without formatting.
+
+## 0.4.0
 
 ### Added
 

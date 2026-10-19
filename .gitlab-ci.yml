@@ -213,12 +213,12 @@ check_readme_links:
       - build/$BOARD/idf*/project_description.json
       - build/$BOARD/idf*/release-build-identity.json
 
-# Stable release lines (blocking): every board on every supported IDF release.
+# Qualified board/IDF pairs: P4/S3 use pinned v5.5.6; S31 requires v6.1.
 firmware:
   extends: .firmware_base
   parallel:
     matrix:
-      - IDF_IMAGE: ["release-v5.5", "release-v6.0", "release-v6.1"]
+      - IDF_IMAGE: ["v5.5.6"]
         BOARD:
           - ESP32_P4X_EYE
           - ESP32_P4X_FUNCTION_EV_BOARD
