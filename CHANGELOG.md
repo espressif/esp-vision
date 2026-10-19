@@ -10,6 +10,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Retain the project description in firmware CI artifacts so tag release metadata generation can read its build version. Gate firmware release packages before upload on complete install/update metadata, matching build versions, image hashes and actual partition bounds. Document the uploader root `firmware/` contract and release ordering; historical releases without qualified metadata remain unavailable for Core flashing.
 
+- Reserve sufficient EV-MUX transport-task stack for nested network configuration parsing and hashing, preventing a stack-protection reset when Device Core configures Wi-Fi over USB or TCP.
+
 ### Added
 
 - Prepare Device Core 0.4.0 with immutable publication-manifest readers and verified application extraction from one complete firmware BIN, preserving layout checks, explicit installation, multi-file model groups and legacy feed compatibility, with bilingual API documentation and safe immutable-download browser cache reuse and normalized model source boundaries.
