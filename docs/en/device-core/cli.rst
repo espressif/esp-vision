@@ -10,7 +10,7 @@ Installation and platforms
 
 .. code-block:: console
 
-   npm install -g @esp-vision/device-core@0.3.0
+   npm install -g @esp-vision/device-core@0.4.0
    esp-vision-device --help
    esp-vision-device inspect
 
