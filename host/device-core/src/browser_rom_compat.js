@@ -15,6 +15,13 @@ export function browserRomCompatibility(loader) {
       }
     }
   }
+  // runStub returns a separate loader. Its command replies use two status bytes;
+  // the ROM loader still expects four and cannot issue reset register writes.
+  let activeStub
+  const hardReset = loader.hardReset
+  loader.hardReset = function (...args) {
+    return activeStub ? activeStub.hardReset(...args) : hardReset.apply(this, args)
+  }
   const runStub = loader.runStub
   loader.runStub = async function (skipFlashDetection = false) {
     const memFinish = this.memFinish, packet = this.readPacket
@@ -34,6 +41,7 @@ export function browserRomCompatibility(loader) {
       const stub = await runStub.call(this, skipFlashDetection)
       if (!stub.IS_STUB) throw new Error('This device has no supported browser flash stub')
       browserStubCompatibility(stub)
+      activeStub = stub
       return stub
     } finally { this.memFinish = memFinish; this.readPacket = packet }
   }

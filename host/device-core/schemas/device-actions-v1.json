@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ESP Vision Device Actions",
-  "deviceCoreVersion": "0.4.1",
+  "deviceCoreVersion": "0.4.2",
   "schemaVersion": 1,
   "actions": [
     {

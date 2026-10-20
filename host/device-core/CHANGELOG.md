@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2 (unreleased)
+
+### Fixed
+
+- Route browser ROM reset calls through the active flash stub after upload, preserving its two-byte status decoder during P4 watchdog register writes; report reset failure diagnostics without invalidating successful firmware verification.
+
 ## 0.4.1 (unreleased)
 
 ### Fixed

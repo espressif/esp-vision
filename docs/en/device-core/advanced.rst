@@ -1336,3 +1336,8 @@ Release readers in @esp-vision/device-core/firmware (0.4.0)
 
 ``loadReleaseManifest({ url, sha256, version?, sourceCommit?, boards?, fetch = globalThis.fetch, signal? })``
     Load exactly one immutable official manifest, validate raw-byte SHA-256, identities, complete board set, every firmware descriptor and website/model/MCP source boundaries. Return the manifest object without downloading firmware or opening ROM. Limits, fields and single-BIN update behavior are specified in :doc:`api`.
+
+Browser flash startup
+---------------------
+
+The browser ROM adapter resets through the active flash stub after verification. A verified write does not prove that firmware has started: hosts must wait for a fresh runtime handshake before enabling configuration. If ``needsReset`` is true, ``resetError`` carries the reset failure code and message; preserve this diagnostic and offer manual reset only as recovery.

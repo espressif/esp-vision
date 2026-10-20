@@ -23,7 +23,7 @@ try {
   assert.ok(Object.keys(result.metafile.inputs).some(path => path.includes('stubs/esp32p4.json')))
   assert.ok(Object.keys(result.metafile.inputs).some(path => path.includes('stubs/esp32s31.json')))
   assert.ok(!Object.keys(result.metafile.inputs).some(path => /src\/(node|cli)/.test(path)))
-  const context = vm.createContext({ EventTarget, URL, TextDecoder, TextEncoder, Uint8Array, AbortController, setTimeout, clearTimeout, console, crypto: webcrypto, structuredClone })
+  const context = vm.createContext({ atob, btoa, EventTarget, URL, TextDecoder, TextEncoder, Uint8Array, AbortController, setTimeout, clearTimeout, console, crypto: webcrypto, structuredClone })
   vm.runInContext(code, context)
   let opens = 0, closes = 0
   const adapter = context.DeviceCore.openBrowserRom({ port: {
@@ -45,6 +45,29 @@ try {
     raw._clearInputBuffer()
     raw._inputBuffer.push(0xc0, 0xdb, 0x47, 0xc0)
     await assert.rejects(raw.readPacket(100), /Invalid SLIP escape/)
+  }
+  // Exercise real upstream stub status decoding. A ROM reset consumes four
+  // status bytes while the running stub replies with two; route reset to it.
+  {
+    const raw = new context.DeviceCore.TestLoader({ getInfo: () => ({ usbVendorId: 0x303a, usbProductId: 0x1001 }) }, { log() {}, error() {}, debug() {} })
+    raw.chipFamily = 0x3280; raw.chipRevision = 302
+    raw.memBegin = raw.memBlock = raw.memFinish = async () => {}
+    raw.readPacket = async () => new Uint8Array([79, 72, 65, 73])
+    context.DeviceCore.testCompatibility(raw)
+    const stub = await raw.runStub(true)
+    let writes = 0
+    stub.detectUsbConnectionType = async () => true
+    stub.getUsbMode = async () => ({ mode: 'usb-jtag-serial' })
+    stub.sendCommand = async () => { writes++ }
+    stub.getResponse = async () => [0, new Uint8Array([0, 0])]
+    // Confirm the original ROM instance rejects the exact same stub response.
+    raw.detectUsbConnectionType = stub.detectUsbConnectionType
+    raw.getUsbMode = stub.getUsbMode
+    raw.sendCommand = async () => {}
+    raw.getResponse = stub.getResponse
+    await assert.rejects(context.DeviceCore.TestLoader.prototype.hardReset.call(raw), /status|response|enough/i)
+    await raw.hardReset()
+    assert.equal(writes, 4, 'P4 watchdog writes must use the running stub status decoder')
   }
   const prototype = context.DeviceCore.TestLoader.prototype
   const originals = Object.fromEntries(['initialize', 'disconnect', 'getSecurityInfo', 'runStub', 'hardReset'].map(key => [key, prototype[key]]))
@@ -115,6 +138,7 @@ try {
         async flashData() { writes++; writing.abort() },
         async readFlash(offset) { return offset === 32768 ? table : data },
         async readRegister() { return 0 },
+        async hardReset() { resets++ },
       }
     }
     prototype.hardReset = async () => { resets++ }

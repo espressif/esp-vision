@@ -112,7 +112,10 @@ export class FirmwareFlashSession {
         }
         await this.reset()
       }
-      catch { onPhase('Firmware verified. Press RESET or reconnect power to start it.'); return { verified: true, needsReset: true } }
+      catch (error) {
+        onPhase('Firmware verified. Automatic reset did not complete; wait for runtime reconnection or press RESET.')
+        return { verified: true, needsReset: true, resetError: { code: error?.code ?? 'RESET_FAILED', message: error?.message ?? String(error) } }
+      }
       onPhase('Firmware verified and reset. Reconnect in the IDE to verify EV-MUX v4.')
       return { verified: true, needsReset: false }
     } catch (error) { this.state = 'error'; throw error }
