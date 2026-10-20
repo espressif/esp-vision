@@ -80,7 +80,10 @@ test('failed readback never reports verified or resets the device', async () => 
 })
 test('reset failure returns verified with explicit manual reset requirement', async () => {
   const f = await fixture(); f.loader.hardReset = async () => { throw new Error('reset unavailable') }
-  assert.equal((await f.device.firmware.update(f.request)).needsReset, true)
+  const result = await f.device.firmware.update(f.request)
+  assert.equal(result.needsReset, true)
+  assert.equal(result.verified, true)
+  assert.deepEqual(result.resetError, { code: 'RESET_FAILED', message: 'reset unavailable' })
 })
 
 test('firmware check lists all board versions and selects an explicit older version', async () => {

@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Reset browser-flashed devices through the active stub loader so its two-byte command status is decoded correctly; preserve automatic-reset failure diagnostics for runtime handoff.
+
 - Separate the Chinese hardware-guide inline REPL limit literal from its following parenthesis so strict HTML/PDF documentation builds accept the new CI contract section.
 - Retain a Core-captured LCD test-pattern JPEG alongside the camera JPEG in CI hardware artifacts and require its dimensions to match the live display.
 - Preserve camera allocation, timeout and unexpected mode-switch errors as hardware-test failures; only explicit unsupported capabilities may be reported as unsupported. Keep identity checks compatible with firmware that does not advertise optional storage inspection.

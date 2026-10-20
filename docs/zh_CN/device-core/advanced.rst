@@ -1336,3 +1336,8 @@ FirmwareFlashSession.flash 返回值
 
 ``loadReleaseManifest({ url, sha256, version?, sourceCommit?, boards?, fetch = globalThis.fetch, signal? })``
     只加载一份不可变官方 manifest，校验原始字节 SHA-256、身份、完整板集、所有固件描述及 website/model/MCP 来源边界，返回 manifest 对象，不下载固件也不打开 ROM。字段、限制与单 BIN 升级行为见 :doc:`api`。
+
+浏览器烧录后的启动
+---------------------
+
+浏览器 ROM 适配器在校验后通过当前运行的 flash stub 复位。写入校验成功不代表固件已经启动：宿主必须等待新的运行态握手后才允许配网。若 ``needsReset`` 为真，``resetError`` 会保留复位失败的代码和消息；手动复位只作为异常恢复方式。
