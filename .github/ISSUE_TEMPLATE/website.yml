@@ -1,73 +1,71 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
-name: Website / 官网
-description: Website pages, documentation, downloads, links, or MCP knowledge / 官网、文档、下载、链接或 MCP 知识
+name: Website
+description: Website pages, documentation, downloads, links, or MCP knowledge
 title: '[Website] '
 body:
 - type: markdown
   attributes:
     value: |-
-      Report this category here in espressif/esp-vision, including issues in companion repositories. English or Chinese is welcome. Search existing issues first. Remove credentials and private data from attachments.
-
-      此类问题统一提交到 espressif/esp-vision，包括配套仓库中的问题。支持中文或英文，请先搜索已有问题，并移除附件中的凭据及隐私数据。
+      Report this category here in espressif/esp-vision, including issues in companion repositories. Search existing issues first. Remove credentials and private data from attachments.
 - type: textarea
   id: summary
   attributes:
-    label: Problem summary / 问题概述
-    description: Describe the affected feature and impact. / 描述受影响的功能和影响范围。
+    label: Problem summary
+    description: Describe the affected feature and impact.
   validations:
     required: true
 - type: textarea
   id: environment
   attributes:
-    label: Environment / 环境信息
-    description: Fill in the relevant versions; write unknown or not applicable where needed. / 填写相关版本；无法获取或不涉及时填写未知或不适用。
+    label: Environment
+    description: Fill in the relevant versions; write unknown or not applicable where needed.
     placeholder: |
-      Affected page URL or MCP tool/resource / 出问题的页面地址或 MCP 工具、资源:
-      Page language and documentation version/target / 页面语言及文档版本、目标芯片:
-      OS and version / 操作系统及版本:
-      Browser and version (or MCP client/version) / 浏览器及版本（或 MCP 客户端及版本）:
-      Time of failure and timezone / 发生时间及所在时区:
+      Affected page URL or MCP tool/resource:
+      Page language and documentation version/target:
+      OS and version:
+      Browser and version (or MCP client/version):
+      Time of failure and timezone:
   validations:
     required: true
 - type: textarea
   id: reproduction
   attributes:
-    label: Steps to reproduce / 复现步骤
-    description: Provide the smallest reproducible example and prerequisites. / 提供最小复现及前置条件。
+    label: Steps to reproduce
+    description: Provide the smallest reproducible example and prerequisites.
     placeholder: |
-      1. Open the URL or query the MCP tool/resource / 打开页面或查询 MCP 工具、资源
-      2. Click, search, download, or enter a query / 点击、搜索、下载或输入查询
-      3. Observe the failure / 观察异常
-      Reproduction frequency / 复现概率:
+      1. Open the URL or query the MCP tool/resource
+      2. Click, search, download, or enter a query
+      3. Observe the failure
+      Reproduction frequency:
   validations:
     required: true
 - type: textarea
   id: expected
   attributes:
-    label: Expected behavior / 预期行为
-    description: What should happen? / 预期应发生什么？
+    label: Expected behavior
+    description: What should happen?
   validations:
     required: true
 - type: textarea
   id: actual
   attributes:
-    label: Actual behavior / 实际行为
-    description: What happened, including the exact error message? / 实际发生了什么？请保留原始错误信息。
+    label: Actual behavior
+    description: What happened, including the exact error message?
   validations:
     required: true
 - type: textarea
   id: evidence
   attributes:
-    label: Logs and attachments / 日志与附件
-    description: Screenshot, broken link, HTTP status, or minimal MCP query/response; identify incorrect text and its source / 截图、失效链接、HTTP 状态或最小 MCP 查询与响应；如内容错误，请标明原文及来源。
+    label: Logs and attachments
+    description: Screenshot, broken link, HTTP status, or minimal MCP query/response; identify incorrect text and its source
   validations:
     required: false
 - type: textarea
   id: workaround
   attributes:
-    label: Workaround and regression / 临时解决办法及回归信息
-    description: If known, include a workaround, last working version, and first failing version. / 如已知，请填写临时解决办法、最后正常版本及首次异常版本。
+    label: Workaround and regression
+    description: If known, include a workaround, last working version, and first failing version.
   validations:
     required: false

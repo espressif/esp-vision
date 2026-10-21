@@ -94,7 +94,7 @@ CI 构建和发布固件使用以下开发板与 IDF 组合：
 
 ## 问题反馈
 
-ESP-VISION 的所有问题统一提交到 [espressif/esp-vision GitHub Issues](https://github.com/espressif/esp-vision/issues)，包括 IDE、官网、Host Device Core 和固件问题。请先搜索已有问题，再选择下面四类表单之一，支持使用中文或英文填写。
+ESP-VISION 的所有问题统一提交到 [espressif/esp-vision GitHub Issues](https://github.com/espressif/esp-vision/issues)，包括 IDE、官网、Host Device Core 和固件问题。请先搜索已有问题，再选择下面四类表单之一，四类表单统一使用英文。
 
 | 分类 | 范围 | 报告入口 |
 | --- | --- | --- |

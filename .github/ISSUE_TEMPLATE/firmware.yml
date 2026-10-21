@@ -1,74 +1,72 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
-name: Firmware / 固件
-description: Build, boot, crashes, camera, display, storage, or on-device APIs / 编译、启动、崩溃、摄像头、显示、存储或设备端 API
+name: Firmware
+description: Build, boot, crashes, camera, display, storage, or on-device APIs
 title: '[Firmware] '
 body:
 - type: markdown
   attributes:
     value: |-
-      Report this category here in espressif/esp-vision, including issues in companion repositories. English or Chinese is welcome. Search existing issues first. Remove credentials and private data from attachments.
-
-      此类问题统一提交到 espressif/esp-vision，包括配套仓库中的问题。支持中文或英文，请先搜索已有问题，并移除附件中的凭据及隐私数据。
+      Report this category here in espressif/esp-vision, including issues in companion repositories. Search existing issues first. Remove credentials and private data from attachments.
 - type: textarea
   id: summary
   attributes:
-    label: Problem summary / 问题概述
-    description: Describe the affected feature and impact. / 描述受影响的功能和影响范围。
+    label: Problem summary
+    description: Describe the affected feature and impact.
   validations:
     required: true
 - type: textarea
   id: environment
   attributes:
-    label: Environment / 环境信息
-    description: Fill in the relevant versions; write unknown or not applicable where needed. / 填写相关版本；无法获取或不涉及时填写未知或不适用。
+    label: Environment
+    description: Fill in the relevant versions; write unknown or not applicable where needed.
     placeholder: |
-      Board model and hardware revision / 开发板型号及硬件版本:
-      Chip, camera, display, and peripherals / 芯片、摄像头、显示屏及外设:
-      Firmware version/commit and download source or CI job / 固件版本、commit 及下载来源或 CI job:
-      ESP-IDF version/commit (custom builds) / ESP-IDF 版本、commit（自行编译时）:
-      Build command and configuration changes (custom builds) / 编译命令及配置改动（自行编译时）:
-      Power supply and connection / 供电及连接方式:
+      Board model and hardware revision:
+      Chip, camera, display, and peripherals:
+      Firmware version/commit and download source or CI job:
+      ESP-IDF version/commit (custom builds):
+      Build command and configuration changes (custom builds):
+      Power supply and connection:
   validations:
     required: true
 - type: textarea
   id: reproduction
   attributes:
-    label: Steps to reproduce / 复现步骤
-    description: Provide the smallest reproducible example and prerequisites. / 提供最小复现及前置条件。
+    label: Steps to reproduce
+    description: Provide the smallest reproducible example and prerequisites.
     placeholder: |
-      1. Flash or boot the firmware / 烧录或启动固件
-      2. Run the minimal script or build command / 运行最小脚本或编译命令
-      3. Observe the failure / 观察异常
-      Reproduction frequency and reset type (cold boot/soft reset) / 复现概率及复位类型（冷启动、软复位）:
+      1. Flash or boot the firmware
+      2. Run the minimal script or build command
+      3. Observe the failure
+      Reproduction frequency and reset type (cold boot/soft reset):
   validations:
     required: true
 - type: textarea
   id: expected
   attributes:
-    label: Expected behavior / 预期行为
-    description: What should happen? / 预期应发生什么？
+    label: Expected behavior
+    description: What should happen?
   validations:
     required: true
 - type: textarea
   id: actual
   attributes:
-    label: Actual behavior / 实际行为
-    description: What happened, including the exact error message? / 实际发生了什么？请保留原始错误信息。
+    label: Actual behavior
+    description: What happened, including the exact error message?
   validations:
     required: true
 - type: textarea
   id: evidence
   attributes:
-    label: Logs and attachments / 日志与附件
-    description: Complete relevant build error or boot/crash log, decoded backtrace if available, minimal script, and model/asset version when relevant / 相关完整编译错误或启动、崩溃日志，可获取的解码回溯、最小脚本，以及相关模型、资源版本。
+    label: Logs and attachments
+    description: Complete relevant build error or boot/crash log, decoded backtrace if available, minimal script, and model/asset version when relevant
   validations:
     required: false
 - type: textarea
   id: workaround
   attributes:
-    label: Workaround and regression / 临时解决办法及回归信息
-    description: If known, include a workaround, last working version, and first failing version. / 如已知，请填写临时解决办法、最后正常版本及首次异常版本。
+    label: Workaround and regression
+    description: If known, include a workaround, last working version, and first failing version.
   validations:
     required: false

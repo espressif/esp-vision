@@ -94,7 +94,7 @@ With the current overlay, v5.5.6 provides SSL/TLS, `cryptolib`, WebSocket, WebRE
 
 ## Report a problem
 
-Report all ESP-VISION problems in [espressif/esp-vision GitHub Issues](https://github.com/espressif/esp-vision/issues), including problems in the IDE, website, Host Device Core, and firmware. Search existing issues first, then choose one of the four forms below. Reports may be written in English or Chinese.
+Report all ESP-VISION problems in [espressif/esp-vision GitHub Issues](https://github.com/espressif/esp-vision/issues), including problems in the IDE, website, Host Device Core, and firmware. Search existing issues first, then choose one of the four forms below. All four forms use English.
 
 | Category | Scope | Report form |
 | --- | --- | --- |

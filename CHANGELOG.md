@@ -6,7 +6,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
-- Added a unified GitHub Issues reporting entry in both READMEs and bilingual issue forms for IDE, website, Host Device Core, and firmware problems.
+- Added a unified GitHub Issues reporting entry in both READMEs and English-language issue forms for IDE, website, Host Device Core, and firmware problems.
 
 ### Fixed
 
