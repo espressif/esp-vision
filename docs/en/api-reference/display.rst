@@ -22,6 +22,23 @@ Camera Preview
 
 With ``fit=True``, the source image is scaled to fit the panel while preserving the display driver's default placement behavior. Create the display once and reuse it; repeatedly constructing the object reinitializes panel resources.
 
+Drawing into a Reusable Image
+-----------------------------
+
+For application-generated graphics, allocate a regular RGB565 image buffer once, update it, and pass it to ``lcd.write()``:
+
+.. code-block:: python
+
+   import display, image
+
+   lcd = display.Display()
+   canvas = image.Image(lcd.width(), lcd.height(), image.RGB565)
+   canvas.draw_rectangle(0, 0, canvas.width(), canvas.height(), color=(6, 8, 18), fill=True)
+   canvas.draw_string(20, 20, "ESP-VISION", color=(255, 255, 255), scale=2)
+   lcd.write(canvas, fit=False)
+
+Keep and redraw the same ``Image`` when producing later frames. The display driver copies its pixels to the panel; the image does not need to be allocated in the driver's framebuffer.
+
 Position, Scale, and Crop
 -------------------------
 

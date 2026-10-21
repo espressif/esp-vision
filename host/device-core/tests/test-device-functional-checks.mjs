@@ -135,3 +135,12 @@ test('identity and RAM checks do not require optional storage inspection support
   await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'identity,memory']), { nonce: 'abc123', report: value => reports.push(value) })
   assert.deepEqual(reports.at(-1), { check: 'summary', passed: 2, failed: 0, skipped: 0 })
 })
+
+test('P4 issue regressions are included in the strict target-check path', async () => {
+  const required = ['camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy']
+  assert.ok(required.every(name => DEVICE_CHECKS.includes(name)))
+  const device = devicePeer(), reports = []
+  await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', required.join(','), '--require-all']),
+    { nonce: 'issue910', report: value => reports.push(value) })
+  assert.deepEqual(reports.at(-1), { check: 'summary', passed: required.length, failed: 0, skipped: 0 })
+})

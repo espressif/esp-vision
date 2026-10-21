@@ -443,15 +443,13 @@ class statistics:
 class Image:
     #: Load an image from a file (BMP/PPM/PGM/JPEG/PNG depending on build).
     #: path: source file path.
-    #: copy_to_fb: True loads the decoded image into the frame buffer.
     @overload
-    def __init__(self, path: str, *, copy_to_fb: bool = False) -> None: ...
+    def __init__(self, path: str) -> None: ...
     #: Allocate a blank image of the given size and pixel format.
     #: width: image width in pixels.
     #: height: image height in pixels.
     #: pixformat: one of BINARY/GRAYSCALE/RGB565/BAYER/YUV422.
     #: buffer: optional external buffer to wrap instead of allocating.
-    #: copy_to_fb: True allocates the image in the frame buffer.
     @overload
     def __init__(
         self,
@@ -460,11 +458,10 @@ class Image:
         pixformat: int,
         *,
         buffer: Any | None = None,
-        copy_to_fb: bool = False,
     ) -> None: ...
     #: Wrap an existing array/buffer (e.g. an ndarray) as an image.
     @overload
-    def __init__(self, array: Any, *, buffer: Any | None = None, copy_to_fb: bool = False) -> None: ...
+    def __init__(self, array: Any, *, buffer: Any | None = None) -> None: ...
 
     #: Image width in pixels.
     def width(self) -> int: ...
@@ -510,7 +507,6 @@ class Image:
         color_palette: Any | None = None,
         alpha_palette: Any | None = None,
         hint: int = 0,
-        transform: Any | None = None,
         copy: bool = True,
     ) -> Image: ...
     #: Crop/scale the image to a region of interest. Same options as copy().
@@ -680,7 +676,6 @@ class Image:
         color_palette: Any | None = None,
         alpha_palette: Any | None = None,
         hint: int = 0,
-        transform: Any | None = None,
         mask: Image | None = None,
     ) -> Image: ...
 

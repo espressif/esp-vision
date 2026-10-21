@@ -54,6 +54,13 @@ ESP-VISION 将面向应用的模块、图像算法、标准 MicroPython 功能�
 
 这些宏可能依赖 ESP-IDF 版本与 SoC 能力宏。关闭 Python 功能后，可能还需移除对应的 ESP-IDF 配置或托管依赖，才能获得可观测的固件体积缩减。
 
+配置内存放置策略
+----------------
+
+带 PSRAM 的开发板通过 ``boards/<BOARD>/port/`` 下的 sdkconfig 配置链设置分配边界。``CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL`` 是 ESP-IDF 默认分配器和 ESP-VISION 自动分配策略使用的字节阈值：不大于该阈值的分配优先使用内部 RAM，更大的分配优先使用 PSRAM。``CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL`` 则单独为驱动和其他必须使用内部 RAM 的分配预留内存。需要调整内存分配比例时，应修改开发板的 sdkconfig 默认值。
+
+大型图像、模型、帧和临时缓冲区在所需能力允许时优先使用 PSRAM。调用方要求直接 DMA 访问或可执行访问时，分配回退仍保留该能力。P4X_EYE 的 SPI 显示也可以把普通 8-bit framebuffer 作为绘制源，因为 LCD 传输层会将其分块搬运到有界 DMA 传输缓冲区；这是明确的复制路径，不会放宽直接 DMA 的要求。没有 PSRAM 的开发板会在能力允许时使用内部内存。
+
 客制化冻结 Python 代码
 ----------------------
 

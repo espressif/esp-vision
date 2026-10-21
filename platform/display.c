@@ -13,6 +13,7 @@
 #include "esp_lcd_panel_ops.h"
 
 #include "boardconfig.h"
+#include "ev_memory.h"
 
 #ifdef ESP_VISION_USE_BOARD_MANAGER
 #ifdef CONFIG_ESP_BOARD_DEV_LEDC_CTRL_SUPPORT
@@ -229,12 +230,14 @@ static esp_err_t esp_vision_display_alloc_framebuffer(uint32_t width, uint32_t h
 {
     size_t size = width * height * sizeof(uint16_t);
 
-    s_display.framebuffer = heap_caps_aligned_alloc(16, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+    s_display.framebuffer = esp_vision_memory_aligned_alloc(16,
+                                                            size,
+                                                            MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
     if (s_display.framebuffer == NULL) {
-        s_display.framebuffer = heap_caps_aligned_alloc(16, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
-    }
-    if (s_display.framebuffer == NULL) {
-        s_display.framebuffer = heap_caps_aligned_alloc(16, size, MALLOC_CAP_8BIT);
+        // The P4X_EYE SPI panel can stage a non-DMA draw source into bounded
+        // DMA transfers. Keep this fallback explicit because it may not meet
+        // the direct-DMA capability requirement above.
+        s_display.framebuffer = esp_vision_memory_aligned_alloc_caps(16, size, MALLOC_CAP_8BIT);
     }
     if (s_display.framebuffer == NULL) {
         return ESP_ERR_NO_MEM;

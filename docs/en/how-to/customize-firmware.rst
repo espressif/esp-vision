@@ -54,6 +54,13 @@ Use ``boards/<BOARD>/port/mpconfigboard.h`` to override standard MicroPython fea
 
 These macros can depend on ESP-IDF versions and SoC capability macros. A disabled Python feature may also require removing its ESP-IDF configuration or managed dependency before it produces a measurable firmware-size reduction.
 
+Configure Memory Placement
+--------------------------
+
+PSRAM boards use the board's ``sdkconfig`` chain under ``boards/<BOARD>/port/`` to set the allocation boundary. ``CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL`` is the byte threshold used by ESP-IDF's default allocator and ESP-VISION's automatic allocator policy: allocations up to the threshold prefer internal RAM, while larger allocations prefer PSRAM. ``CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL`` separately reserves internal RAM for drivers and other allocations that require it. Adjust these values in the board's sdkconfig defaults when changing the memory balance.
+
+Large image, model, frame, and scratch buffers prefer PSRAM when their required capabilities allow it. When a caller requires direct DMA or executable access, allocator fallbacks retain that capability. The P4X_EYE SPI display can also use an ordinary 8-bit framebuffer as a draw source because the LCD transfer layer stages it into bounded DMA transfers; this explicit copy path does not weaken direct-DMA requirements. Boards without PSRAM use internal memory where the capability is available.
+
 Customize Frozen Python Code
 ----------------------------
 

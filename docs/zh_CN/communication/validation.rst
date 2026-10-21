@@ -73,12 +73,12 @@
    npm --prefix host/device-core run test:hardware -- --serial <USB-OTG-port> --role usb --checks identity,camera,display
    npm --prefix host/device-core run test:hardware -- --tcp <device-ipv4>:3232 --checks identity,memory,camera
 
-``--checks`` 接受 ``all`` 或逗号分隔的检查名。保留的摄像头/显示检查为 ``identity``、``memory``、``camera``、``framesizes``、``pixformats``、``orientation``、``ipa_stats``、``snapshot_rate``、``preview``、``image_ops``、``display``、``display_stream``。``all`` 选择完整检查集，不表示所有板卡都具备对应硬件；报告应明确区分通过、失败与缺少能力的跳过，不能将跳过算作已通过。初次实验只测试当前硬件，最终提交才由 CI 运行完整固件矩阵。
+``--checks`` 接受 ``all`` 或逗号分隔的检查名。摄像头/显示检查包括 ``identity``、``memory``、``camera``、``framesizes``、``pixformats``、``orientation``、``ipa_stats``、``snapshot_rate``、``preview``、``image_ops``、``display``、``display_stream``、``camera_display_lifecycle``、``image_copy_to_fb``、``image_transform_argument``、``sensor_snapshot_buffer`` 和 ``memory_policy``。``all`` 选择完整检查集，不表示所有板卡都具备对应硬件；报告应明确区分通过、失败与缺少能力的跳过，不能将跳过算作已通过。初次实验只测试当前硬件，最终提交才由 CI 运行完整固件矩阵。
 
 CI target test 契约
 ~~~~~~~~~~~~~~~~~~~
 
-当前 CI 硬件门禁使用 ESP-IDF v5.5.6，在 P4 Function EV Board 上执行全部十二项运行时检查。CI 同时保存摄像头 JPEG 与 LCD 测试图案 JPEG，并将截图尺寸与活动显示对象核对。所有选中项必须通过（``--require-all``），不支持能力的 SKIP 也会使该板卡门禁失败。 摄像头模式循环仅容忍明确的不支持错误；内存分配失败、超时及非预期的模式切换错误都会使检查失败。这只验证所选开发板与 IDF 组合，不代表编译矩阵中的其它板卡。驱动会将 ``--expect-board`` 和下载构建的 ``project_description.json`` 中的精确 ``project_version`` 同时传给启动探测与完整套件，在执行 Python、摄像头和显示检查前拒绝错误板型或旧固件。
+当前 CI 硬件门禁使用 ESP-IDF v5.5.6，在 P4 Function EV Board 上执行全部十六项运行时检查。CI 同时保存摄像头 JPEG 与 LCD 测试图案 JPEG，并将截图尺寸与活动显示对象核对。所有选中项必须通过（``--require-all``），不支持能力的 SKIP 也会使该板卡门禁失败。摄像头模式循环仅容忍明确的不支持错误；内存分配失败、超时及非预期的模式切换错误都会使检查失败。这只验证所选开发板与 IDF 组合，不代表编译矩阵中的其它板卡。驱动会将 ``--expect-board`` 和下载构建的 ``project_description.json`` 中的精确 ``project_version`` 同时传给启动探测与完整套件，在执行 Python、摄像头和显示检查前拒绝错误板型或旧固件。
 
 运行时辅助脚本通过有界的 ``python.execute()`` 调用装载到独立 RAM 命名空间。每条编码后命令都满足固件声明的 ``replInputMax`` （最多 511 字节）；更长的请求会触发 Device Core 的临时文件执行路径。成功、失败或取消后都会释放辅助命名空间和 LCD 资源，因此内存、摄像头和显示检查不依赖可写文件系统。
 

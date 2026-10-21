@@ -11,6 +11,7 @@
 
 #include "fb_alloc.h"
 #include "omv_common.h"
+#include "ev_memory.h"
 
 typedef struct _omv_fb_alloc_node_t {
     struct _omv_fb_alloc_node_t *prev;
@@ -23,35 +24,18 @@ typedef struct _omv_fb_alloc_node_t {
 
 static omv_fb_alloc_node_t *omv_fb_alloc_head = NULL;
 
-static void *omv_fb_raw_alloc_with_caps(size_t size, uint32_t caps) {
-    return heap_caps_malloc(size, caps);
-}
-
 static void *omv_fb_raw_alloc(size_t size, int hints) {
-    void *ptr = NULL;
-
     if (hints & FB_ALLOC_PREFER_INTERNAL) {
-        ptr = omv_fb_raw_alloc_with_caps(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        if (ptr == NULL) {
-            ptr = omv_fb_raw_alloc_with_caps(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        }
+        return esp_vision_memory_malloc_preferred(size,
+                                                  MALLOC_CAP_8BIT,
+                                                  ESP_VISION_MEMORY_PREFER_INTERNAL);
     } else if (hints & FB_ALLOC_PREFER_SIZE) {
-        ptr = omv_fb_raw_alloc_with_caps(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (ptr == NULL) {
-            ptr = omv_fb_raw_alloc_with_caps(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        }
-    } else {
-        ptr = omv_fb_raw_alloc_with_caps(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (ptr == NULL) {
-            ptr = omv_fb_raw_alloc_with_caps(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        }
+        return esp_vision_memory_malloc_preferred(size,
+                                                  MALLOC_CAP_8BIT,
+                                                  ESP_VISION_MEMORY_PREFER_SPIRAM);
     }
 
-    if (ptr == NULL) {
-        ptr = omv_fb_raw_alloc_with_caps(size, MALLOC_CAP_8BIT);
-    }
-
-    return ptr;
+    return esp_vision_memory_malloc(size, MALLOC_CAP_8BIT);
 }
 
 static size_t omv_fb_largest_free_block_with_caps(uint32_t caps) {

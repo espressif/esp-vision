@@ -4,7 +4,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { EV_REPL_INPUT_MAX_BYTES, evReplExecInputBytes } from '../src/evrepl.js'
 
-export const DEVICE_CHECKS = Object.freeze(['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation', 'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream'])
+export const DEVICE_CHECKS = Object.freeze(['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation', 'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream', 'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy'])
 const MARKER = '__EVDEVICECHECK__'
 const failure = (code, message) => Object.assign(new Error(message), { code })
 const unsupported = error => error?.code === 'UNSUPPORTED_OPERATION' || /ESP_ERR_NOT_SUPPORTED|ESP_ERR_NOT_FOUND|no module named|ENODEV/i.test(error?.message ?? '')
@@ -43,7 +43,7 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
   const results = [], namespace = `_evhil_${nonce}`
   let loaded = false, namespaceStarted = false, loadError = null, inputLimit = EV_REPL_INPUT_MAX_BYTES
   const parameters = { frames: options.frames, framesize: options.framesize, pixformat: options.pixformat, displayHold: options.displayHold, screenCapture: Boolean(options.screenOutput) }
-  const timeoutFor = name => 1000 * (name === 'display' ? 30 + options.displayHold * 3 : name === 'ipa_stats' ? options.frameTimeout + 40 : options.frameTimeout + Math.max(30, options.frames * (name === 'display_stream' ? 2 : 1)))
+  const timeoutFor = name => 1000 * (name === 'display' ? 30 + options.displayHold * 3 : name === 'camera_display_lifecycle' ? options.frameTimeout + 80 : name === 'memory_policy' ? options.frameTimeout + 60 : name === 'sensor_snapshot_buffer' ? options.frameTimeout + 40 : name === 'image_copy_to_fb' ? 30 : name === 'ipa_stats' ? options.frameTimeout + 40 : options.frameTimeout + Math.max(30, options.frames * (name === 'display_stream' ? 2 : 1)))
   const execute = async (source, timeout = 10000, operationSignal = signal) => {
     // Larger python.execute() requests use temporary files in Device Core.
     // Keep fixtures in RAM by respecting the actual encoded REPL-line budget.

@@ -28,6 +28,7 @@
 #include "sys/mman.h"
 
 #include "boardconfig.h"
+#include "ev_memory.h"
 
 #ifndef CMSIS_MCU_H
 #define CMSIS_MCU_H "cmsis_compiler.h"
@@ -318,16 +319,10 @@ static esp_err_t esp_vision_camera_init_ppa(void)
     ESP_RETURN_ON_ERROR(ret, TAG, "failed to register PPA client");
 
     s_camera.ppa_out_size = esp_vision_camera_align_up(out_size, cache_align);
-    s_camera.ppa_out_buf = heap_caps_aligned_calloc(cache_align,
-                                                    1,
-                                                    s_camera.ppa_out_size,
-                                                    MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
-    if (s_camera.ppa_out_buf == NULL) {
-        s_camera.ppa_out_buf = heap_caps_aligned_calloc(cache_align,
-                                                        1,
-                                                        s_camera.ppa_out_size,
-                                                        MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
-    }
+    s_camera.ppa_out_buf = esp_vision_memory_aligned_calloc(cache_align,
+                                                            1,
+                                                            s_camera.ppa_out_size,
+                                                            MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
     if (s_camera.ppa_out_buf == NULL) {
         esp_vision_camera_release_ppa();
         return ESP_ERR_NO_MEM;

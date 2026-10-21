@@ -33,6 +33,7 @@
 #include "esp_heap_caps.h"
 #include "py/runtime.h"
 #include "umm_malloc.h"
+#include "ev_memory.h"
 
 typedef union _umm_alloc_header_t umm_alloc_header_t;
 
@@ -62,25 +63,11 @@ void umm_deinit_x(void) {
 }
 
 static void *umm_heap_malloc(size_t size) {
-    void *ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (ptr == NULL) {
-        ptr = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    }
-    if (ptr == NULL) {
-        ptr = heap_caps_malloc(size, MALLOC_CAP_8BIT);
-    }
-    return ptr;
+    return esp_vision_memory_malloc(size, MALLOC_CAP_8BIT);
 }
 
 static void *umm_heap_realloc(void *ptr, size_t size) {
-    void *new_ptr = heap_caps_realloc(ptr, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (new_ptr == NULL) {
-        new_ptr = heap_caps_realloc(ptr, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    }
-    if (new_ptr == NULL) {
-        new_ptr = heap_caps_realloc(ptr, size, MALLOC_CAP_8BIT);
-    }
-    return new_ptr;
+    return esp_vision_memory_realloc(ptr, size, MALLOC_CAP_8BIT);
 }
 
 static void umm_alloc_link(umm_alloc_header_t *header) {

@@ -286,6 +286,205 @@ def display_stream(opts):
         lcd.deinit()
 
 
+def camera_display_lifecycle(opts):
+    """Exercise camera/LCD coexistence, camera shutdown recovery, and restart."""
+    import gc, esp32, sensor, display, image
+
+    def dma_heaps():
+        return esp32.idf_heap_info(1 << 3)  # ESP-IDF MALLOC_CAP_DMA.
+
+    lcd = None
+    frame = None
+    canvas = None
+    try:
+        sensor.shutdown()
+        gc.collect()
+        lcd = display.Display(backlight=100)
+        panel_width, panel_height = lcd.width(), lcd.height()
+        lcd.deinit()
+        lcd = None
+        gc.collect()
+
+        sensor.reset()
+        sensor.set_pixformat(sensor.RGB565)
+        sensor.set_framesize(sensor.QVGA)
+        sensor.skip_frames(n=3)
+        frame = sensor.snapshot()
+        dma_before = dma_heaps()
+        lcd = display.Display(backlight=100)
+        lcd.write(frame, fit=True)
+        dma_active = dma_heaps()
+        lcd.deinit()
+        lcd = None
+        frame = None
+        gc.collect()
+
+        sensor.shutdown()
+        gc.collect()
+        dma_shutdown = dma_heaps()
+        lcd = display.Display(backlight=100)
+        canvas = image.Image(32, 32, image.RGB565)
+        lcd.write(canvas, fit=True)
+        lcd.deinit()
+        lcd = None
+        canvas = None
+        gc.collect()
+
+        sensor.reset()
+        sensor.set_pixformat(sensor.RGB565)
+        sensor.set_framesize(sensor.QVGA)
+        sensor.skip_frames(n=3)
+        frame = sensor.snapshot()
+        restarted = (frame.width(), frame.height())
+        dma_restarted = dma_heaps()
+        return dict(width=panel_width, height=panel_height,
+                    cameraWidth=restarted[0], cameraHeight=restarted[1],
+                    dmaBefore=dma_before, dmaActive=dma_active,
+                    dmaAfterShutdown=dma_shutdown, dmaAfterRestart=dma_restarted)
+    finally:
+        if lcd is not None:
+            lcd.deinit()
+        frame = None
+        canvas = None
+        sensor.shutdown()
+        gc.collect()
+
+
+def image_copy_to_fb(opts):
+    """The unsupported copy_to_fb keyword must be rejected consistently."""
+    import gc, image
+
+    canvas = None
+    try:
+        try:
+            image.Image(32, 32, image.RGB565, copy_to_fb=True)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError('Image accepted unsupported copy_to_fb')
+
+        canvas = image.Image(32, 32, image.RGB565)
+        try:
+            canvas.to_rgb565(copy_to_fb=True)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError('to_rgb565 accepted unsupported copy_to_fb')
+        canvas.draw_rectangle(0, 0, 32, 32, color=(255, 0, 0), fill=True)
+        assert canvas.size() == 32 * 32 * 2, 'unexpected RGB565 buffer size'
+        return dict(width=canvas.width(), height=canvas.height(), size=canvas.size())
+    finally:
+        canvas = None
+        gc.collect()
+
+
+def image_transform_argument(opts):
+    """Transform is not part of the ESP-VISION Image API."""
+    import image
+
+    canvas = image.Image(32, 32, image.RGB565)
+    source = image.Image(8, 8, image.RGB565)
+    matrix = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+    for operation in (
+        lambda: canvas.copy(transform=matrix),
+        lambda: canvas.draw_image(source, transform=matrix),
+    ):
+        try:
+            operation()
+        except TypeError as exc:
+            assert 'keyword' in str(exc), 'transform is accepted but unsupported'
+        else:
+            raise AssertionError('Image accepted unsupported transform keyword')
+    return dict(operations=2)
+
+
+def sensor_snapshot_buffer(opts):
+    """Validate the caller-owned writable buffer contract for sensor.snapshot."""
+    import gc, sensor
+
+    buffer = None
+    frame = None
+    try:
+        sensor.shutdown()
+        sensor.reset()
+        sensor.set_pixformat(sensor.RGB565)
+        sensor.set_framesize(sensor.QVGA)
+        sensor.skip_frames(n=3)
+        try:
+            sensor.snapshot(buffer=bytearray(16))
+        except TypeError:
+            pass
+        else:
+            raise AssertionError('sensor.snapshot unexpectedly accepted buffer keyword')
+        try:
+            sensor.snapshot(bytearray(16))
+        except ValueError as exc:
+            assert 'snapshot buffer too small' in str(exc), 'unexpected undersized buffer error: ' + str(exc)
+        else:
+            raise AssertionError('sensor.snapshot accepted an undersized buffer')
+        frame_bytes = 320 * 240 * 2
+        buffer = bytearray(frame_bytes)
+        frame = sensor.snapshot(buffer)
+        assert (frame.width(), frame.height(), frame.size()) == (320, 240, frame_bytes), 'unexpected caller-buffer frame'
+        buffer = None
+        gc.collect()
+        assert (frame.width(), frame.height()) == (320, 240), 'Image did not retain caller buffer after GC'
+        return dict(width=frame.width(), height=frame.height(), size=frame.size())
+    finally:
+        frame = None
+        buffer = None
+        sensor.shutdown()
+        gc.collect()
+
+
+def memory_policy(opts):
+    """Large Image storage follows MicroPython GC; camera snapshots use PSRAM."""
+    import gc, esp32, image, sensor
+
+    def free_bytes(caps):
+        return sum(heap[1] for heap in esp32.idf_heap_info(caps))
+
+    def measure_image(width, height):
+        gc.collect()
+        before = gc.mem_alloc()
+        canvas = image.Image(width, height, image.RGB565)
+        gc.collect()
+        allocated = gc.mem_alloc() - before
+        canvas = None
+        gc.collect()
+        return width * height * 2, allocated
+
+    frame = None
+    try:
+        small_bytes, small_allocated = measure_image(32, 32)
+        assert small_bytes - 512 <= small_allocated <= small_bytes + 8192, 'small Image allocation did not use GC heap'
+        large_bytes, large_allocated = measure_image(640, 480)
+        assert large_bytes - 4096 <= large_allocated <= large_bytes + 16384, 'large Image allocation did not use GC heap'
+
+        sensor.shutdown()
+        gc.collect()
+        sensor.reset()
+        sensor.set_pixformat(sensor.RGB565)
+        sensor.set_framesize(sensor.QVGA)
+        psram_before = free_bytes(1 << 10)  # ESP-IDF MALLOC_CAP_SPIRAM.
+        if psram_before <= 0:
+            raise RuntimeError('ESP_ERR_NOT_SUPPORTED: PSRAM heap unavailable')
+        frame = sensor.snapshot()
+        gc.collect()
+        psram_after = free_bytes(1 << 10)
+        frame_bytes = frame.width() * frame.height() * 2
+        psram_used = psram_before - psram_after
+        assert psram_used >= frame_bytes - 4096, 'camera snapshot buffer was not allocated from PSRAM'
+        return dict(smallBytes=small_bytes, smallAllocated=small_allocated,
+                    largeBytes=large_bytes, largeAllocated=large_allocated,
+                    width=frame.width(), height=frame.height(), frameBytes=frame_bytes,
+                    psramUsed=psram_used)
+    finally:
+        frame = None
+        sensor.shutdown()
+        gc.collect()
+
+
 
 def memory(opts):
     import esp32
@@ -314,7 +513,12 @@ def run_check(name, opts):
     functions = dict(memory=memory, sensor_state=sensor_state, framesizes=framesizes,
                      pixformats=pixformats, orientation=orientation, ipa_stats=ipa_stats,
                      snapshot_rate=snapshot_rate, preview=preview, image_ops=image_ops,
-                     display=display, display_stream=display_stream)
+                     display=display, display_stream=display_stream,
+                     camera_display_lifecycle=camera_display_lifecycle,
+                     image_copy_to_fb=image_copy_to_fb,
+                     image_transform_argument=image_transform_argument,
+                     sensor_snapshot_buffer=sensor_snapshot_buffer,
+                     memory_policy=memory_policy)
     try:
         data = functions[name](opts)
         result = dict(name=name, status='PASS', data=data)

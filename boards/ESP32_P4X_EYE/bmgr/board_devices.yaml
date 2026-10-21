@@ -31,7 +31,9 @@ devices:
         dc_gpio_num: 19
         spi_mode: 3
         pclk_hz: 80000000
-        trans_queue_depth: 2
+        # Keep one bounded DMA transfer in flight so camera startup does not
+        # consume the contiguous block needed by a second SPI transaction.
+        trans_queue_depth: 1
         lcd_cmd_bits: 8
         lcd_param_bits: 8
         flags:

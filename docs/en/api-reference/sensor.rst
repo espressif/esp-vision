@@ -22,7 +22,7 @@ A typical program resets the sensor, selects a pixel format and frame size, lets
    while True:
        img = sensor.snapshot()
 
-``sensor.reset()`` applies the board's default camera configuration. ``RGB565`` is suitable for display, drawing, and most AI workflows, while ``GRAYSCALE`` reduces memory and processing cost for many detection algorithms. ``sensor.snapshot()`` returns an :py:class:`image.Image` backed by the reusable frame buffer, so copy the image when it must remain unchanged after the next capture.
+``sensor.reset()`` applies the board's default camera configuration. ``RGB565`` is suitable for display, drawing, and most AI workflows, while ``GRAYSCALE`` reduces memory and processing cost for many detection algorithms. ``sensor.snapshot()`` returns an :py:class:`image.Image` backed by the reusable frame buffer, so copy the image when it must remain unchanged after the next capture. You can pass a writable buffer large enough for the configured frame as ``sensor.snapshot(buffer)``; the returned image keeps that buffer alive.
 
 Image Orientation and Camera Status
 -----------------------------------
@@ -58,6 +58,10 @@ The camera stream can be stopped when capture is not required and restarted befo
    img = sensor.snapshot()
 
 After restarting the stream, discard a few frames if exposure or the incoming frame queue needs to stabilize.
+
+.. note::
+
+   The default ``ESP32_P4X_EYE`` SPI settings support QVGA camera capture and LCD drawing at the same time. SPI color transfers use DMA-capable memory, so raising the camera frame size or the panel transfer size/queue depth can exceed the available contiguous DMA block even when ``gc.mem_free()`` and total free PSRAM remain large. If ``display.Display()`` or ``lcd.write()`` raises ``ESP_ERR_NO_MEM``, drop any ``sensor.snapshot()`` image references, call ``sensor.shutdown()``, initialize and use the LCD, then call ``lcd.deinit()`` followed by ``sensor.reset()`` to resume camera capture.
 
 IPA Runtime Control
 -------------------
