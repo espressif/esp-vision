@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+name: Host Device Core
+description: Host connection, EV-MUX sessions, RPC, transport, or reconnect / 主机连接、EV-MUX 会话、RPC、传输或重连
+title: '[Host Device Core] '
+body:
+- type: markdown
+  attributes:
+    value: |-
+      Report this category here in espressif/esp-vision, including issues in companion repositories. English or Chinese is welcome. Search existing issues first. Remove credentials and private data from attachments.
+
+      此类问题统一提交到 espressif/esp-vision，包括配套仓库中的问题。支持中文或英文，请先搜索已有问题，并移除附件中的凭据及隐私数据。
+- type: textarea
+  id: summary
+  attributes:
+    label: Problem summary / 问题概述
+    description: Describe the affected feature and impact. / 描述受影响的功能和影响范围。
+  validations:
+    required: true
+- type: textarea
+  id: environment
+  attributes:
+    label: Environment / 环境信息
+    description: Fill in the relevant versions; write unknown or not applicable where needed. / 填写相关版本；无法获取或不涉及时填写未知或不适用。
+    placeholder: |
+      Host Device Core package version or commit / Host Device Core 包版本或 commit:
+      Caller and version (IDE, Agent, or custom client) / 调用方及版本（IDE、Agent 或自定义客户端）:
+      Host runtime and version (Node.js/browser) / 主机运行环境及版本（Node.js、浏览器）:
+      OS and version / 操作系统及版本:
+      Board and firmware version or commit / 开发板及固件版本或 commit:
+      Transport (usb/usj/uart/tcp) and connection topology / 传输方式及连接拓扑:
+      EV-MUX protocol version (if known) / EV-MUX 协议版本（如已知）:
+  validations:
+    required: true
+- type: textarea
+  id: reproduction
+  attributes:
+    label: Steps to reproduce / 复现步骤
+    description: Provide the smallest reproducible example and prerequisites. / 提供最小复现及前置条件。
+    placeholder: |
+      1. Connect and acquire a session / 连接并获取会话
+      2. Send the request or trigger reconnect/reset / 发送请求或触发重连、复位
+      3. Observe the failure / 观察异常
+      Minimal client code or commands / 最小客户端代码或命令:
+      Reproduction frequency / 复现概率:
+  validations:
+    required: true
+- type: textarea
+  id: expected
+  attributes:
+    label: Expected behavior / 预期行为
+    description: What should happen? / 预期应发生什么？
+  validations:
+    required: true
+- type: textarea
+  id: actual
+  attributes:
+    label: Actual behavior / 实际行为
+    description: What happened, including the exact error message? / 实际发生了什么？请保留原始错误信息。
+  validations:
+    required: true
+- type: textarea
+  id: evidence
+  attributes:
+    label: Logs and attachments / 日志与附件
+    description: Timestamped host/device logs around the failure, RPC method/error code, and seq/sessionId/link generation/VM epoch if available / 故障前后的带时间戳主机、设备日志，RPC 方法、错误码，以及可获取的 seq、sessionId、link generation、VM epoch。
+  validations:
+    required: false
+- type: textarea
+  id: workaround
+  attributes:
+    label: Workaround and regression / 临时解决办法及回归信息
+    description: If known, include a workaround, last working version, and first failing version. / 如已知，请填写临时解决办法、最后正常版本及首次异常版本。
+  validations:
+    required: false

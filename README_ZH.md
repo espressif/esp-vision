@@ -92,6 +92,19 @@ CI 构建和发布固件使用以下开发板与 IDF 组合：
 | ![Color detection demo](https://dl.espressif.com/AE/esp-vision/color-recognition.gif) | ![QR code demo](https://dl.espressif.com/AE/esp-vision/qr-code-recognition.gif) |
 |||
 
+## 问题反馈
+
+ESP-VISION 的所有问题统一提交到 [espressif/esp-vision GitHub Issues](https://github.com/espressif/esp-vision/issues)，包括 IDE、官网、Host Device Core 和固件问题。请先搜索已有问题，再选择下面四类表单之一，支持使用中文或英文填写。
+
+| 分类 | 范围 | 报告入口 |
+| --- | --- | --- |
+| IDE | 编辑器、项目、界面、预览及烧录流程 | [报告 IDE 问题](https://github.com/espressif/esp-vision/issues/new?template=ide.yml) |
+| 官网 | 官网页面、文档、下载、链接及 MCP 知识 | [报告官网问题](https://github.com/espressif/esp-vision/issues/new?template=website.yml) |
+| Host Device Core | 主机连接、EV-MUX 会话、RPC、传输及重连 | [报告 Host Device Core 问题](https://github.com/espressif/esp-vision/issues/new?template=host-device-core.yml) |
+| 固件 | 编译、启动、崩溃、摄像头、显示、存储及设备端 API | [报告固件问题](https://github.com/espressif/esp-vision/issues/new?template=firmware.yml) |
+
+每类表单均包含环境与版本信息、复现步骤、预期行为、实际行为及相关日志或附件。不确定分类时，请选择最接近的一类，并描述出问题的操作流程。表单源文件位于 [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/)。
+
 ## 资源
 
 - [Device Core SDK 与 API 参考](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/index.html)

@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+name: IDE
+description: IDE UI, editor, projects, preview, or flashing workflows / IDE 界面、编辑器、项目、预览或烧录流程
+title: '[IDE] '
+body:
+- type: markdown
+  attributes:
+    value: |-
+      Report this category here in espressif/esp-vision, including issues in companion repositories. English or Chinese is welcome. Search existing issues first. Remove credentials and private data from attachments.
+
+      此类问题统一提交到 espressif/esp-vision，包括配套仓库中的问题。支持中文或英文，请先搜索已有问题，并移除附件中的凭据及隐私数据。
+- type: textarea
+  id: summary
+  attributes:
+    label: Problem summary / 问题概述
+    description: Describe the affected feature and impact. / 描述受影响的功能和影响范围。
+  validations:
+    required: true
+- type: textarea
+  id: environment
+  attributes:
+    label: Environment / 环境信息
+    description: Fill in the relevant versions; write unknown or not applicable where needed. / 填写相关版本；无法获取或不涉及时填写未知或不适用。
+    placeholder: |
+      IDE type and URL / IDE 类型及地址:
+      IDE version or commit / IDE 版本或 commit:
+      OS and version / 操作系统及版本:
+      Browser or VS Code version / 浏览器或 VS Code 版本:
+      Board and firmware version (if involved) / 开发板与固件版本（如涉及）:
+      Connection (usb/usj/uart/tcp, if involved) / 连接方式（如涉及）:
+  validations:
+    required: true
+- type: textarea
+  id: reproduction
+  attributes:
+    label: Steps to reproduce / 复现步骤
+    description: Provide the smallest reproducible example and prerequisites. / 提供最小复现及前置条件。
+    placeholder: |
+      1. Open the IDE and project / 打开 IDE 和项目
+      2. Perform the action / 执行操作
+      3. Observe the failure / 观察异常
+      Reproduction frequency / 复现概率:
+  validations:
+    required: true
+- type: textarea
+  id: expected
+  attributes:
+    label: Expected behavior / 预期行为
+    description: What should happen? / 预期应发生什么？
+  validations:
+    required: true
+- type: textarea
+  id: actual
+  attributes:
+    label: Actual behavior / 实际行为
+    description: What happened, including the exact error message? / 实际发生了什么？请保留原始错误信息。
+  validations:
+    required: true
+- type: textarea
+  id: evidence
+  attributes:
+    label: Logs and attachments / 日志与附件
+    description: Browser developer console or VS Code output, screenshots, and a minimal project or script / 浏览器控制台或 VS Code 输出、截图和最小项目或脚本。
+  validations:
+    required: false
+- type: textarea
+  id: workaround
+  attributes:
+    label: Workaround and regression / 临时解决办法及回归信息
+    description: If known, include a workaround, last working version, and first failing version. / 如已知，请填写临时解决办法、最后正常版本及首次异常版本。
+  validations:
+    required: false
