@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+name: Host Device Core
+description: Host connection, EV-MUX sessions, RPC, transport, or reconnect
+title: '[Host Device Core] '
+body:
+- type: markdown
+  attributes:
+    value: |-
+      Report this category here in espressif/esp-vision, including issues in companion repositories. Search existing issues first. Remove credentials and private data from attachments.
+- type: textarea
+  id: summary
+  attributes:
+    label: Problem summary
+    description: Describe the affected feature and impact.
+  validations:
+    required: true
+- type: textarea
+  id: environment
+  attributes:
+    label: Environment
+    description: Fill in the relevant versions; write unknown or not applicable where needed.
+    placeholder: |
+      Host Device Core package version or commit:
+      Caller and version (IDE, Agent, or custom client):
+      Host runtime and version (Node.js/browser):
+      OS and version:
+      Board and firmware version or commit:
+      Transport (usb/usj/uart/tcp) and connection topology:
+      EV-MUX protocol version (if known):
+  validations:
+    required: true
+- type: textarea
+  id: reproduction
+  attributes:
+    label: Steps to reproduce
+    description: Provide the smallest reproducible example and prerequisites.
+    placeholder: |
+      1. Connect and acquire a session
+      2. Send the request or trigger reconnect/reset
+      3. Observe the failure
+      Minimal client code or commands:
+      Reproduction frequency:
+  validations:
+    required: true
+- type: textarea
+  id: expected
+  attributes:
+    label: Expected behavior
+    description: What should happen?
+  validations:
+    required: true
+- type: textarea
+  id: actual
+  attributes:
+    label: Actual behavior
+    description: What happened, including the exact error message?
+  validations:
+    required: true
+- type: textarea
+  id: evidence
+  attributes:
+    label: Logs and attachments
+    description: Timestamped host/device logs around the failure, RPC method/error code, and seq/sessionId/link generation/VM epoch if available
+  validations:
+    required: false
+- type: textarea
+  id: workaround
+  attributes:
+    label: Workaround and regression
+    description: If known, include a workaround, last working version, and first failing version.
+  validations:
+    required: false

@@ -4,6 +4,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- Added a unified GitHub Issues reporting entry in both READMEs and English-language issue forms for IDE, website, Host Device Core, and firmware problems.
+
 ### Fixed
 
 - Reset browser-flashed devices through the active stub loader so its two-byte command status is decoded correctly; preserve automatic-reset failure diagnostics for runtime handoff.

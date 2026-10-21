@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+name: Firmware
+description: Build, boot, crashes, camera, display, storage, or on-device APIs
+title: '[Firmware] '
+body:
+- type: markdown
+  attributes:
+    value: |-
+      Report this category here in espressif/esp-vision, including issues in companion repositories. Search existing issues first. Remove credentials and private data from attachments.
+- type: textarea
+  id: summary
+  attributes:
+    label: Problem summary
+    description: Describe the affected feature and impact.
+  validations:
+    required: true
+- type: textarea
+  id: environment
+  attributes:
+    label: Environment
+    description: Fill in the relevant versions; write unknown or not applicable where needed.
+    placeholder: |
+      Board model and hardware revision:
+      Chip, camera, display, and peripherals:
+      Firmware version/commit and download source or CI job:
+      ESP-IDF version/commit (custom builds):
+      Build command and configuration changes (custom builds):
+      Power supply and connection:
+  validations:
+    required: true
+- type: textarea
+  id: reproduction
+  attributes:
+    label: Steps to reproduce
+    description: Provide the smallest reproducible example and prerequisites.
+    placeholder: |
+      1. Flash or boot the firmware
+      2. Run the minimal script or build command
+      3. Observe the failure
+      Reproduction frequency and reset type (cold boot/soft reset):
+  validations:
+    required: true
+- type: textarea
+  id: expected
+  attributes:
+    label: Expected behavior
+    description: What should happen?
+  validations:
+    required: true
+- type: textarea
+  id: actual
+  attributes:
+    label: Actual behavior
+    description: What happened, including the exact error message?
+  validations:
+    required: true
+- type: textarea
+  id: evidence
+  attributes:
+    label: Logs and attachments
+    description: Complete relevant build error or boot/crash log, decoded backtrace if available, minimal script, and model/asset version when relevant
+  validations:
+    required: false
+- type: textarea
+  id: workaround
+  attributes:
+    label: Workaround and regression
+    description: If known, include a workaround, last working version, and first failing version.
+  validations:
+    required: false

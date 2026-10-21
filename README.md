@@ -92,6 +92,19 @@ With the current overlay, v5.5.6 provides SSL/TLS, `cryptolib`, WebSocket, WebRE
 | ![Color detection demo](https://dl.espressif.com/AE/esp-vision/color-recognition.gif) | ![QR code demo](https://dl.espressif.com/AE/esp-vision/qr-code-recognition.gif) |
 |||
 
+## Report a problem
+
+Report all ESP-VISION problems in [espressif/esp-vision GitHub Issues](https://github.com/espressif/esp-vision/issues), including problems in the IDE, website, Host Device Core, and firmware. Search existing issues first, then choose one of the four forms below. All four forms use English.
+
+| Category | Scope | Report form |
+| --- | --- | --- |
+| IDE | Editor, projects, UI, preview, and flashing workflows | [Report an IDE problem](https://github.com/espressif/esp-vision/issues/new?template=ide.yml) |
+| Website | Website pages, documentation, downloads, links, and MCP knowledge | [Report a website problem](https://github.com/espressif/esp-vision/issues/new?template=website.yml) |
+| Host Device Core | Host connections, EV-MUX sessions, RPC, transport, and reconnect | [Report a Host Device Core problem](https://github.com/espressif/esp-vision/issues/new?template=host-device-core.yml) |
+| Firmware | Builds, boot, crashes, camera, display, storage, and on-device APIs | [Report a firmware problem](https://github.com/espressif/esp-vision/issues/new?template=firmware.yml) |
+
+Each form asks for environment and version details, reproduction steps, expected and actual behavior, and relevant logs or attachments. If the category is unclear, choose the closest match and describe the affected workflow. The form sources are in [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/).
+
 ## Resources
 
 - [Device Core SDK and API reference](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/index.html)
