@@ -2,7 +2,7 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
-## [Unreleased]
+## [2026.10.21]
 
 ### Added
 
@@ -12,7 +12,6 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Add @esp-vision/device-cli with Python, binary file, camera/screen capture, sequential batch and bounded watch commands; provide versioned JSON results, streamed events and cancellation from a self-contained npm executable.
 - Package the official ESP-VISION logo and provide WorkBuddy local Skill ZIP imports and official Knowledge MCP configuration through the npm installer, with explicit pending-import status and immutable versioned payloads.
 - Bundle a fixed standalone Device CLI and the official Knowledge HTTP MCP in a Codex/Claude plugin with one capability-oriented Skill and an npm installer supporting verified upgrades and failure recovery.
-- Own the online Knowledge MCP runtime and anonymous daily aggregate statistics in the main repository, with a private locked Node 24 package, immutable-image build context and 18 HTTP/privacy/reporting regression tests.
 - Publish Knowledge MCP as a public npm package with a reusable server factory, isolated stdio transport, complete validated snapshot, provenance metadata and installed-artifact HTTP/statistics checks.
 - Own the online Knowledge MCP runtime and anonymous daily aggregate statistics in the main repository, with a locked Node 24 runtime, immutable-image build context and HTTP/privacy/reporting regression tests.
 - Build Knowledge MCP images from the exact checked npm archive; publish schema 2 GitLab release descriptors binding npm, snapshot, source and image identities, then trigger website deployment after qualification gates.
