@@ -2,6 +2,14 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
+## [Unreleased]
+
+### Fixed
+
+- Validate CI npm archives with a local pack dry run so already published versions remain testable; retain immutable-version checks for real publication.
+
+- Mirror qualified release source commits to GitHub before DL model-source validation, independently of manual npm publication, with a mandatory CI ordering regression.
+
 ## [2026.10.21]
 
 ### Added

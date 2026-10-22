@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { test } from 'node:test'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -189,3 +189,75 @@ test('release helper rejects conflicting supplied tarball options', () => {
     assert.match(result.output, /Choose --tarball or --tarball-dir/)
   })
 })
+
+async function archivedCliFixture(fixture) {
+  const packageRoot = join(fixture.root, 'host/device-cli')
+  const manifest = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'))
+  Object.assign(manifest, { files: ['bin'], bin: { 'fixture-cli': 'bin/fixture.mjs' } })
+  await writeFile(join(packageRoot, 'package.json'), JSON.stringify(manifest))
+  const staged = join(fixture.root, 'staged')
+  await mkdir(join(staged, 'package/bin'), { recursive: true })
+  await writeFile(join(staged, 'package/package.json'), JSON.stringify(manifest))
+  await writeFile(join(staged, 'package/bin/fixture.mjs'), '#!/usr/bin/env node\n')
+  await chmod(join(staged, 'package/bin/fixture.mjs'), 0o755)
+  await mkdir(join(packageRoot, 'scripts'))
+  await writeFile(join(packageRoot, 'scripts/check-package.mjs'), 'process.exit(0)\n')
+  const archive = join(fixture.root, 'published-version.tgz')
+  assert.equal(spawnSync('tar', ['-czf', archive, '-C', staged, 'package']).status, 0)
+  const bin = join(fixture.root, 'fake-bin'), log = join(fixture.root, 'npm-calls.jsonl')
+  await mkdir(bin)
+  const npm = join(bin, 'npm')
+  await writeFile(npm, `#!/usr/bin/env node
+const fs = require('node:fs'), crypto = require('node:crypto');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.NPM_CALL_LOG, JSON.stringify(args) + "\\n");
+if (args[0] === 'publish') {
+  process.stderr.write('You cannot publish over the previously published versions: 0.1.0.');
+  process.exit(42);
+}
+if (args[0] === 'whoami') { process.stdout.write('esp-vision'); process.exit(0); }
+if (args[0] !== 'pack' || !args.includes('--dry-run')) process.exit(43);
+const integrity = 'sha512-' + crypto.createHash('sha512').update(fs.readFileSync(args[1])).digest('base64');
+process.stdout.write(JSON.stringify([{ name: '@esp-vision/device-cli', version: '0.1.0', integrity: process.env.BAD_PACK_INTEGRITY ? 'sha512-invalid' : integrity }]));
+`)
+  await chmod(npm, 0o755)
+  const env = withoutTokenEnv(fixture.env, { PATH: `${bin}:${process.env.PATH ?? ''}`, NPM_CALL_LOG: log })
+  return { archive, log, env }
+}
+
+test('CI archive validation does not publish or probe an already published version', () => withReleaseFixture(async fixture => {
+  const { archive, log, env } = await archivedCliFixture(fixture)
+  const result = runHelper(fixture, ['--dry-run', '--package', 'host/device-cli', '--tarball', archive], env)
+  assert.equal(result.status, 0, result.output)
+  assert.match(result.output, /Archive validation verified/)
+  const calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][0], 'pack')
+  assert.ok(calls[0].includes('--dry-run'))
+}))
+
+test('CI archive validation rejects a different integrity reported by npm', () => withReleaseFixture(async fixture => {
+  const { archive, env } = await archivedCliFixture(fixture)
+  const result = runHelper(fixture, ['--dry-run', '--package', 'host/device-cli', '--tarball', archive], { ...env, BAD_PACK_INTEGRITY: '1' })
+  assert.notEqual(result.status, 0)
+  assert.match(result.output, /npm interpreted a different tarball/)
+}))
+
+test('real publication still rejects changed public bytes and skips identical versions', () => withReleaseFixture(async fixture => {
+  const { archive, log, env } = await archivedCliFixture(fixture)
+  const loader = join(fixture.root, 'registry-fixture.mjs')
+  await writeFile(loader, `globalThis.fetch = async () => ({ok:true,status:200,json:async()=>({dist:{integrity:process.env.REGISTRY_INTEGRITY}})});`)
+  const publishEnv = { ...env, NODE_OPTIONS: `--import ${pathToFileURL(loader).href}`, NPM_PUBLISH_TOKEN: 'protected-fixture-token',
+    CI_PIPELINE_SOURCE: 'push', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true', REGISTRY_INTEGRITY: 'sha512-different' }
+  const args = ['--package', 'host/device-cli', '--tarball', archive]
+  const changed = runHelper(fixture, args, publishEnv)
+  assert.notEqual(changed.status, 0)
+  assert.match(changed.output, /already exists with different content/)
+  const { createHash } = await import('node:crypto')
+  publishEnv.REGISTRY_INTEGRITY = 'sha512-' + createHash('sha512').update(await readFile(archive)).digest('base64')
+  const identical = runHelper(fixture, args, publishEnv)
+  assert.equal(identical.status, 0, identical.output)
+  assert.match(identical.output, /already published with identical content; skipped/)
+  const calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+  assert.deepEqual(calls.map(call => call[0]), ['whoami', 'whoami'])
+}))
