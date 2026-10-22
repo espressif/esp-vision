@@ -114,8 +114,13 @@ try {
   }
 
   if (dryRun) {
-    runNpm(['publish', tarball, '--dry-run', '--ignore-scripts', '--access', 'public', '--registry', registry], packageRoot)
-    console.log(`Dry run verified ${metadata.name}@${metadata.version}; integrity ${metadata.integrity}; tarball ${tarball}; no registry write`)
+    // CI qualifies archives even when this package version is already public.
+    // npm publish --dry-run rejects those versions before any registry write.
+    const [checked] = JSON.parse(runNpm(['pack', tarball, '--dry-run', '--ignore-scripts', '--json'], packageRoot).stdout)
+    assert.equal(checked.name, metadata.name)
+    assert.equal(checked.version, metadata.version)
+    assert.equal(checked.integrity, metadata.integrity, 'npm interpreted a different tarball')
+    console.log(`Archive validation verified ${metadata.name}@${metadata.version}; integrity ${metadata.integrity}; tarball ${tarball}; no registry write`)
   } else {
     await writeFile(authConfig, `registry=${registry}\n//registry.npmjs.org/:_authToken=\${NPM_PUBLISH_TOKEN}\n`, { mode: 0o600 })
     const publisher = runNpm(['whoami', '--registry', registry], packageRoot, { authConfig }).stdout.trim()
