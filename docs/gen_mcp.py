@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Extract a machine-readable API knowledge pack from the ESP-VISION single
-# sources of truth, for the documentation MCP service (see the website repo
-# docs/09 and docs/10). Two API surfaces are extracted:
+# sources of truth, for the Knowledge MCP runtime in host/knowledge-mcp.
+# Two API surfaces are extracted:
 #
 #   1. ESP-VISION public modules  -- from stubs/*.pyi (the signature SSOT;
 #      reuses docs/gen_api.py's AST helpers so signatures never drift).
@@ -17,7 +17,7 @@
 #     python docs/gen_mcp.py v0.0.0-dev --out /path/to/mcp-pack.json
 #
 # This is a build artifact: deterministic, diffable, offline-buildable. It is
-# regenerated in CI and published alongside the docs (see docs/10 plan).
+# regenerated in CI and embedded in Knowledge MCP release artifacts.
 
 import argparse
 import ast
@@ -64,7 +64,9 @@ def _extract_espvision_module(module: str) -> dict:
     symbols: List[dict] = []
 
     def func_symbol(nodes, kind, owner=None):
-        signatures = [gen_api._build_signature(n.name, n.args) for n in nodes]
+        signatures = [gen_api._build_signature(n.name, n.args)
+                      + (' -> ' + ast.get_source_segment(source, n.returns) if n.returns else '')
+                      for n in nodes]
         arg_names: List[str] = []
         for n in nodes:
             arg_names.extend(gen_api._collect_arg_names(n.args))
@@ -134,6 +136,30 @@ def _extract_espvision_module(module: str) -> dict:
             mt = _symbol_targets(module, 'methods', sym['name'])
             sym['targets'] = list(mt) if mt else default_targets
             symbols.append(sym)
+
+    # Export aliases of public classes and their methods. Type aliases such as
+    # TensorInput = object are not runtime API symbols and are left alone.
+    canonical = {s['name']: s for s in symbols}
+    for node in tree.body:
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Name)):
+            continue
+        original = canonical.get(node.value.id)
+        if not original or original['kind'] != 'class':
+            continue
+        for target in node.targets:
+            if not isinstance(target, ast.Name) or target.id in canonical:
+                continue
+            for name, symbol in canonical.items():
+                if name != node.value.id and not name.startswith(node.value.id + '.'):
+                    continue
+                alias = dict(symbol)
+                alias['name'] = target.id + name[len(node.value.id):]
+                alias['aliasOf'] = module + '.' + name
+                alias['doc'] = 'Alias of {}. {}'.format(alias['aliasOf'], symbol['doc']).strip()
+                if symbol['kind'] == 'class':
+                    alias['signatures'] = [target.id + sig[len(node.value.id):]
+                                           for sig in symbol['signatures']]
+                symbols.append(alias)
 
     return {
         'name': module,

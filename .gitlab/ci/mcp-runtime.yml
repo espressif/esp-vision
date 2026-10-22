@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+knowledge_mcp_checks:
+  stage: check
+  image: node:24-bookworm-slim
+  tags: [build, internet, amd64]
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  script:
+    - npm --prefix host/knowledge-mcp ci --ignore-scripts --no-audit --no-fund
+    - npm --prefix host/knowledge-mcp run build
+    - npm --prefix host/knowledge-mcp test

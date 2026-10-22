@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "version": "fixture-2026.10.21",
+    "sourceCommit": "test-fixture",
+    "micropythonVersion": "v1.28.0",
+    "canonicalUrlTemplate": "https://docs.example.invalid/{lang}/{version}/{target}/{path}#{anchor}",
+    "counts": { "modules": 1, "symbols": 1, "docs": 1, "examples": 1 }
+  },
+  "modules": [
+    {
+      "name": "sensor",
+      "source": "esp-vision",
+      "targets": ["esp32p4", "esp32s3"],
+      "symbols": [
+        {
+          "kind": "function",
+          "name": "snapshot",
+          "signatures": ["snapshot()"],
+          "doc": "Capture one frame from the camera.",
+          "targets": ["esp32p4", "esp32s3"]
+        }
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "target": "esp32p4",
+      "modules": ["sensor"],
+      "boards": ["ESP32_P4X_EYE"],
+      "features": { "camera": true }
+    }
+  ],
+  "docs": [
+    {
+      "id": "camera-pipeline",
+      "kind": "concept",
+      "title": "Camera pipeline",
+      "bodyMd": "Capture and process a camera frame."
+    }
+  ],
+  "examples": [
+    {
+      "path": "example/01_save_snapshot.py",
+      "title": "save_snapshot",
+      "code": "import sensor\\nimg = sensor.snapshot()\\nimg.save('/sdcard/frame.jpg')",
+      "modules": ["sensor"]
+    }
+  ]
+}

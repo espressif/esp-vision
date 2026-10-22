@@ -353,6 +353,8 @@ class apriltag:
 #: channels correspond to the LAB color space.
 class histogram:
     #: Combined bins (grayscale/binary) or L bins (RGB565).
+    #: Values are normalized floating-point pixel frequencies, not integer counts.
+    #: For a non-empty selection their sum is approximately 1.0 (floating-point rounding applies).
     def bins(self) -> list[float]: ...
     #: L-channel (lightness) bins.
     def l_bins(self) -> list[float]: ...
