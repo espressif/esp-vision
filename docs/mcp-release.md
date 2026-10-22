@@ -29,7 +29,7 @@ flowchart TD
     Image --> Verify[Disposable container and persistent-volume acceptance]
     Verify --> Publish[Publish npm, snapshot and digest-bound descriptor]
     Firmware[Firmware qualification and DL firmware publication] --> Publish
-    Publish --> Bridge[Native GitLab bridge: version, project, image repository, source commit]
+    Publish --> Bridge[Native GitLab bridge: version, project, source commit]
     Bridge --> Website[Website fetches and validates package]
     Website --> Deploy[Deploy exact image digest; verify health and representative tools]
     Deploy --> Rollback[Restore previous digest if verification fails]
@@ -39,7 +39,7 @@ The main repository owns server source, knowledge generation, tests, Dockerfile,
 
 The `esp-vision-mcp-knowledge` Generic Package version contains `knowledge-mcp.tgz`, `mcp-pack.json`, `mcp-pack.sha256`, `mcp-release.json` and `mcp-release.sha256`. Schema 2 binds the npm name/version/byte count/SHA-256, its embedded snapshot and provenance, source commit and exact image digest. Website verifies this identity before deployment and against HTTP health afterwards. Schema 1 is accepted only for an explicitly selected manual legacy rollback. The descriptor binds exact pack bytes, version, source commit and immutable `repository@sha256:digest`. Identical publication retries may complete a partial upload; conflicting existing bytes abort before writes. The descriptor checksum is uploaded last. The publication job is serialized; do not enable alternative writers that bypass its identity checks. Configure registry duplicate protection and retain the referenced container digests to preserve old-release redeployment.
 
-The bridge passes `ESP_VISION_MCP_PACKAGE_VERSION`, `ESP_VISION_MCP_PROJECT_ID`, `ESP_VISION_MCP_IMAGE_REPOSITORY` and `RELEASE_EXPECTED_SOURCE_COMMIT`. The consumer validates both checksums, exact version/source identity and the permitted registry repository. A runtime-generated dotenv value is not required by the native bridge. Manual redeployment selects an existing package version and exact image; it does not rebuild or select a mutable image tag.
+The bridge passes `ESP_VISION_MCP_PACKAGE_VERSION`, `ESP_VISION_MCP_PROJECT_ID` and `RELEASE_EXPECTED_SOURCE_COMMIT`. Configure protected `MCP_ALLOWED_IMAGE_REPOSITORY` in website with the main repository's full Knowledge image repository, such as `gitlab.espressif.cn:5050/ae_group/esp-vision/knowledge-mcp`. Website checks this setting in its prepare stage and validates descriptors against this independently configured allowlist, both checksums and exact version/source identity. It ignores legacy bridge image hints: a registry variable that expands incorrectly in a trigger job cannot choose a deployment repository. A runtime-generated dotenv value is not required by the native bridge. Manual redeployment selects an existing package version and exact image; it does not rebuild or select a mutable image tag.
 
 Before production enablement, allow the website project's job token to read the main project's Generic Packages and container repository, and verify that the upstream trigger user can start website pipelines. Keep the package and image registries private. Website reporting is a default-branch-only manual job, serialized with production deployment; reports are internal artifacts. Website operational details live in that repository's deployment documentation.
 

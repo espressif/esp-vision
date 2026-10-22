@@ -43,6 +43,7 @@ def main():
         forwarded[key] = value
     payload = output / 'bridge-env.json'
     payload.write_text(json.dumps({**forwarded, 'CI_PIPELINE_SOURCE': 'pipeline',
+                                  'MCP_ALLOWED_IMAGE_REPOSITORY': repository,
                                   'CI_API_V4_URL': 'https://gitlab.example/api/v4',
                                   'CI_JOB_TOKEN': 'test-only-token', 'CI_REGISTRY': 'registry.example'}))
     script = '''

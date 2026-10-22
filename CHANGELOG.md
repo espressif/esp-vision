@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Keep the Knowledge image repository allowlist in website deployment configuration, remove trigger-time registry expansion from the bridge, and exercise the actual consumer with its independent pin.
+
 - Validate CI npm archives with a local pack dry run so already published versions remain testable; retain immutable-version checks for real publication.
 
 - Mirror qualified release source commits to GitHub before DL model-source validation, independently of manual npm publication, with a mandatory CI ordering regression.
