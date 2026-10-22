@@ -9,23 +9,23 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Added a unified GitHub Issues reporting entry in both READMEs and English-language issue forms for IDE, website, Host Device Core, and firmware problems.
 - Added mandatory target regressions for P4 camera/LCD coexistence and shutdown/restart, unsupported Image keyword rejection, caller-owned snapshot buffers, and the configured allocation policy.
 
+### Changed
+
+- Unified ESP-VISION-owned heap allocation around `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` while retaining requested DMA capabilities; set a 16 KiB internal-memory boundary on PSRAM-enabled P4 boards and the P4 template.
+- Qualify ESP32-P4/S3 firmware and hardware CI on pinned ESP-IDF v5.5.6, retain release/v6.1 for ESP32-S31, and align release packaging dependencies with this board-specific matrix. Document the required IDF environments and possible build/runtime/Python API changes with other versions in English and Chinese.
+
 ### Fixed
 
 - Removed the unsupported `copy_to_fb` keyword from `image.Image` construction and `Image.to_*()` conversion, and removed it from those stubs and docs; `image.ImageIO.read(copy_to_fb=...)` remains supported.
 - Removed the unsupported `transform` keyword from the ESP-VISION `Image.copy()` and `Image.draw_image()` signatures and stubs.
 - Reduced the P4X_EYE SPI display transaction queue to one entry so camera startup and LCD transfers share a bounded DMA footprint.
 - Reset browser-flashed devices through the active stub loader so its two-byte command status is decoded correctly; preserve automatic-reset failure diagnostics for runtime handoff.
-
 - Separate the Chinese hardware-guide inline REPL limit literal from its following parenthesis so strict HTML/PDF documentation builds accept the new CI contract section.
 - Retain a Core-captured LCD test-pattern JPEG alongside the camera JPEG in CI hardware artifacts and require its dimensions to match the live display.
 - Preserve camera allocation, timeout and unexpected mode-switch errors as hardware-test failures; only explicit unsupported capabilities may be reported as unsupported. Keep identity checks compatible with firmware that does not advertise optional storage inspection.
 - Keep SDK-only hardware-fixture regression tests independent of an installed Python interpreter; verify bounded source reconstruction in Node and execute the fixture through real Core hardware acceptance.
 - Load hardware-test fixtures in RAM within the negotiated REPL input limit instead of requiring Flash file uploads for memory/camera/display checks. Report storage state separately and fail explicit file acceptance on unmounted volumes without formatting. Bind target-test startup and runtime checks to the selected board/build identity and require every selected CI check to pass. Ship the updated packaged hardware tools as Device Core 0.4.1 to avoid republishing changed 0.4.0 content.
-
-### Changed
-
-- Unified ESP-VISION-owned heap allocation around `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` while retaining requested DMA capabilities; set a 16 KiB internal-memory boundary on PSRAM-enabled P4 boards and the P4 template.
-- Qualify ESP32-P4/S3 firmware and hardware CI on pinned ESP-IDF v5.5.6, retain release/v6.1 for ESP32-S31, and align release packaging dependencies with this board-specific matrix. Document the required IDF environments and possible build/runtime/Python API changes with other versions in English and Chinese.
+- Dispatch queued VM RPCs at bounded main-thread Python safe points so live camera/LCD applications can serve capture requests without returning to the REPL; preserve session authentication and output isolation.
 
 ## [2026.10.19]
 

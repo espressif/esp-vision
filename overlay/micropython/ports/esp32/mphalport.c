@@ -157,13 +157,12 @@ int mp_hal_stdin_rx_chr(void) {
         if (ev_stdio_mux_enabled()) {
             // EV-MUX owns every physical ingress: the transport task drains
             // the ring buffers and feeds the frame parser. The REPL consumes
-            // framed repl.stdin bytes only, and VM-class RPCs queued by the
-            // transport task are executed here, in legal VM context.
+            // framed repl.stdin bytes only. VM-class RPCs queued by the
+            // transport task are dispatched at main-VM safe points.
             int framed_c = -1;
             if (ev_control_transport_read_pending(&framed_c)) {
                 return framed_c;
             }
-            ev_control_transport_vm_poll();
             MICROPY_EVENT_POLL_HOOK
             continue;
         }
@@ -254,6 +253,9 @@ void mp_hal_delay_ms(mp_uint_t ms) {
     for (;;) {
         mp_handle_pending(MP_HANDLE_PENDING_CALLBACKS_AND_EXCEPTIONS);
         MICROPY_PY_SOCKET_EVENTS_HANDLER
+        // `time.sleep_ms` reaches this wait path while Python is active. Poll
+        // before releasing the GIL so queued VM RPCs can run during sleeps.
+        ev_control_transport_vm_poll();
         MP_THREAD_GIL_EXIT();
         uint64_t t1 = esp_timer_get_time();
         dt = t1 - t0;

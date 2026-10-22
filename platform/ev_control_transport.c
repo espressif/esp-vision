@@ -244,6 +244,8 @@ static ev_control_response_context_t *ev_control_response_context_current(void)
 static ev_control_vm_frame_t s_vm_queue[EV_CONTROL_VM_QUEUE_LEN];
 static volatile uint8_t s_vm_queue_head;
 static volatile uint8_t s_vm_queue_tail;
+static uint32_t s_vm_queue_pending;
+static bool s_vm_poll_active;
 static StaticSemaphore_t s_vm_queue_lock_buf;
 static SemaphoreHandle_t s_vm_queue_lock;
 static StaticSemaphore_t s_transport_state_lock_buf;
@@ -375,6 +377,7 @@ static void ev_control_vm_queue_clear(void)
     memset(s_vm_queue, 0, sizeof(s_vm_queue));
     s_vm_queue_head = 0;
     s_vm_queue_tail = 0;
+    __atomic_store_n(&s_vm_queue_pending, 0, __ATOMIC_RELEASE);
     ev_control_vm_queue_unlock();
 }
 
@@ -393,6 +396,7 @@ static void ev_control_vm_queue_clear_stale(uint32_t input_generation)
         if (frame->input_generation != input_generation) {
             memset(frame, 0, sizeof(*frame));
             s_vm_queue_head = s_vm_queue_tail;
+            __atomic_store_n(&s_vm_queue_pending, 0, __ATOMIC_RELEASE);
         }
     }
     ev_control_vm_queue_unlock();
@@ -467,6 +471,9 @@ static void ev_control_vm_queue_expire(void)
         input_generation = frame->input_generation;
         transition_id = frame->transition_id;
         s_vm_queue_head = (uint8_t)((s_vm_queue_head + 1) % EV_CONTROL_VM_QUEUE_LEN);
+        __atomic_store_n(&s_vm_queue_pending,
+                         s_vm_queue_head != s_vm_queue_tail,
+                         __ATOMIC_RELEASE);
         ev_control_vm_queue_unlock();
 
         ev_session_snapshot_t snapshot;
@@ -553,6 +560,7 @@ static bool ev_control_vm_queue_push(ev_control_rpc_domain_t domain,
     memcpy(frame->payload, payload, payload_len);
     frame->payload[payload_len] = '\0';
     s_vm_queue_tail = next_tail;
+    __atomic_store_n(&s_vm_queue_pending, 1, __ATOMIC_RELEASE);
     ev_control_vm_queue_unlock();
     return true;
 }
@@ -3132,14 +3140,32 @@ bool ev_control_transport_repl_pending(void)
 
 void ev_control_transport_vm_poll(void)
 {
+    // The bytecode hook is frequent. Keep the empty path to an atomic load
+    // and branch; it is safe before VM-thread state is initialized.
+    if (__atomic_load_n(&s_vm_queue_pending, __ATOMIC_ACQUIRE) == 0) {
+        return;
+    }
+    // VM-class RPCs use MicroPython state and must only run on the main VM
+    // task. Python worker threads may hit the same VM/event hooks.
+    if (!mp_thread_is_main_thread() || s_vm_poll_active) {
+        return;
+    }
+    // VM RPC handlers can invoke Python/VFS code, which may re-enter event
+    // hooks. Keep the active response/output context exclusive to this frame.
+    s_vm_poll_active = true;
     ev_control_vm_frame_t frame;
     ev_control_vm_queue_lock();
     if (s_vm_queue_head == s_vm_queue_tail) {
+        __atomic_store_n(&s_vm_queue_pending, 0, __ATOMIC_RELEASE);
         ev_control_vm_queue_unlock();
+        s_vm_poll_active = false;
         return;
     }
     memcpy(&frame, &s_vm_queue[s_vm_queue_head], sizeof(frame));
     s_vm_queue_head = (uint8_t)((s_vm_queue_head + 1) % EV_CONTROL_VM_QUEUE_LEN);
+    __atomic_store_n(&s_vm_queue_pending,
+                     s_vm_queue_head != s_vm_queue_tail,
+                     __ATOMIC_RELEASE);
     ev_control_vm_queue_unlock();
 
     ev_session_snapshot_t session;
@@ -3149,6 +3175,7 @@ void ev_control_transport_vm_poll(void)
             (session.input_generation != frame.input_generation) ||
             (session.transition_id != frame.transition_id)) {
         ++s_stats.stale_generation_drops;
+        s_vm_poll_active = false;
         return;
     }
     ev_control_rpc_domain_t domain = (ev_control_rpc_domain_t)frame.domain;
@@ -3168,6 +3195,7 @@ void ev_control_transport_vm_poll(void)
         (void)ev_control_send_error(frame.method, frame.seq,
                                     "INTERNAL_ERROR", "VM output context unavailable");
         ev_control_response_context_clear();
+        s_vm_poll_active = false;
         return;
     }
 
@@ -3181,6 +3209,7 @@ void ev_control_transport_vm_poll(void)
         nlr_pop();
         ev_vm_output_scope_pop(&output_scope);
         ev_control_response_context_clear();
+        s_vm_poll_active = false;
         return;
     }
     // C handlers may call MicroPython/VFS APIs that raise through NLR. Restore
@@ -3190,6 +3219,7 @@ void ev_control_transport_vm_poll(void)
                                 "INTERNAL_ERROR", "VM RPC handler raised");
     ev_vm_output_scope_pop(&output_scope);
     ev_control_response_context_clear();
+    s_vm_poll_active = false;
 }
 
 void ev_control_transport_vm_reset_begin(void)
