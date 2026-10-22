@@ -27,6 +27,7 @@
 #include <new>
 
 #include "esp_heap_caps.h"
+#include "ev_memory.h"
 
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
@@ -91,11 +92,7 @@ extern const mp_obj_type_t py_tflite_model_type;
 
 static uint8_t *tflite_caps_alloc(size_t size, size_t align)
 {
-    uint8_t *p = (uint8_t *) heap_caps_aligned_alloc(align, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (p == nullptr) {
-        p = (uint8_t *) heap_caps_aligned_alloc(align, size, MALLOC_CAP_DEFAULT);
-    }
-    return p;
+    return (uint8_t *)esp_vision_memory_aligned_alloc(align, size, MALLOC_CAP_8BIT);
 }
 
 static bool tflite_valid_dtype(TfLiteType type)

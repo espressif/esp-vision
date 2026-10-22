@@ -27,6 +27,7 @@
 #include "py/mpconfig.h"
 
 #include "ev_control_json.h"
+#include "ev_memory.h"
 #include "ev_session.h"
 
 #define EV_MUX_SERIAL_TARGETS (3)
@@ -238,10 +239,10 @@ static uint8_t *ev_mux_arena_alloc(void)
     if (!esp_psram_is_initialized()) {
         return NULL;
     }
-    return heap_caps_malloc(EV_MUX_ARENA_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    return esp_vision_memory_malloc_caps(EV_MUX_ARENA_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
 #else
     // Preserve the existing internal-memory behavior on boards without PSRAM.
-    return heap_caps_malloc(EV_MUX_ARENA_BYTES, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    return esp_vision_memory_malloc_caps(EV_MUX_ARENA_BYTES, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 #endif
 }
 
@@ -1016,8 +1017,8 @@ static esp_err_t ev_mux_enqueue_normal(const ev_mux_submit_options_t *options,
 static bool ev_mux_special_buffer_alloc(uint8_t **buffer)
 {
     if (*buffer == NULL) {
-        *buffer = (uint8_t *)heap_caps_malloc(EV_MUX_LARGE_PAYLOAD_MAX,
-                                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        *buffer = (uint8_t *)esp_vision_memory_malloc_caps(EV_MUX_LARGE_PAYLOAD_MAX,
+                                                           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     }
     return *buffer != NULL;
 }

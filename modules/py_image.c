@@ -1072,7 +1072,7 @@ static mp_obj_t py_image_to(pixformat_t pixfmt, mp_rom_obj_t default_color_palet
                             size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     enum {
         ARG_x_scale, ARG_y_scale, ARG_roi, ARG_channel, ARG_alpha, ARG_color_palette, ARG_alpha_palette,
-        ARG_hint, ARG_transform, ARG_copy, ARG_copy_to_fb, ARG_quality, ARG_subsampling
+        ARG_hint, ARG_copy, ARG_quality, ARG_subsampling
     };
     const mp_arg_t allowed_args[] = {
         { MP_QSTR_x_scale, MP_ARG_OBJ | MP_ARG_KW_ONLY, {.u_rom_obj = MP_ROM_NONE} },
@@ -1083,9 +1083,7 @@ static mp_obj_t py_image_to(pixformat_t pixfmt, mp_rom_obj_t default_color_palet
         { MP_QSTR_color_palette, MP_ARG_OBJ | MP_ARG_KW_ONLY, {.u_rom_obj = default_color_palette} },
         { MP_QSTR_alpha_palette, MP_ARG_OBJ | MP_ARG_KW_ONLY, {.u_rom_obj = MP_ROM_NONE} },
         { MP_QSTR_hint, MP_ARG_INT | MP_ARG_KW_ONLY,  {.u_int = 0 } },
-        { MP_QSTR_transform, MP_ARG_OBJ | MP_ARG_KW_ONLY,  {.u_rom_obj = MP_ROM_NONE} },
         { MP_QSTR_copy, MP_ARG_BOOL | MP_ARG_KW_ONLY, {.u_bool = default_copy} },
-        { MP_QSTR_copy_to_fb, MP_ARG_BOOL | MP_ARG_KW_ONLY, {.u_bool = false} },
         { MP_QSTR_quality, MP_ARG_INT | MP_ARG_KW_ONLY, {.u_int = 90} },
         { MP_QSTR_subsampling, MP_ARG_INT | MP_ARG_KW_ONLY,  {.u_int = JPEG_SUBSAMPLING_AUTO} },
     };
@@ -1120,12 +1118,6 @@ static mp_obj_t py_image_to(pixformat_t pixfmt, mp_rom_obj_t default_color_palet
                                                      IMAGE_HINT_SCALE_ASPECT_KEEP |
                                                      IMAGE_HINT_SCALE_ASPECT_EXPAND |
                                                      IMAGE_HINT_SCALE_ASPECT_IGNORE)) | IMAGE_HINT_BLACK_BACKGROUND;
-
-    float *transform = py_helper_arg_to_transform(args[ARG_transform].u_obj);
-
-    if (args[ARG_copy_to_fb].u_bool) {
-        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("copy_to_fb is not supported"));
-    }
 
     image_t dst_img = {
         .w = fast_floorf(roi.w * x_scale),
@@ -1216,10 +1208,7 @@ static mp_obj_t py_image_to(pixformat_t pixfmt, mp_rom_obj_t default_color_palet
 
     uint32_t size = image_size(&dst_img);
 
-    if (args[ARG_copy_to_fb].u_bool) {
-        // Convert to FB.
-        py_helper_set_to_framebuffer(&dst_img);
-    } else if (args[ARG_copy].u_bool) {
+    if (args[ARG_copy].u_bool) {
         // Create dynamic copy.
         image_alloc(&dst_img, size);
     } else {
@@ -1238,11 +1227,11 @@ static mp_obj_t py_image_to(pixformat_t pixfmt, mp_rom_obj_t default_color_palet
         fb_alloc_mark();
         imlib_draw_image(&dst_img, src_img, 0, 0, x_scale, y_scale, &roi,
                          args[ARG_channel].u_int, args[ARG_alpha].u_int, color_palette, alpha_palette,
-                         args[ARG_hint].u_int, transform, NULL, NULL, NULL);
+                         args[ARG_hint].u_int, NULL, NULL, NULL, NULL);
         fb_alloc_free_till_mark();
     }
 
-    if ((!args[ARG_copy_to_fb].u_bool) && (!args[ARG_copy].u_bool)) {
+    if (!args[ARG_copy].u_bool) {
         py_helper_update_framebuffer(&dst_img);
         memcpy(src_img, &dst_img, sizeof(image_t));
     }
@@ -1874,7 +1863,7 @@ static mp_obj_t py_image_line_op(size_t n_args, const mp_obj_t *pos_args, mp_map
                                  imlib_draw_row_callback_t callback) {
     enum {
         ARG_image, ARG_x, ARG_y, ARG_x_scale, ARG_y_scale, ARG_roi,
-        ARG_channel, ARG_alpha, ARG_color_palette, ARG_alpha_palette, ARG_hint, ARG_transform, ARG_mask
+        ARG_channel, ARG_alpha, ARG_color_palette, ARG_alpha_palette, ARG_hint, ARG_mask
     };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_image, MP_ARG_OBJ | MP_ARG_REQUIRED, {.u_rom_obj = MP_ROM_NONE} },
@@ -1888,7 +1877,6 @@ static mp_obj_t py_image_line_op(size_t n_args, const mp_obj_t *pos_args, mp_map
         { MP_QSTR_color_palette, MP_ARG_OBJ | MP_ARG_KW_ONLY, {.u_rom_obj = MP_ROM_NONE} },
         { MP_QSTR_alpha_palette, MP_ARG_OBJ | MP_ARG_KW_ONLY, {.u_rom_obj = MP_ROM_NONE} },
         { MP_QSTR_hint, MP_ARG_INT | MP_ARG_KW_ONLY,  {.u_int = 0 } },
-        { MP_QSTR_transform, MP_ARG_OBJ | MP_ARG_KW_ONLY,  {.u_rom_obj = MP_ROM_NONE} },
         { MP_QSTR_mask, MP_ARG_OBJ | MP_ARG_KW_ONLY,  {.u_rom_obj = MP_ROM_NONE} },
     };
 
@@ -1952,8 +1940,6 @@ static mp_obj_t py_image_line_op(size_t n_args, const mp_obj_t *pos_args, mp_map
     const uint16_t *color_palette = py_helper_arg_to_palette(args[ARG_color_palette].u_obj, PIXFORMAT_RGB565);
     const uint8_t *alpha_palette = py_helper_arg_to_palette(args[ARG_alpha_palette].u_obj, PIXFORMAT_GRAYSCALE);
 
-    float *transform = py_helper_arg_to_transform(args[ARG_transform].u_obj);
-
     image_t *mask = NULL;
     if (args[ARG_mask].u_obj != mp_const_none) {
         mask = py_helper_arg_to_image(args[ARG_mask].u_obj, ARG_IMAGE_MUTABLE | ARG_IMAGE_ALLOC);
@@ -1975,7 +1961,7 @@ static mp_obj_t py_image_line_op(size_t n_args, const mp_obj_t *pos_args, mp_map
 
     imlib_draw_image(image, other, args[ARG_x].u_int, args[ARG_y].u_int, x_scale, y_scale, &roi,
                      args[ARG_channel].u_int, args[ARG_alpha].u_int, color_palette, alpha_palette,
-                     args[ARG_hint].u_int, transform, callback, mask, dst_row_override);
+                     args[ARG_hint].u_int, NULL, callback, mask, dst_row_override);
 
     fb_alloc_free_till_mark();
     return pos_args[0];
@@ -6271,21 +6257,16 @@ static MP_DEFINE_CONST_FUN_OBJ_KW(py_image_stereo_disparity_obj, 1, py_image_ste
 #endif // IMLIB_ENABLE_STEREO_DISPARITY
 
 mp_obj_t py_image_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *all_args) {
-    enum { ARG_arg, ARG_height, ARG_pixformat, ARG_buffer, ARG_copy_to_fb, ARG_shape, ARG_strides, ARG_scale};
+    enum { ARG_arg, ARG_height, ARG_pixformat, ARG_buffer, ARG_shape, ARG_strides, ARG_scale};
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_arg,          MP_ARG_REQUIRED | MP_ARG_OBJ },
         { MP_QSTR_height,       MP_ARG_INT, {.u_int = -1} },
         { MP_QSTR_pixformat,    MP_ARG_INT, {.u_int = -1} },
         { MP_QSTR_buffer,       MP_ARG_OBJ | MP_ARG_KW_ONLY, {.u_rom_obj = MP_ROM_NONE} },
-        { MP_QSTR_copy_to_fb,   MP_ARG_BOOL | MP_ARG_KW_ONLY, {.u_bool = false} },
     };
 
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
     mp_arg_parse_all_kw_array(n_args, n_kw, all_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
-
-    if (args[ARG_copy_to_fb].u_bool) {
-        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("copy_to_fb is not supported"));
-    }
 
     image_t image = {0};
 
@@ -6299,11 +6280,7 @@ mp_obj_t py_image_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw
         imlib_read_geometry(&fp, &image, path, &rs);
         file_close(&fp);
 
-        if (args[ARG_copy_to_fb].u_bool) {
-            py_helper_set_to_framebuffer(&image);
-        } else {
-            image_alloc(&image, image_size(&image));
-        }
+        image_alloc(&image, image_size(&image));
 
         imlib_load_image(&image, path);
         fb_alloc_free_till_mark();
@@ -6333,9 +6310,7 @@ mp_obj_t py_image_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw
             image.pixfmt = PIXFORMAT_RGB565;
         }
 
-        if (args[ARG_copy_to_fb].u_bool) {
-            py_helper_set_to_framebuffer(&image);
-        } else if (args[ARG_buffer].u_obj != mp_const_none) {
+        if (args[ARG_buffer].u_obj != mp_const_none) {
             mp_buffer_info_t bufinfo = {0};
             mp_get_buffer_raise(args[ARG_buffer].u_obj, &bufinfo, MP_BUFFER_WRITE);
             image.data = bufinfo.buf;
@@ -6390,14 +6365,7 @@ mp_obj_t py_image_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw
             mp_raise_ValueError(MP_ERROR_TEXT("Expected an image buffer"));
         }
 
-        if (args[ARG_copy_to_fb].u_bool) {
-            py_helper_set_to_framebuffer(&image);
-            if (bufinfo.buf != NULL) {
-                memcpy(image.data, bufinfo.buf, bufinfo.len);
-            } else {
-                memset(image.data, 0, image_size(&image));
-            }
-        } else if (bufinfo.buf != NULL) {
+        if (bufinfo.buf != NULL) {
             image.data = bufinfo.buf;
             if (image_size(&image) > bufinfo.len) {
                 mp_raise_ValueError(MP_ERROR_TEXT("Buffer is too small"));

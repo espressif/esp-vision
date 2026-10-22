@@ -25,6 +25,7 @@
 #include "dl_model_base.hpp"
 #include "dl_pose_yolo11_postprocessor.hpp"
 #include "esp_heap_caps.h"
+#include "ev_memory.h"
 #include "fbs_model.hpp"
 #include "imagenet_cls_postprocessor.hpp"
 #include "nanotrack.hpp"
@@ -273,10 +274,9 @@ static espdl_model_data_t espdl_read_model_from_vfs(mp_obj_t path_obj)
 
     const size_t size = (size_t)file_size;
     const size_t aligned_size = (size + 15U) & ~15U;
-    uint8_t *data = (uint8_t *)heap_caps_aligned_alloc(16, aligned_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (data == nullptr) {
-        data = (uint8_t *)heap_caps_aligned_alloc(16, aligned_size, MALLOC_CAP_DEFAULT);
-    }
+    uint8_t *data = (uint8_t *)esp_vision_memory_aligned_alloc(16,
+                                                               aligned_size,
+                                                               MALLOC_CAP_8BIT);
     if (data == nullptr) {
         mp_stream_close(file);
         mp_raise_msg_varg(&mp_type_MemoryError,

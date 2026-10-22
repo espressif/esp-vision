@@ -34,6 +34,7 @@
 #include "camera.h"
 #include "display.h"
 #include "ev_channel.h"
+#include "ev_memory.h"
 #include "ev_session.h"
 #include "ev_control_json.h"
 #include "ev_mux.h"
@@ -1753,7 +1754,7 @@ static esp_err_t ev_control_send_script_write(uint32_t seq, const char *request)
     }
 
     size_t decoded_capacity = (strlen(content_base64) * 3 / 4) + 4;
-    uint8_t *decoded = heap_caps_malloc(decoded_capacity, MALLOC_CAP_8BIT);
+    uint8_t *decoded = esp_vision_memory_malloc(decoded_capacity, MALLOC_CAP_8BIT);
     if (decoded == NULL) {
         return ev_control_send_error("script.write", seq, "NO_MEM", "failed to allocate decode buffer");
     }
@@ -2987,7 +2988,7 @@ static void ev_control_parser_feed_byte(ev_control_parser_t *parser,
                     ev_control_parser_reset_keep_link(parser);
                     return;
                 }
-                parser->file_payload = heap_caps_malloc(parser->payload_len + 1, MALLOC_CAP_8BIT);
+                parser->file_payload = esp_vision_memory_malloc(parser->payload_len + 1, MALLOC_CAP_8BIT);
                 if (parser->file_payload == NULL) {
                     ++s_stats.frames_rejected;
                     ev_control_parser_reset_keep_link(parser);

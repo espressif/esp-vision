@@ -15,6 +15,7 @@
 
 #include "esp_timer.h"
 #include "esp_rtsp.h"
+#include "ev_memory.h"
 #include "media_lib_adapter.h"
 #include "media_lib_netif.h"
 
@@ -135,7 +136,7 @@ static mp_obj_t py_rtsp_server_make_new(const mp_obj_type_t *type, size_t n_args
         s_media_lib_ready = true;
     }
 
-    py_rtsp_shared_t *sh = malloc(sizeof(py_rtsp_shared_t));
+    py_rtsp_shared_t *sh = esp_vision_memory_malloc(sizeof(py_rtsp_shared_t), MALLOC_CAP_8BIT);
     if (sh == NULL) {
         mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("rtsp: out of memory"));
     }
@@ -212,7 +213,7 @@ static mp_obj_t py_rtsp_server_send(mp_obj_t self_in, mp_obj_t nal_in)
         return mp_const_none;
     }
 
-    uint8_t *copy = malloc(bufinfo.len);
+    uint8_t *copy = esp_vision_memory_malloc(bufinfo.len, MALLOC_CAP_8BIT);
     if (copy == NULL) {
         return mp_const_none;
     }

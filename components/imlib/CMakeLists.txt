@@ -66,6 +66,7 @@ idf_component_register(
         "upstream"
         "${IMLIB_ESP_VISION_BOARD_DIR}"
         "include"
+        "${ESP_VISION_ROOT}/platform"
         "${IMLIB_MICROPY_DIR}"
         "${IMLIB_MICROPY_PORT_DIR}"
         "${IMLIB_MICROPY_BOARD_DIR}"

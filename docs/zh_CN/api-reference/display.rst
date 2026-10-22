@@ -22,6 +22,23 @@ display -- LCD 显示
 
 使用 ``fit=True`` 时，源图像会缩放以适配屏幕，并沿用显示驱动的默认放置方式。显示对象应只创建一次并持续复用；重复创建对象会重新初始化屏幕资源。
 
+复用 Image 绘制内容
+-------------------
+
+如果应用需要自行绘制图形，可以创建一个普通的 RGB565 图像缓冲区并重复更新，再传给 ``lcd.write()``：
+
+.. code-block:: python
+
+   import display, image
+
+   lcd = display.Display()
+   canvas = image.Image(lcd.width(), lcd.height(), image.RGB565)
+   canvas.draw_rectangle(0, 0, canvas.width(), canvas.height(), color=(6, 8, 18), fill=True)
+   canvas.draw_string(20, 20, "ESP-VISION", color=(255, 255, 255), scale=2)
+   lcd.write(canvas, fit=False)
+
+后续帧可以继续修改并复用同一个 ``Image``。显示驱动会将图像像素写入屏幕；图像无需分配在显示驱动的帧缓冲区中。
+
 定位、缩放与裁剪
 ----------------
 

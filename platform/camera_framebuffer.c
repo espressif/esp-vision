@@ -6,6 +6,7 @@
 
 #include "camera.h"
 #include "esp_heap_caps.h"
+#include "ev_memory.h"
 
 static uint8_t *s_snapshot;
 static size_t s_snapshot_capacity;
@@ -24,10 +25,7 @@ esp_err_t esp_vision_camera_get_snapshot_buffer(size_t size, uint8_t **pixels)
     }
     *pixels = NULL;
     if (s_snapshot_capacity < size) {
-        uint8_t *next = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (next == NULL) {
-            next = heap_caps_malloc(size, MALLOC_CAP_8BIT);
-        }
+        uint8_t *next = esp_vision_memory_malloc(size, MALLOC_CAP_8BIT);
         if (next == NULL) {
             return ESP_ERR_NO_MEM;
         }

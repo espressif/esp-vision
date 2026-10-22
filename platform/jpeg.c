@@ -20,6 +20,8 @@
 #include "imlib.h"
 #endif
 
+#include "ev_memory.h"
+
 #ifndef SOC_JPEG_ENCODE_SUPPORTED
 #define SOC_JPEG_ENCODE_SUPPORTED 0
 #endif
@@ -156,7 +158,7 @@ static esp_err_t esp_vision_new_jpeg_ensure_buffers(size_t raw_size)
             s_new_jpeg.jpeg_buf_size = 0;
         }
 
-        s_new_jpeg.jpeg_buf = malloc(jpeg_capacity);
+        s_new_jpeg.jpeg_buf = esp_vision_memory_malloc(jpeg_capacity, MALLOC_CAP_8BIT);
         if (s_new_jpeg.jpeg_buf == NULL) {
             return ESP_ERR_NO_MEM;
         }

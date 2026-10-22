@@ -20,6 +20,8 @@
 #include "hal/isp_ll.h"
 #include "linux/videodev2.h"
 
+#include "ev_memory.h"
+
 #if CONFIG_ESP_VIDEO_ENABLE_ISP_PIPELINE_CONTROLLER
 #include "esp_ipa.h"
 #include "esp_video_device.h"
@@ -99,8 +101,9 @@ static esp_err_t isp_lsc_take_spare(uint8_t *bank)
 {
     uint8_t spare = s_lsc_installed_bank ^ 1;
     if (s_lsc_banks[spare] == NULL) {
-        s_lsc_banks[spare] = heap_caps_calloc(4 * ESP_VISION_ISP_LSC_MAX_POINTS,
-                                              sizeof(isp_lsc_gain_t), MALLOC_CAP_8BIT);
+        s_lsc_banks[spare] = esp_vision_memory_calloc(4 * ESP_VISION_ISP_LSC_MAX_POINTS,
+                                                      sizeof(isp_lsc_gain_t),
+                                                      MALLOC_CAP_8BIT);
         if (s_lsc_banks[spare] == NULL) {
             return ESP_ERR_NO_MEM;
         }

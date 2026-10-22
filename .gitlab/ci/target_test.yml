@@ -36,6 +36,7 @@
     - mkdir -p logs
     - |
       python3 tools/ci/flash_and_test.py --board "$BOARD" \
+        --checks all \
         --require-all \
         --log "logs/$BOARD-$IDF_LABEL-target-test.log" \
         --output "logs/$BOARD-$IDF_LABEL-frame.jpg" \

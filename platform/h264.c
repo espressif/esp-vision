@@ -23,6 +23,7 @@
 
 #include "esp_h264_alloc.h"
 #include "esp_h264_enc_single_hw.h"
+#include "ev_memory.h"
 
 struct esp_vision_h264_enc {
     esp_h264_enc_handle_t enc;
@@ -102,7 +103,7 @@ esp_err_t esp_vision_h264_open(int width, int height, int fps, int gop,
         return ESP_ERR_INVALID_SIZE;
     }
 
-    esp_vision_h264_enc_t *self = calloc(1, sizeof(*self));
+    esp_vision_h264_enc_t *self = esp_vision_memory_calloc(1, sizeof(*self), MALLOC_CAP_8BIT);
     if (self == NULL) {
         return ESP_ERR_NO_MEM;
     }

@@ -46,6 +46,11 @@ void heap_caps_free(void *pointer)
     }
 }
 
+void *esp_vision_memory_malloc_caps(size_t size, uint32_t caps)
+{
+    return heap_caps_malloc(size, caps);
+}
+
 typedef struct {
     bool current;
     uint32_t generation;

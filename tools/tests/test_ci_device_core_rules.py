@@ -222,6 +222,18 @@ class FirmwarePublicationGateTests(unittest.TestCase):
                 elif dependency.startswith("target_test_"):
                     self.assertIn(dependency, hil, name)
 
+    def test_issue_regressions_are_selected_and_required_by_target_job(self):
+        hil = yaml.safe_load((ROOT / ".gitlab/ci/target_test.yml").read_text())
+        target_command = "\n".join(hil[".target_test_base"]["script"])
+        self.assertIn("--checks all", target_command)
+        self.assertIn("--require-all", target_command)
+
+        check_registry = (ROOT / "host/device-core/tests/device-checks.mjs").read_text()
+        for check in ("camera_display_lifecycle", "image_copy_to_fb", "image_transform_argument",
+                      "sensor_snapshot_buffer", "memory_policy"):
+            with self.subTest(check=check):
+                self.assertIn(f"'{check}'", check_registry)
+
     def test_upload_waits_for_package_and_required_qualification(self):
         jobs = yaml.safe_load((ROOT / ".gitlab/ci/deploy.yml").read_text())
         gate = jobs["qualify_firmware_release"]

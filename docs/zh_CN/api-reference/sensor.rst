@@ -22,7 +22,7 @@ sensor -- 摄像头
    while True:
        img = sensor.snapshot()
 
-``sensor.reset()`` 会应用开发板的默认摄像头配置。``RGB565`` 适用于显示、绘图和大多数 AI 工作流，``GRAYSCALE`` 则可降低许多检测算法的内存占用和处理开销。``sensor.snapshot()`` 返回由可复用帧缓冲承载的 :py:class:`image.Image`，因此需要在下一次采集后继续保持图像内容不变时，应先复制该图像。
+``sensor.reset()`` 会应用开发板的默认摄像头配置。``RGB565`` 适用于显示、绘图和大多数 AI 工作流，``GRAYSCALE`` 则可降低许多检测算法的内存占用和处理开销。``sensor.snapshot()`` 返回由可复用帧缓冲承载的 :py:class:`image.Image`，因此需要在下一次采集后继续保持图像内容不变时，应先复制该图像。也可以传入一个足以容纳当前帧的可写缓冲区：``sensor.snapshot(buffer)``；返回的图像会保留该缓冲区的引用。
 
 图像方向与摄像头状态
 --------------------
@@ -58,6 +58,10 @@ sensor -- 摄像头
    img = sensor.snapshot()
 
 重新启动摄像头流后，如果曝光或输入帧队列需要重新稳定，应丢弃少量图像帧。
+
+.. note::
+
+   ``ESP32_P4X_EYE`` 的默认 SPI 配置支持 QVGA 摄像头采集与 LCD 同时使用。SPI 图像传输需要 DMA 可用内存，因此提高摄像头分辨率或增大面板传输块/队列深度后，可能超出最大连续 DMA 空闲块，即使 ``gc.mem_free()`` 和 PSRAM 总可用量仍然很大。如果 ``display.Display()`` 或 ``lcd.write()`` 抛出 ``ESP_ERR_NO_MEM``，先释放对 ``sensor.snapshot()`` 图像的引用并调用 ``sensor.shutdown()``，再初始化和使用 LCD；之后调用 ``lcd.deinit()``，再调用 ``sensor.reset()`` 恢复摄像头采集。
 
 运行时控制 IPA
 --------------
