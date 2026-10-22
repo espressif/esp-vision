@@ -19,6 +19,8 @@ try {
   assert.ok(packed.files.some(({ path }) => path === 'NOTICE'))
   assert.ok(packed.files.some(({ path }) => path === 'schemas/device-actions-v1.json'))
   assert.ok(packed.files.every(({ path }) => /^(src\/|schemas\/|tests\/|scripts\/|package\.json$|README\.md$|LICENSE$|NOTICE$|CHANGELOG\.md$)/.test(path)), 'tarball must contain only the standalone library')
+  assert.ok(!Object.hasOwn(manifest, 'bin'), 'Device Core no longer installs a management CLI')
+  assert.ok(!packed.files.some(({ path }) => path === 'src/cli.js'), 'the Core package must not contain the CLI')
   assert.ok(!packed.files.some(({ path }) => path.startsWith('docs/')), 'Documentation is published by the ESP-VISION documentation center')
   assert.ok(!packed.files.some(({ path }) => path.includes('__pycache__') || path.endsWith('.pyc')), 'Never ship host Python bytecode')
   const consumer = join(temporary, 'consumer')
@@ -39,10 +41,12 @@ try {
   const { DeviceSession } = await import('@esp-vision/device-core/session');
   const { FirmwareFlashSession, loadOfficialFirmware, loadReleaseManifest } = await import('@esp-vision/device-core/firmware');
   if (typeof loadOfficialFirmware !== 'function' || typeof loadReleaseManifest !== 'function') throw new Error('Missing public release manifest readers');
-  const { tcpTransport, serialTransport, openNodeRom } = await import('@esp-vision/device-core/node');
+  const { defaultPython, filterSerialPorts, inventory, listSerial, serialEntry, tcpTransport, serialTransport, transportFor, openNodeRom } = await import('@esp-vision/device-core/node');
   const { openBrowserRom } = await import('@esp-vision/device-core/browser');
   if (typeof openBrowserRom !== 'function' || typeof openBrowserRom({ port: { open() { throw new Error('Not opened'); }, close() {} } }).initialize !== 'function') throw new Error('Missing passive browser ROM adapter');
   if (typeof tcpTransport !== 'function' || typeof serialTransport !== 'function') throw new Error('Missing public Node transports');
+  if (typeof inventory !== 'function' || typeof listSerial !== 'function' || typeof filterSerialPorts !== 'function'
+      || typeof serialEntry !== 'function' || typeof transportFor !== 'function' || typeof defaultPython !== 'string') throw new Error('Missing public Node inventory APIs');
   const { createNodeDiscovery } = await import('@esp-vision/device-core/discovery/node');
   const { EventEmitter } = await import('node:events');
   let queries = 0;
@@ -58,18 +62,11 @@ try {
   api.createDevice({ transport: serialTransport({ python: 'python3', serial: 'not-opened' }) });
   if (typeof DeviceSession !== 'function' || typeof FirmwareFlashSession !== 'function') throw new Error('Missing host adapter APIs');`
   execFileSync(process.execPath, ['--input-type=module', '-e', script], { cwd: consumer, stdio: 'pipe' })
-  assert.equal(manifest.bin['esp-vision-device'], './src/cli.js')
-  const help = execFileSync(process.execPath, [join(consumer, 'node_modules/@esp-vision/device-core/src/cli.js'), '--help'], { encoding: 'utf8' })
-  assert.ok(help.includes('esp-vision-device inspect'))
-  if (process.platform !== 'win32') {
-    const installedHelp = execFileSync(join(consumer, 'node_modules/.bin/esp-vision-device'), ['--help'], { encoding: 'utf8' })
-    assert.ok(installedHelp.includes('esp-vision-device inspect'), 'The installed npm command must execute through its symlink')
-  }
   for (const required of ['src/node_serial.py', 'scripts/run-tests.mjs', 'tests/hardware-check.mjs', 'tests/device-checks.mjs', 'tests/fixtures/device-checks.py']) {
     assert.ok(packed.files.some(({ path }) => path === required), `Missing installed check asset: ${required}`)
   }
   const unitOutput = execFileSync('npm', ['test'], { cwd: installed, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })
-  const unitCount = Number(/^# tests (\d+)$/m.exec(unitOutput)?.[1] ?? 0)
+  const unitCount = Number(/^(?:# tests|ℹ tests) (\d+)$/m.exec(unitOutput)?.[1] ?? 0)
   assert.ok(unitCount > 0, 'Installed npm test must execute a nonempty suite')
   const hardwareHelp = execFileSync('npm', ['run', 'test:hardware', '--', '--help'], { cwd: installed, encoding: 'utf8' })
   assert.ok(hardwareHelp.includes('--serial PATH'), 'Installed hardware runner must load and show its help')

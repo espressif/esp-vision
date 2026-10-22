@@ -19,9 +19,17 @@ test('default hardware acceptance exercises real facade over a fake EV-MUX TCP p
   const server = createServer(socket => {
     sockets.add(socket)
     socket.on('close', () => sockets.delete(socket))
+    let pythonMarker = null
     const parser = new EvMuxParser({ filterFrame(metadata, bytes) {
       const text = new TextDecoder().decode(bytes)
       if (metadata.channel === 'repl.stdin') {
+        pythonMarker ??= /EV_HARDWARE_[a-z0-9]+/.exec(text)?.[0] ?? null
+        const completionMarker = /~~EVSCRIPT-END:[A-Za-z0-9-]+~~/.exec(text)?.[0]
+        if (completionMarker) {
+          socket.write(makeEvMuxFrame({ channel: 'repl.stdout', type: 'data', sessionId, vmEpoch: 1,
+            payload: `${text}\r\n${pythonMarker ?? ''}\r\n${completionMarker}\r\n>>> ` }))
+          return false
+        }
         const marker = /EV_HARDWARE_[a-z0-9]+/.exec(text)?.[0] ?? 'EVIDE_BOOT_OK'
         socket.write(makeEvMuxFrame({ channel: 'repl.stdout', type: 'data', sessionId, vmEpoch: 1, payload: `${text}\r\n${marker}\r\n>>> ` }))
         return false

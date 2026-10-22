@@ -35,8 +35,92 @@ test('file upload selects encoding and creation policy from public parameters', 
 test('file read is binary by default with explicit UTF-8 decoding and bounded options', async () => {
   const { files, calls } = fixture()
   assert.ok(await files.read({ path: '/model.bin' }) instanceof Uint8Array)
+  assert.deepEqual(calls[0][2], { timeout: null, chunkTimeout: 30000, maxBytes: null, signal: null })
   assert.equal(await files.read({ path: '/a.txt', encoding: 'utf-8', maxBytes: 512 }), '你好')
-  assert.equal(calls[1][2].maxBytes, 512)
+  assert.deepEqual(calls[1][2], { timeout: null, chunkTimeout: 30000, maxBytes: 512, signal: null })
+})
+
+test('files.read forwards aggregate and per-command timeouts and validates both', async () => {
+  const { files, calls } = fixture()
+  await files.read({ path: '/a', timeout: 90000, chunkTimeout: 4500, maxBytes: 2048 })
+  assert.deepEqual(calls[0][2], { timeout: 90000, chunkTimeout: 4500, maxBytes: 2048, signal: null })
+  await files.read({ path: '/a', timeout: null, chunkTimeout: 12000 })
+  assert.deepEqual(calls[1][2], { timeout: null, chunkTimeout: 12000, maxBytes: null, signal: null })
+  for (const timeout of [0, -1, NaN, Infinity, '100']) {
+    await assert.rejects(files.read({ path: '/a', timeout }), RangeError)
+  }
+  for (const chunkTimeout of [null, 0, -1, NaN, Infinity, '100']) {
+    await assert.rejects(files.read({ path: '/a', chunkTimeout }), RangeError)
+  }
+  assert.equal(calls.length, 2, 'invalid timeout settings must fail before device I/O')
+})
+
+function installSimulatedFileRead(repl, data, { commandDurationMs, advanceClock }) {
+  const budgets = []
+  repl._execPy = async (source, timeout) => {
+    budgets.push(timeout)
+    if (commandDurationMs > timeout) {
+      advanceClock(timeout)
+      throw Object.assign(new Error('repl exec timeout'), { code: 'TIMEOUT' })
+    }
+    advanceClock(commandDurationMs)
+    const offset = Number(/f.seek\((\d+)\)/.exec(source)[1])
+    const count = Number(/f.read\((\d+)\)/.exec(source)[1])
+    const chunk = data.slice(offset, offset + count)
+    const hex = [...chunk].map(byte => byte.toString(16).padStart(2, '0')).join('')
+    return `__EVREAD_OK__${data.length}:${chunk.length}:${hex}\n`
+  }
+  return budgets
+}
+
+test('a 56 KiB file read can take longer than 30 seconds with a fresh bound per REPL command', async () => {
+  const repl = new EvRepl({ writeEvmux() {} })
+  const data = Uint8Array.from({ length: 56 * 1024 }, (_, index) => index % 256)
+  const originalNow = Date.now
+  let now = 100000
+  Date.now = () => now
+  try {
+    const budgets = installSimulatedFileRead(repl, data, {
+      commandDurationMs: 1000,
+      advanceClock: duration => { now += duration },
+    })
+    assert.deepEqual(await repl.readFile('/slow.bin'), data)
+    assert.equal(now - 100000, 56000)
+    assert.equal(budgets.length, 56)
+    assert.ok(budgets.every(timeout => timeout === 30000))
+  } finally {
+    Date.now = originalNow
+  }
+})
+
+test('file reads keep per-command bounds and an optional aggregate deadline', async () => {
+  const data = Uint8Array.from({ length: 4096 }, (_, index) => index % 256)
+  const originalNow = Date.now
+  let now = 200000
+  Date.now = () => now
+  try {
+    const chunkedRepl = new EvRepl({ writeEvmux() {} })
+    const chunkBudgets = installSimulatedFileRead(chunkedRepl, data, {
+      commandDurationMs: 4000,
+      advanceClock: duration => { now += duration },
+    })
+    assert.deepEqual(await chunkedRepl.readFile('/slow.bin', { timeout: 20000, chunkTimeout: 5000 }), data)
+    assert.deepEqual(chunkBudgets, [5000, 5000, 5000, 5000])
+
+    now = 300000
+    const totalTimeoutRepl = new EvRepl({ writeEvmux() {} })
+    const totalBudgets = installSimulatedFileRead(totalTimeoutRepl, data, {
+      commandDurationMs: 8000,
+      advanceClock: duration => { now += duration },
+    })
+    await assert.rejects(
+      totalTimeoutRepl.readFile('/slow.bin', { timeout: 25000, chunkTimeout: 30000 }),
+      { code: 'TIMEOUT' },
+    )
+    assert.deepEqual(totalBudgets, [25000, 17000, 9000, 1000])
+  } finally {
+    Date.now = originalNow
+  }
 })
 
 test('file listing passes scoped path and recursion without walking the entire device', async () => {

@@ -4,7 +4,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createDevice } from '../src/index.js'
 import { firmwareSha256 } from '../src/firmware_flash.js'
-import { parseCli, runCli } from '../src/cli.js'
 
 async function fixture() {
   const data = new Uint8Array(0x11000).fill(0xff), calls = []
@@ -107,20 +106,4 @@ test('installation with damaged readback does not reset or report success', asyn
   const f = await fixture(); f.loader.readFlash = async (_offset, count) => new Uint8Array(count)
   await assert.rejects(f.device.firmware.update(f.request), /verification failed/)
   assert.ok(!f.calls.includes('reset')); assert.equal(f.calls.at(-1), 'close')
-})
-
-test('CLI install uses ROM directly and passes mode through both check and update', async () => {
-  const f = await fixture(), checked = []
-  const options = parseCli(['firmware', 'update', '--mode', 'install', '--board', 'BOARD', '--port', '/dev/ttyACM0', '--version', 'new'])
-  const result = await runCli(options, {
-    transportFor: () => { throw new Error('No application transport should be acquired') },
-    async readFile() { throw new Error('No user catalog required') },
-    createDevice: () => ({ firmware: {
-      async check(request) { checked.push(request.mode); return { release: f.release } },
-      async update(request) { assert.equal(request.mode, 'install'); return { verified: true } },
-    }, async disconnect() {} }),
-  })
-  assert.equal(result.verified, true); assert.deepEqual(checked, ['install'])
-  assert.throws(() => parseCli(['firmware', 'update', '--mode', 'install', '--port', 'COM3', '--version', 'new']), /explicit --board/)
-  assert.throws(() => parseCli(['firmware', 'update', '--mode', 'install', '--tcp', 'host', '--board', 'BOARD', '--version', 'new']), /local --port/)
 })

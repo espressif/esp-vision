@@ -1,12 +1,29 @@
 # Changelog
 
-## 0.4.2 (unreleased)
+## [Unreleased]
+
+### Changed
+
+- Move the host management CLI to the standalone `@esp-vision/device-cli` package and keep passive Node inventory helpers available from `@esp-vision/device-core/node`.
+
+### Fixed
+
+- Detach started Python runs from connection-lifetime cancellation after VM entry, so normal disconnect releases ownership without sending a remote stop; retain caller AbortSignal cancellation.
+
+- Wait for a private VM-entry sentinel before resolving detached Python startup, with bounded startup waits and session-isolated output.
+
+- Add validated `connect({ probeRepl: false })` for non-interrupting native RPC access and use it for metadata inventory probes; retain the existing active connection default.
+
+- Make aggregate deadlines optional by default for completed Python runs and file reads while retaining bounded REPL exchanges and per-chunk file-read limits.
+- Keep wait-mode small-source execution on the REPL until its completion sentinel arrives, without imposing a fixed program-completion timeout or requiring device storage.
+
+## 0.4.2
 
 ### Fixed
 
 - Route browser ROM reset calls through the active flash stub after upload, preserving its two-byte status decoder during P4 watchdog register writes; report reset failure diagnostics without invalidating successful firmware verification.
 
-## 0.4.1 (unreleased)
+## 0.4.1
 
 ### Fixed
 

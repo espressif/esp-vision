@@ -74,9 +74,13 @@ export class EvRepl {
         this.buffer = ''
         this.waiters = []
         this.onScriptEnd = null
+        this.scriptStartMarker = null
+        this.scriptStartSeen = false
+        this.scriptStartWaiter = null
         this.scriptEndMarker = null
         this.scriptEndCommand = null
         this.scriptSentinelSeq = 0
+        this.scriptEndPromptOffset = null
         this.execQueue = Promise.resolve()
         this.closedError = null
         this.inputMaxBytes = EV_REPL_INPUT_MAX_BYTES
@@ -94,11 +98,70 @@ export class EvRepl {
         return `${this.scriptEndCommand}\r\n`
     }
 
-    createScriptRunCommand(path) {
+    createScriptStartSentinel() {
+        const randomId = globalThis.crypto?.randomUUID?.() ||
+            `${Date.now().toString(36)}-${++this.scriptSentinelSeq}`
+        this.scriptStartMarker = `~~EVSCRIPT-START:${randomId}~~`
+        this.scriptStartSeen = false
+        return `print(${pythonString(this.scriptStartMarker)})`
+    }
+
+    waitForScriptStart({ timeout = 5000, signal = null } = {}) {
+        if (!Number.isFinite(timeout) || timeout <= 0) {
+            throw new RangeError('Script start acknowledgement timeout must be positive')
+        }
+        if (this.scriptStartSeen) {
+            this.scriptStartSeen = false
+            return Promise.resolve()
+        }
+        if (!this.scriptStartMarker) {
+            return Promise.reject(Object.assign(new Error('Script start acknowledgement is unavailable'), {
+                code: 'SCRIPT_START_MISSING',
+            }))
+        }
+        if (signal?.aborted) {
+            return Promise.reject(abortReason(signal))
+        }
+        if (this.scriptStartWaiter) return this.scriptStartWaiter.promise
+
+        let waiter
+        const promise = new Promise((resolve, reject) => {
+            const cleanup = () => {
+                clearTimeout(waiter.timer)
+                signal?.removeEventListener('abort', onAbort)
+                if (this.scriptStartWaiter === waiter) this.scriptStartWaiter = null
+            }
+            const settle = (callback, value) => {
+                cleanup()
+                callback(value)
+            }
+            const onAbort = () => settle(reject, abortReason(signal))
+            waiter = {
+                promise: null,
+                resolve: () => {
+                    this.scriptStartSeen = false
+                    settle(resolve)
+                },
+                reject: error => settle(reject, error),
+                timer: setTimeout(() => settle(reject, Object.assign(
+                    new Error(`script start acknowledgement timeout after ${timeout}ms`),
+                    { code: 'SCRIPT_START_TIMEOUT' },
+                )), timeout),
+            }
+            this.scriptStartWaiter = waiter
+            signal?.addEventListener('abort', onAbort, { once: true })
+            if (signal?.aborted) onAbort()
+        })
+        waiter.promise = promise
+        return promise
+    }
+
+    createScriptRunCommand(path, { acknowledgeStart = false } = {}) {
+        const start = acknowledgeStart ? this.createScriptStartSentinel() : null
         const end = this.createScriptEndSentinel().trim()
         // Generate completion inside the running statement. A second queued
         // stdin command would otherwise be consumed by Python input().
-        const source = target => `try:\n execfile(${target})\nexcept BaseException as __evcore_error:\n __import__('sys').print_exception(__evcore_error)\nfinally:\n ${end}`
+        const source = target => `try:\n${start ? ` ${start}\n` : ''} execfile(${target})\nexcept BaseException as __evcore_error:\n __import__('sys').print_exception(__evcore_error)\nfinally:\n ${end}`
         let command = `exec("${escapeForExec(source(pythonString(path)))}")\r\n`
         this.scriptRunPrelude = null
         if (new TextEncoder().encode(command).length > this.inputMaxBytes) {
@@ -115,11 +178,59 @@ export class EvRepl {
         return command
     }
 
-    cancelScriptEndSentinel() {
+    createInlineSourceAssignments(source, variableName) {
+        if (typeof source !== 'string' || !/^__[A-Za-z0-9_]+$/.test(variableName)) {
+            throw new TypeError('Inline Python source requires a string and a private variable name')
+        }
+        const characters = Array.from(source)
+        const statements = []
+        let chunk = ''
+        const statementFor = (value, first) => `${variableName}${first ? '=' : '+='}${JSON.stringify(value)}`
+        for (const character of characters) {
+            const candidate = chunk + character
+            const candidateStatement = statementFor(candidate, statements.length === 0)
+            if (this.execInputBytes(candidateStatement) <= this.inputMaxBytes) {
+                chunk = candidate
+                continue
+            }
+            if (!chunk) throw new Error('Inline Python source character exceeds the REPL input limit')
+            statements.push(statementFor(chunk, statements.length === 0))
+            chunk = character
+            if (this.execInputBytes(statementFor(chunk, false)) > this.inputMaxBytes) {
+                throw new Error('Inline Python source character exceeds the REPL input limit')
+            }
+        }
+        if (chunk || statements.length === 0) statements.push(statementFor(chunk, statements.length === 0))
+        return statements
+    }
+
+    createInlineScriptRunCommand(variableName) {
+        if (!/^__[A-Za-z0-9_]+$/.test(variableName)) {
+            throw new TypeError('Inline Python run requires a private variable name')
+        }
+        const end = this.createScriptEndSentinel().trim()
+        const source = `try:\n exec(${variableName})\nexcept BaseException as __evcore_error:\n __import__('sys').print_exception(__evcore_error)\nfinally:\n try:\n  del ${variableName}\n except NameError:\n  pass\n ${end}`
+        const command = `exec("${escapeForExec(source)}")\r\n`
+        if (new TextEncoder().encode(command).length > this.inputMaxBytes) {
+            this.cancelScriptEndSentinel()
+            throw new Error('Inline Python runner exceeds the REPL input limit')
+        }
+        this.scriptEndCommand = command.trimEnd()
+        this.scriptRunEcho = true
+        return command
+    }
+
+    cancelScriptEndSentinel(error = null) {
+        this.scriptStartMarker = null
+        this.scriptStartSeen = false
+        this.scriptStartWaiter?.reject(error || Object.assign(new Error('Script ended before its start acknowledgement'), {
+            code: 'SCRIPT_START_MISSING',
+        }))
         this.scriptEndMarker = null
         this.scriptEndCommand = null
         this.scriptRunEcho = false
         this.scriptRunPrelude = null
+        this.scriptEndPromptOffset = null
     }
 
     /**
@@ -138,6 +249,7 @@ export class EvRepl {
                 this.scriptRunEcho = false
             }
         }
+        this.drainScriptStart()
         const marker = this.scriptEndMarker
         if (!marker) {
             return
@@ -180,7 +292,39 @@ export class EvRepl {
             }
             this.buffer = before + this.buffer.slice(end)
             this.cancelScriptEndSentinel()
+            this.scriptEndPromptOffset = before.length
             this.onScriptEnd?.()
+            return
+        }
+    }
+
+    drainScriptStart() {
+        const marker = this.scriptStartMarker
+        if (!marker) return
+        let searchFrom = 0
+        for (;;) {
+            const at = this.buffer.indexOf(marker, searchFrom)
+            if (at < 0) return
+            let end = at + marker.length
+            const tail = this.buffer[end]
+            if (tail === undefined) return
+            if (tail !== '\r' && tail !== '\n') {
+                // The friendly-REPL echo includes the marker inside the
+                // runner command. Only its standalone printed line is proof
+                // that the VM entered the runner.
+                searchFrom = end
+                continue
+            }
+            if (tail === '\r') {
+                if (end + 1 >= this.buffer.length) return
+                end += this.buffer[end + 1] === '\n' ? 2 : 1
+            } else {
+                end += 1
+            }
+            this.buffer = this.buffer.slice(0, at) + this.buffer.slice(end)
+            this.scriptStartMarker = null
+            this.scriptStartSeen = true
+            this.scriptStartWaiter?.resolve()
             return
         }
     }
@@ -201,11 +345,13 @@ export class EvRepl {
             // until its output marker arrives and both can be removed.
             return this.buffer.length - commandAt
         }
-        if (this.buffer.endsWith(marker + '\r')) {
-            return marker.length + 1
+        for (const activeMarker of [this.scriptStartMarker, marker]) {
+            if (activeMarker && this.buffer.endsWith(activeMarker + '\r')) {
+                return activeMarker.length + 1
+            }
         }
         let hold = 0
-        for (const candidate of [marker, this.scriptEndCommand]) {
+        for (const candidate of [this.scriptStartMarker, marker, this.scriptEndCommand]) {
             if (!candidate) {
                 continue
             }
@@ -234,12 +380,29 @@ export class EvRepl {
         }
         this.buffer += text
         this.drainScriptEnd()
+        let passthrough = ''
+        let holdPromptTail = false
+        if (this.scriptEndPromptOffset !== null) {
+            const prefix = this.buffer.slice(0, this.scriptEndPromptOffset)
+            const tail = this.buffer.slice(this.scriptEndPromptOffset)
+            if (tail.length < PROMPT.length && PROMPT.startsWith(tail)) {
+                this.buffer = tail
+                this.scriptEndPromptOffset = 0
+                passthrough = prefix
+                holdPromptTail = true
+            } else if (tail.startsWith(PROMPT)) {
+                this.buffer = prefix + tail.slice(PROMPT.length)
+                this.scriptEndPromptOffset = null
+            } else {
+                this.scriptEndPromptOffset = null
+            }
+        }
         this.drain()
         if (this.waiters.length === 0) {
-            const hold = this.partialMarkerTail()
+            const hold = holdPromptTail ? this.buffer.length : this.partialMarkerTail()
             const out = this.buffer.slice(0, this.buffer.length - hold)
             this.buffer = this.buffer.slice(this.buffer.length - hold)
-            return out
+            return passthrough + out
         }
         return ''
     }
@@ -278,7 +441,7 @@ export class EvRepl {
             waiter.removeAbortListener?.()
             waiter.reject(error)
         }
-        this.cancelScriptEndSentinel()
+        this.cancelScriptEndSentinel(error)
         this.buffer = ''
     }
 
@@ -305,11 +468,11 @@ export class EvRepl {
         return result
     }
 
-    writeStdin(data) {
+    writeStdin(data, { signal = null } = {}) {
         return this.enqueue(async () => {
             const bytes = data instanceof Uint8Array ? data : new TextEncoder().encode(data)
             if (bytes.length <= this.inputMaxBytes) {
-                return this.writeEvmux('repl.stdin', 'data', null, data)
+                return this.writeEvmux('repl.stdin', 'data', null, data, { signal })
             }
             let result
             for (let offset = 0; offset < bytes.length; offset += this.inputMaxBytes) {
@@ -318,10 +481,11 @@ export class EvRepl {
                     'data',
                     null,
                     bytes.subarray(offset, Math.min(offset + this.inputMaxBytes, bytes.length)),
+                    { signal },
                 )
             }
             return result
-        })
+        }, { signal })
     }
 
     execLine(line, { timeout = 8000, signal = null } = {}) {
@@ -353,7 +517,7 @@ export class EvRepl {
                 reject(error)
             }
             const timer = setTimeout(() => {
-                fail(new Error(`repl exec timeout: ${line.slice(0, 60)}`))
+                fail(Object.assign(new Error(`repl exec timeout: ${line.slice(0, 60)}`), { code: 'TIMEOUT' }))
             }, timeout)
             const abort = () => {
                 fail(abortReason(signal))
@@ -385,7 +549,7 @@ export class EvRepl {
         completion.catch(() => {})
         if (signal?.aborted) return completion
         try {
-            await this.writeEvmux('repl.stdin', 'data', null, line + '\r\n')
+            await this.writeEvmux('repl.stdin', 'data', null, line + '\r\n', { signal })
             commandWritten = true
         } catch (err) {
             const index = this.waiters.indexOf(waiter)
@@ -553,14 +717,26 @@ walk('')
         return result
     }
 
-    async readFile(fn, { timeout = 30000, signal = null, maxBytes = null } = {}) {
+    async readFile(fn, { timeout = null, chunkTimeout = 30000, signal = null, maxBytes = null } = {}) {
+        if (timeout !== null && (!Number.isFinite(timeout) || timeout <= 0)) {
+            throw new RangeError('Device file read timeout must be positive or null')
+        }
+        if (!Number.isFinite(chunkTimeout) || chunkTimeout <= 0) {
+            throw new RangeError('Device file read chunk timeout must be positive')
+        }
         if (maxBytes !== null && (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > 16 * 1024 * 1024)) {
             throw Object.assign(new Error('Invalid bounded file read limit'), { code: 'DEVICE_READ_LIMIT_INVALID' })
         }
         // Keep each stdout burst bounded, allowing the transport task to send
         // keepalives between chunks. Serialize the whole read with REPL work.
         return this.enqueue(async () => {
-            const deadline = Date.now() + timeout
+            const deadline = timeout === null ? null : Date.now() + timeout
+            const commandBudget = () => {
+                if (deadline === null) return chunkTimeout
+                const remaining = deadline - Date.now()
+                if (remaining <= 0) throw Object.assign(new Error('Device file read timeout'), { code: 'TIMEOUT' })
+                return Math.min(chunkTimeout, remaining)
+            }
             const chunks = []
             let offset = 0
             let size = null
@@ -568,8 +744,6 @@ walk('')
             const incomplete = () => Object.assign(new Error(`Incomplete file response for ${fn}`), { code: 'DEVICE_FILE_READ_INCOMPLETE' })
             for (;;) {
                 throwIfAborted(signal)
-                const remaining = deadline - Date.now()
-                if (remaining <= 0) throw new Error('Device file read timeout')
                 const count = maxBytes === null ? 1024 : Math.min(1024, maxBytes - offset + 1)
                 let source = `
 import binascii
@@ -584,13 +758,13 @@ except Exception as e:
  print('__EVREAD_ERROR__'+repr(e))
 `
                 if (this.execInputBytes(source) > this.inputMaxBytes) {
-                    await this._execPy(`__evcore_read_path=${pythonString(fn)}`, remaining, signal)
+                    await this._execPy(`__evcore_read_path=${pythonString(fn)}`, commandBudget(), signal)
+                    commandBudget()
                     source = source.replace(filePath, '__evcore_read_path')
                     filePath = '__evcore_read_path'
                 }
-                const budget = deadline - Date.now()
-                if (budget <= 0) throw new Error('Device file read timeout')
-                const rsp = await this._execPy(source, budget, signal)
+                const rsp = await this._execPy(source, commandBudget(), signal)
+                commandBudget()
                 const errorAt = rsp.indexOf('__EVREAD_ERROR__')
                 if (errorAt >= 0) throw new Error(`Unable to read ${fn}: ${rsp.slice(errorAt + 16).trim()}`)
                 const match = /(?:^|\n)__EVREAD_OK__(\d+):(\d+):([0-9a-fA-F]*)\s*$/.exec(rsp)

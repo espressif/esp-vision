@@ -8,6 +8,15 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Added a unified GitHub Issues reporting entry in both READMEs and English-language issue forms for IDE, website, Host Device Core, and firmware problems.
 - Added mandatory target regressions for P4 camera/LCD coexistence and shutdown/restart, unsupported Image keyword rejection, caller-owned snapshot buffers, and the configured allocation policy.
+- Expose passive Node device inventory and adapter asset URLs as public Device Core APIs.
+
+### Changed
+
+- Require an explicit manual action for protected default-branch npm publication, separating merge approval from public release.
+
+- Unified ESP-VISION-owned heap allocation around `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` while retaining requested DMA capabilities; set a 16 KiB internal-memory boundary on PSRAM-enabled P4 boards and the P4 template.
+- Qualify ESP32-P4/S3 firmware and hardware CI on pinned ESP-IDF v5.5.6, retain release/v6.1 for ESP32-S31, and align release packaging dependencies with this board-specific matrix. Document the required IDF environments and possible build/runtime/Python API changes with other versions in English and Chinese.
+- Release Device Core 0.5.0 as an SDK-only package; move the management command to the standalone Device CLI with an explicit 0.4.x migration path.
 
 ### Changed
 
@@ -26,6 +35,12 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Keep SDK-only hardware-fixture regression tests independent of an installed Python interpreter; verify bounded source reconstruction in Node and execute the fixture through real Core hardware acceptance.
 - Load hardware-test fixtures in RAM within the negotiated REPL input limit instead of requiring Flash file uploads for memory/camera/display checks. Report storage state separately and fail explicit file acceptance on unmounted volumes without formatting. Bind target-test startup and runtime checks to the selected board/build identity and require every selected CI check to pass. Ship the updated packaged hardware tools as Device Core 0.4.1 to avoid republishing changed 0.4.0 content.
 - Dispatch queued VM RPCs at bounded main-thread Python safe points so live camera/LCD applications can serve capture requests without returning to the REPL; preserve session authentication and output isolation.
+- Align the SDK installation example with the reviewed detached-execution version.
+- Keep acknowledged Python runs alive when disconnecting the host session while preserving caller-requested cancellation.
+- Confirm detached Python startup from VM execution before releasing the CLI session, so queued input cannot disappear behind a successful start result.
+- Expose passive Device Core connections and keep metadata inventory probes from interrupting running Python programs; document session-local execution state.
+- Honor omitted aggregate Python and file-read deadlines, including short in-memory Python sources; retain bounded protocol setup and chunk waits with cancellation and session cleanup.
+- Lock POSIX serial adapters before opening and drain child diagnostics before classifying failures so concurrent CLI attempts report SERIAL_BUSY without stealing device bytes.
 
 ## [2026.10.19]
 

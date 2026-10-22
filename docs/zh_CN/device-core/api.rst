@@ -93,9 +93,9 @@ device.discover(options)
 device.connect(options)
 ----------------------------------------------
 
-``{ transport?, role = "unknown", expectedDevice = null, timeout = 30000, signal? } → Promise<Inspection>``
+``{ transport?, role = "unknown", expectedDevice = null, timeout = 30000, probeRepl = true, signal? } → Promise<Inspection>``
 
-``role`` 接受 ``unknown``、``usj``、``usb``、``uart``、``tcp``。Core 先订阅再打开连接，协商 v4，按需检查 ``expectedDevice``，获取会话并探测 REPL。返回默认查询结果 identity/capabilities/runtime。正在连接、已连接或正在断开的对象会以 ``DEVICE_BUSY`` 拒绝重复连接。身份匹配不等于认证。连接可能中断既有 Python 程序，不是无副作用的在线探测。
+``role`` 接受 ``unknown``、``usj``、``usb``、``uart``、``tcp``。Core 先订阅再打开连接，协商 v4，按需检查 ``expectedDevice``，获取会话并探测 REPL。返回默认查询结果 identity/capabilities/runtime。正在连接、已连接或正在断开的对象会以 ``DEVICE_BUSY`` 拒绝重复连接。身份匹配不等于认证。默认 ``probeRepl: true`` 会发送中断并探测 REPL，因此可能停止既有 Python 程序。设置 ``probeRepl: false`` 可获取 EV-MUX 会话而不发送 REPL 输入，供程序持续运行时观测或调用原生 RPC；仍遵循会话所有权，不会强制抢占。后续 Python 执行和依赖 REPL 的文件操作仍可能中断程序。该参数只接受布尔值。
 
 device.disconnect()
 --------------------------------------
@@ -118,7 +118,7 @@ device.inspect(request)
    * - ``capabilities``
      - 协商得到的固件能力、features、channels、limits。
    * - ``runtime``
-     - 会话/parser/transport 快照，附 vmReady、vmEpoch 和当前 run 或 null。
+     - 会话/parser/transport 快照，附 vmReady、vmEpoch 和当前 run 或 null。``scriptRunning`` 和 ``run`` 只跟踪本 SDK 会话启动的执行；新连接不能根据 false/null 判断设备上的后台程序空闲。``vmReady`` 表示 VM 已启动，不表示空闲。
    * - ``network``
      - network.status 结果，包括 enabled/configured/state/IPv4 与事务状态，不含已保存密码。
    * - ``storage``
@@ -174,9 +174,9 @@ device.python.input(data)
 device.python.execute(request)
 ------------------------------------------------------------
 
-``{ source? | path?, completion = "wait", timeout = 10000, maxOutputChars?, signal? }``
+``{ source? | path?, completion = "wait", timeout = null, maxOutputChars?, signal? }``
 
-``source``（字符串）与 ``path``（设备绝对路径）必须且只能提供一个。``completion: "wait"`` 返回 ``{ ok, path, output, outputTruncated }``，直接执行 source 时 path 为 null。``completion: "start"`` 返回 ``{ ok: true, path, done }``，done 完成后返回同样的结果结构。``timeout`` 仅允许用于 wait 模式。``maxOutputChars`` 为非负整数，限制保留的输出字符数，不限制串口带宽或脚本运行时长。
+``source``（字符串）与 ``path``（设备绝对路径）必须且只能提供一个。``completion: "wait"`` 返回 ``{ ok, path, output, outputTruncated }``，直接执行 source 时 path 为 null。``completion: "start"`` 返回 ``{ ok: true, path, done }``，done 完成后返回同样的结果结构。start 返回前会等待生成的 runner 发出私有 VM 进入标记，不代表应用初始化或执行完成。``timeout`` 仅允许用于 wait 模式；省略或 null 表示无整体执行时限，准备阶段的协议交互仍有边界。``maxOutputChars`` 为非负整数，限制保留的输出字符数，不限制串口带宽或脚本运行时长。
 
 .. code-block:: javascript
 
@@ -189,7 +189,7 @@ device.python.execute(request)
      console.log(await run.done)
    } finally { off() }
 
-示例 terminal 由 UI 提供。start 模式的 source 会上传到 Core 拥有的唯一临时文件，运行完成后清理；传入的用户 path 不会因此被删除。取消或断线可能使完成状态未知或清理未完成。须检查输出中的 Python traceback，``ok`` 是执行/传输结果，不能通用地断言任意 Python 程序获得了正确业务结果。
+示例 terminal 由 UI 提供。start 模式的 source 会上传到 Core 拥有的唯一临时文件，运行完成后清理；传入的用户 path 不会因此被删除。start 句柄返回后，``device.disconnect()`` 会释放会话但不会请求停止程序；会话关闭时 ``done`` 在本地拒绝，设备上的程序可能继续运行。请求中的 ``signal`` 会一直绑定到 ``done`` 结束；会话仍可用时，取消会请求停止程序。断线可能导致临时文件未清理。Python stdout 始终绑定原 EV-MUX 会话，无法由新连接重新接收；需要实时输出时应保持会话，用截图或应用进度文件确认后台程序状态。须检查输出中的 Python traceback，``ok`` 是执行/传输结果，不能通用地断言任意 Python 程序获得了正确业务结果。
 
 设备文件操作
 --------------------------------
@@ -206,9 +206,9 @@ device.files.list(request = {})
 device.files.read(request)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``{ path, encoding = "binary", timeout = 30000, maxBytes = null, signal? }``
+``{ path, encoding = "binary", timeout = null, chunkTimeout = 30000, maxBytes = null, signal? }``
 
-binary 返回 Uint8Array，utf-8 返回字符串。maxBytes 为 null 或 0..16777216 的整数，限制整文件读取；超限会拒绝，不会悄悄返回文件前缀。
+binary 返回 Uint8Array，utf-8 返回字符串。省略/null ``timeout`` 表示无整体读取时限；``chunkTimeout`` 限制每次 REPL 交互，默认 30000 毫秒。显式指定整体时限时，每次交互也受剩余时间限制。maxBytes 为 null 或 0..16777216 的整数，限制整文件读取；超限会拒绝，不会悄悄返回文件前缀。
 
 device.files.write(request)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

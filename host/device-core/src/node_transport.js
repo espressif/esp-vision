@@ -46,20 +46,49 @@ export function serialTransport(options) {
       return new Promise((resolveConnect, reject) => {
         const adapter = fileURLToPath(new URL('./node_serial.py', import.meta.url))
         child = spawn(options.python, ['-u', adapter, options.serial], { stdio: ['pipe', 'pipe', 'pipe'] })
-        let ready = false, stderr = ''
-        const abort = () => { child.kill('SIGTERM'); reject(fail('CANCELLED', 'Serial connection cancelled')) }
+        let ready = false, settled = false, runtimeErrorReported = false, stderr = ''
+        const abort = () => {
+          child.kill('SIGTERM')
+          if (!settled) {
+            settled = true
+            reject(fail('CANCELLED', 'Serial connection cancelled'))
+          }
+        }
         const cleanup = () => signal.removeEventListener('abort', abort)
-        const error = () => { cleanup(); const code = ['SERIAL_ACCESS_DENIED', 'SERIAL_BUSY'].find(code => stderr.includes(code)) ?? 'SERIAL_ERROR'; const error = fail(code, 'Serial adapter failed; ensure Python, pyserial and port access are available'); reject(error); events.emit('error', error) }
-        child.on('error', error)
-        child.stdin.on('error', error)
+        const serialError = () => {
+          const code = ['SERIAL_ACCESS_DENIED', 'SERIAL_BUSY'].find(code => stderr.includes(code)) ?? 'SERIAL_ERROR'
+          return fail(code, 'Serial adapter failed; ensure Python, pyserial and port access are available')
+        }
+        const failBeforeReady = () => {
+          if (settled) return
+          settled = true
+          cleanup()
+          const error = serialError()
+          reject(error)
+          events.emit('error', error)
+        }
+        const reportRuntimeError = () => {
+          if (runtimeErrorReported) return
+          runtimeErrorReported = true
+          events.emit('error', serialError())
+        }
+        child.on('error', () => { if (ready) reportRuntimeError() })
+        child.stdin.on('error', () => { if (ready) reportRuntimeError() })
         child.stdout.on('data', bytes => events.emit('data', bytes))
         child.stderr.on('data', bytes => {
           if (ready) return
           // Do not print Python errors: they can contain host paths or device data.
           stderr = (stderr + bytes.toString()).slice(-128)
-          if (stderr.split(/\r?\n/).includes('READY')) { ready = true; cleanup(); resolveConnect() }
+          if (stderr.split(/\r?\n/).includes('READY')) {
+            ready = true
+            settled = true
+            cleanup()
+            resolveConnect()
+          }
         })
-        child.on('exit', () => { cleanup(); if (!ready) error(); events.emit('close') })
+        // Wait for close rather than exit: stdout/stderr may still have buffered
+        // data after exit, including the adapter's stable SERIAL_BUSY marker.
+        child.on('close', () => { cleanup(); if (!ready) failBeforeReady(); events.emit('close') })
         signal.addEventListener('abort', abort, { once: true })
         if (signal.aborted) abort()
       })

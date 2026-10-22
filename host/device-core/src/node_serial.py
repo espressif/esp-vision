@@ -10,6 +10,13 @@ import threading
 import serial
 
 
+def _configure_serial_exclusive(port, platform=os.name):
+    # pyserial implements this as a non-blocking advisory lock on POSIX. The
+    # Windows backend does not support this option, so leave its behavior alone.
+    if platform == 'posix':
+        port.exclusive = True
+
+
 def main():
     if sys.argv[1] == '--list':
         from serial.tools.list_ports import comports
@@ -23,6 +30,7 @@ def main():
     port.rts = False
     port.dtr = True
     port.port = sys.argv[1]
+    _configure_serial_exclusive(port)
     stopped = threading.Event()
 
     def terminate(*_args):
@@ -64,6 +72,6 @@ if __name__ == '__main__':
         main()
     except Exception as error:
         text = str(error).lower()
-        code = 'SERIAL_ACCESS_DENIED' if ('permission denied' in text or 'access is denied' in text or 'access denied' in text) else 'SERIAL_BUSY' if ('resource busy' in text or 'exclusively lock' in text) else 'SERIAL_ERROR'
+        code = 'SERIAL_ACCESS_DENIED' if ('permission denied' in text or 'access is denied' in text or 'access denied' in text) else 'SERIAL_BUSY' if ('resource busy' in text or 'resource temporarily unavailable' in text or 'exclusively lock' in text) else 'SERIAL_ERROR'
         print(code, file=sys.stderr, flush=True)
         sys.exit(2)

@@ -93,9 +93,9 @@ The example is illustrative metadata, not a device to connect to. ``deviceId`` i
 device.connect(options)
 ----------------------------------------------
 
-``{ transport?, role = "unknown", expectedDevice = null, timeout = 30000, signal? } → Promise<Inspection>``
+``{ transport?, role = "unknown", expectedDevice = null, timeout = 30000, probeRepl = true, signal? } → Promise<Inspection>``
 
-``role`` accepts ``unknown``, ``usj``, ``usb``, ``uart`` or ``tcp``. Core subscribes before opening transport, negotiates v4, checks ``expectedDevice`` when provided, acquires a session and probes the REPL. The result is the default inspection (identity/capabilities/runtime). An already connecting, connected or disconnecting instance rejects with ``DEVICE_BUSY``. Identity matching is not authentication. Connection can interrupt an existing Python program; it is not a read-only liveness probe.
+``role`` accepts ``unknown``, ``usj``, ``usb``, ``uart`` or ``tcp``. Core subscribes before opening transport, negotiates v4, checks ``expectedDevice`` when provided, acquires a session and probes the REPL. The result is the default inspection (identity/capabilities/runtime). An already connecting, connected or disconnecting instance rejects with ``DEVICE_BUSY``. Identity matching is not authentication. The default ``probeRepl: true`` sends an interrupt and probes the REPL, which can stop an existing Python program. Set ``probeRepl: false`` to acquire the EV-MUX session without sending REPL input, for observation or native RPC operations while a program continues running. This still acquires the device session and respects ownership; it is not a force-takeover option. Python execution and REPL-backed file operations can subsequently interrupt the program. The option must be a boolean.
 
 device.disconnect()
 --------------------------------------
@@ -118,7 +118,7 @@ device.inspect(request)
    * - ``capabilities``
      - Negotiated firmware capabilities, features, channels and limits.
    * - ``runtime``
-     - Session/parser/transport snapshot plus vmReady, vmEpoch and current run or null.
+     - Session/parser/transport snapshot plus vmReady, vmEpoch and current run or null. ``scriptRunning`` and ``run`` track executions started by this SDK session; a fresh connection cannot use false/null to establish that a detached program is idle. ``vmReady`` means the VM has started, not that it is idle.
    * - ``network``
      - network.status reply including enabled/configured/state/IPv4 and operation state; no saved password.
    * - ``storage``
@@ -174,9 +174,9 @@ Accepts a string or Uint8Array, returns the underlying write Promise. Send ``\r`
 device.python.execute(request)
 ------------------------------------------------------------
 
-``{ source? | path?, completion = "wait", timeout = 10000, maxOutputChars?, signal? }``
+``{ source? | path?, completion = "wait", timeout = null, maxOutputChars?, signal? }``
 
-Provide exactly one of ``source`` (string) or ``path`` (absolute device file). With ``completion: "wait"``, resolves ``{ ok, path, output, outputTruncated }``; inline source has ``path: null``. With ``completion: "start"``, resolves ``{ ok: true, path, done }`` and ``done`` resolves the same result shape. ``timeout`` is accepted only for wait mode. ``maxOutputChars`` is a nonnegative integer controlling retained output, not UART bandwidth or script lifetime.
+Provide exactly one of ``source`` (string) or ``path`` (absolute device file). With ``completion: "wait"``, resolves ``{ ok, path, output, outputTruncated }``; inline source has ``path: null``. With ``completion: "start"``, resolves ``{ ok: true, path, done }`` and ``done`` resolves the same result shape. The start result follows a private VM-entry marker from the generated runner; it does not confirm application initialization or completion. ``timeout`` is accepted only for wait mode; omission or null means no aggregate execution deadline, while setup exchanges remain bounded. ``maxOutputChars`` is a nonnegative integer controlling retained output, not UART bandwidth or script lifetime.
 
 .. code-block:: javascript
 
@@ -189,7 +189,7 @@ Provide exactly one of ``source`` (string) or ``path`` (absolute device file). W
      console.log(await run.done)
    } finally { off() }
 
-Here ``terminal`` is supplied by the UI. Start mode uploads source to a unique Core-owned temporary file and removes it after completion; it does not remove a user-supplied path. Abort/disconnect may leave completion uncertain or cleanup incomplete. Inspect the returned output for Python tracebacks: ``ok`` is an execution/transport result and is not a universal assertion that arbitrary Python code produced a correct application result.
+Here ``terminal`` is supplied by the UI. Start mode uploads source to a unique Core-owned temporary file and removes it after completion; it does not remove a user-supplied path. After the start handle returns, ``device.disconnect()`` releases the session without requesting a stop; ``done`` rejects locally as the session closes, and the device program may continue. The request's ``signal`` remains bound until ``done`` settles and requests a stop if aborted while the session is available. Disconnect can prevent temporary-file cleanup. Python stdout remains tied to the original EV-MUX session and cannot be reattached from a new connection; keep the session open for live output and use captures or application progress artifacts to check a detached program. Inspect the returned output for Python tracebacks: ``ok`` is an execution/transport result and is not a universal assertion that arbitrary Python code produced a correct application result.
 
 Device file operations
 --------------------------------------------
@@ -206,9 +206,9 @@ Returns a flat array of { name, path, type: "file" | "directory", size }; direct
 device.files.read(request)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``{ path, encoding = "binary", timeout = 30000, maxBytes = null, signal? }``
+``{ path, encoding = "binary", timeout = null, chunkTimeout = 30000, maxBytes = null, signal? }``
 
-Returns Uint8Array for binary or string for utf-8. maxBytes is null or an integer 0..16777216 and bounds the complete file read; exceeding it rejects instead of returning a silent prefix.
+Returns Uint8Array for binary or string for utf-8. Omitted/null ``timeout`` means no aggregate read deadline; ``chunkTimeout`` bounds each REPL exchange and defaults to 30000 ms. An explicit positive total timeout caps each exchange by the remaining time. maxBytes is null or an integer 0..16777216 and bounds the complete file read; exceeding it rejects instead of returning a silent prefix.
 
 device.files.write(request)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

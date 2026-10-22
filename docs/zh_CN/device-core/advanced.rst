@@ -133,7 +133,7 @@ framed MicroPython REPL 协调器。io.writeEvmux(channel, type, method, payload
 ``EvRepl.walkFs({ signal = null } = {})``
     返回兼容接口使用的嵌套文件树。
 
-``EvRepl.readFile(fn, { timeout = 30000, signal = null, maxBytes = null } = {})``
+``EvRepl.readFile(fn, { timeout = null, chunkTimeout = 30000, signal = null, maxBytes = null } = {})``
     返回完整文件 Uint8Array；文件变化、超限或不完整时拒绝。
 
 ``EvRepl.touchFile(fn)``
@@ -216,7 +216,7 @@ DeviceSession
 ``DeviceSession.release({ timeout = 1200 } = {})``
     释放 EV-MUX 会话租约，Promise 返回 RPC 结果。
 
-``DeviceSession.executePython(source, { timeout = 8000, signal = null } = {})``
+``DeviceSession.executePython(source, { timeout = null, signal = null } = {})``
     通过 framed REPL 执行源码并返回输出。
 
 ``DeviceSession.interrupt()``

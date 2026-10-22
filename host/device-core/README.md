@@ -19,10 +19,10 @@
 | Visibility | Public; installation needs no npm login |
 | Source location | `host/device-core` in the ESP-VISION firmware repository |
 
-This source prepares **0.4.0 (not published by this change)** with browser ROM flashing, immutable release-manifest readers and application updates from a single complete BIN. npm 0.3.0 does not contain these APIs. The `/node` byte transports and bundled checks require 0.1.1; complete installation and `/node` `openNodeRom` are introduced in 0.3.0. Check the registry before using the 0.4.0 install examples; until publication, use a tarball packed from an exact reviewed source commit. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
+The latest public npm release is **0.4.2**. This source prepares **0.5.0 (not yet published)**: Core becomes an SDK-only package, the management CLI moves to `@esp-vision/device-cli`, and Python execution/file reads have no aggregate deadline unless configured. Pin the exact package version and verify it exists in the public registry before installing. Until publication, use a tarball packed from an exact reviewed source commit. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
 
 ```sh
-npm install --save-exact @esp-vision/device-core@0.4.0 --registry=https://registry.npmjs.org/
+npm install --save-exact @esp-vision/device-core@0.5.0 --registry=https://registry.npmjs.org/
 ```
 
 EV-MUX v4 firmware is required. A v3 hello is rejected with `VERSION_MISMATCH`; applications should ask the user to update firmware. Core has no runtime dependency on the IDE, Agent, DOM or Node serial libraries. The host supplies the physical byte transport and discovery adapter; Core owns protocol parsing, session negotiation, REPL coordination and device operations.
@@ -38,10 +38,10 @@ Documentation source lives in this repository under `docs/en/device-core/` and `
 
 ## Management CLI
 
-The npm package installs `esp-vision-device`. `inspect` combines passive wired/LAN enumeration and targeted queries. By default it lists USB serial candidates; `--all-ports` also includes native UART/Bluetooth ports. Explicit `--port` bypasses discovery filtering; `configure`, `control`, and `firmware check/update` cover management. See the [CLI guide](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/cli.html) ([中文](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/cli.html)).
+Starting with 0.5.0, Device Core is a library and does not install a management command. Existing 0.4.x installations retain their command until explicitly upgraded or removed. Install the independent `@esp-vision/device-cli` package when you need the device toolkit. It uses the public Core APIs and is installed explicitly; Device Core does not fetch or wrap the CLI. See the [CLI guide](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/device-core/cli.html) ([中文](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/device-core/cli.html)).
 
 ```sh
-npm install -g @esp-vision/device-core@0.4.0
+npm install -g @esp-vision/device-cli
 esp-vision-device inspect
 esp-vision-device inspect --all-ports
 esp-vision-device inspect --interface usj,usb --probe --json
@@ -110,7 +110,9 @@ try {
 }
 ```
 
-### Immutable release snapshots and a single firmware BIN (0.4.0, unpublished)
+`connect()` sends Ctrl-C and a short REPL liveness probe by default for compatibility. Pass `probeRepl: false` when a detached application may be running: Core still acquires the EV-MUX session and reads identity/capabilities, but leaves the REPL untouched. In this mode a reported `vmReady: false` stays false; Python operations that require a ready VM fail with a readiness error.
+
+### Immutable release snapshots and a single firmware BIN
 
 The `/firmware` entry exports `loadOfficialFirmware({ board?, version?, fetch?, signal? })` and `loadReleaseManifest({ url, sha256, version?, sourceCommit?, boards?, fetch?, signal? })`. The official reader prioritizes `[publication]` in `config.toml`, selects exactly one version reference and verifies its raw manifest SHA-256 before returning `{ schemaVersion: 1, version, sourceCommit, pipelineId, layout, releases, website, mcp?, publication }`. History references include exact board sets; unsupported board/version combinations and malformed explicit publication data reject without falling back to guessed URLs or old metadata. Configs without `[publication]` keep the legacy feed; an explicit version limits old metadata requests too.
 
@@ -128,11 +130,11 @@ const release = snapshot.releases.find(entry => entry.board === selectedBoard);
 
 In `layout: 'single-bin'`, `image.source = { url, bytes, sha256, offset }` describes the complete BIN; `image.url` equals its URL, while `image.bytes/sha256` still describe only the application. The source URL/length/hash must match `install`, and its offset must equal the application's flash offset. Core downloads the full container once (no Range request), validates its whole hash and embedded bootloader/partition/application hashes, then extracts and writes only the application in default update mode. Existing partition checks and full application readback remain mandatory; `mode: 'install'` writes the qualified complete BIN. With `image.source`, supplied `data` must also be the complete BIN; old application-only metadata keeps its existing raw-app `data` semantics. Manifests are bounded at 4 MiB, firmware downloads at 256 MiB and their approved exact size. Official manifest/artifact sources are confined to the ESP-VISION CDN root; model URLs use their full source commit and MCP has a version/commit/hash descriptor. No npm, firmware tag or CDN publication is performed by preparing this source version.
 
-To validate before npm publication, check out an exact reviewed commit, run `npm install --ignore-scripts --no-audit --no-fund --package-lock=false` and `npm run release:check` in `host/device-core`, then `npm pack --ignore-scripts --pack-destination <project-local-output>`. Install that locally produced tarball or use a source archive pinned to that exact commit. Do not claim that an unpublished 0.4.0 is available in the registry.
+To validate before npm publication, check out an exact reviewed commit, run `npm install --ignore-scripts --no-audit --no-fund --package-lock=false` and `npm run release:check` in `host/device-core`, then `npm pack --ignore-scripts --pack-destination <project-local-output>`. Install that locally produced tarball or use a source archive pinned to that exact commit.
 
-### Browser ROM flashing (unreleased)
+### Browser ROM flashing
 
-`@esp-vision/device-core/browser` exports `openBrowserRom({ port, logger?, signal? })`. Build from this branch until a new SDK release is published; installing 0.3.0 does not enable this API. The constructor is passive, and `initialize()` lazily loads the pinned `tasmota-webserial-esptool` browser backend. Use a browser bundler such as webpack, Vite or esbuild; direct native ESM loading of the upstream backend is not supported. No Python installation or consumer-side tasmota patch is needed. The root and `/node` entry points do not load browser modules.
+`@esp-vision/device-core/browser` exports `openBrowserRom({ port, logger?, signal? })`. The constructor is passive, and `initialize()` lazily loads the pinned `tasmota-webserial-esptool` browser backend. Use a browser bundler such as webpack, Vite or esbuild; direct native ESM loading of the upstream backend is not supported. No Python installation or consumer-side tasmota patch is needed. The root and `/node` entry points do not load browser modules.
 
 ```js
 import { createDevice } from '@esp-vision/device-core';
@@ -152,6 +154,8 @@ if (result.needsReset) showManualReset();
 Core owns downloads, chip/revision/security and partition/capacity checks, write, full readback and reset. The adapter owns the selected port until Core disconnects it; the UI must first release any runtime serial connection. It starts no stub during construction or chip initialization: Core checks the approved image and ROM security before calling `runStub`. P4 revision 301/302 flash power and S31 support come from pinned upstream 9.4.2; Core retains bounded SLIP-prefix tolerance, native USB stub startup confirmation and size-scaled erase timeouts. Unsupported stubs fail explicitly. Keep the page and port alive until the update Promise settles; cancellation is accepted before writing, never used to interrupt a started write/readback. This ROM adapter does not provide runtime EV-MUX serial transport or Wi-Fi/TCP OTA.
 
 ### Official Node adapters
+
+The public Node entry also exports `inventory`, `listSerial`, `filterSerialPorts`, `serialEntry`, `transportFor` and `defaultPython`. Enumeration is passive unless `inventory({ probe: true })` is explicitly requested; cancellation is supported. Bundlers obtain the exact published Python adapters from `nodeAdapterAssets()`, which returns `{ serial: URL, rom: URL }` without opening a port or running Python.
 
 The Node-only `@esp-vision/device-core/node` subpath exports `tcpTransport({ host, port })` and `serialTransport({ serial, python })`. Constructors are passive; Core opens/closes the link during `connect()`/`disconnect()`. Serial needs pyserial in the selected Python interpreter, and uses role `usj`, `usb` or `uart` for the actual interface. The root/browser entry points do not load Node networking/process modules.
 
@@ -238,7 +242,11 @@ await device.python.execute({ path: '/main.py', completion: 'start' });
 unsubscribe();
 ```
 
-`source` and `path` are mutually exclusive. `completion: 'wait'` (the default) returns `{ ok, path, output, outputTruncated }` after the program finishes. `'start'` returns `{ ok, path, done }` after starting it; await `done` for the execution result. Source started this way uses an internal temporary script that Core removes after execution. Terminal input, scripts and filesystem helpers share one MicroPython interpreter. The application should not send terminal input while an automated operation owns the REPL. Conflicting automated operations reject with `DEVICE_BUSY`; Core does not silently queue them or isolate user Python in a second interpreter. Terminal input remains available to an explicitly started interactive script.
+`source` and `path` are mutually exclusive. `completion: 'wait'` (the default) returns `{ ok, path, output, outputTruncated }` after the program finishes. `'start'` returns `{ ok, path, done }` after Core receives a private VM-entry marker from the generated runner; it does not wait for the program to finish, so a short script may already be done when the handle is returned. Core waits at most five seconds for this start acknowledgement. If it times out or is cancelled, the program may have entered and Core does not claim that it stopped. Await `done` for the execution result. Once the start handle is returned, `device.disconnect()` releases the session without requesting a stop; `done` rejects locally as the session closes, and the device program may continue. A caller-provided `signal` remains bound until `done` settles and requests a stop if aborted while the session is available. Source started this way uses an internal temporary script that Core removes after execution; disconnect can prevent this cleanup. Terminal input, scripts and filesystem helpers share one MicroPython interpreter. The application should not send terminal input while an automated operation owns the REPL. Conflicting automated operations reject with `DEVICE_BUSY`; Core does not silently queue them or isolate user Python in a second interpreter. Terminal input remains available to an explicitly started interactive script.
+
+Small `source` requests with `completion: 'wait'` run through the existing REPL without creating a device file, so they work when storage is unmounted and do not require `script.run` or `file.write.binary`. Core holds the source in a temporary REPL variable, executes it in the normal global namespace so user variables remain available, and deletes only that temporary variable after completion. Source larger than the REPL input limit uses a temporary device script and requires `script.run`, `file.write.binary`, and writable storage.
+
+For `completion: 'wait'`, omitting `timeout` disables the aggregate operation deadline; a positive `timeout` limits the full operation, including its REPL queue and startup exchanges. Core still bounds each REPL exchange and RPC, so an omitted total deadline does not create an unbounded protocol wait. If a timeout or cancellation occurs while code is running, its effects may be uncertain; Core does not claim that the program stopped or roll back device changes.
 
 ### Files and images
 
@@ -259,7 +267,7 @@ const image = await device.capture({ source: 'camera', format: 'jpeg', timeout: 
 // image: { data: Uint8Array, mimeType: 'image/jpeg', metadata }
 ```
 
-Paths are absolute device paths. `files.list({ path: '/', recursive: false })` returns entries `{ name, path, type, size }`. `files.read({ path })` returns a `Uint8Array`; use `encoding: 'utf-8'` to return text, and `maxBytes` to bound a read. Writes default to `overwrite: true`; set it to `false` to require a new destination. Uploading and executing are separate operations; create an empty file with `files.write({ path, data: new Uint8Array() })` rather than a second touch API. Remove an empty directory with `files.remove({ path: '/models', type: 'directory' })`; there is no implicit recursive deletion. `files.mkdir({ path, recursive: true })` creates missing parents.
+Paths are absolute device paths. `files.list({ path: '/', recursive: false })` returns entries `{ name, path, type, size }`. `files.read({ path })` returns a `Uint8Array`; use `encoding: 'utf-8'` to return text, and `maxBytes` to bound a read. Omitting `timeout` disables the aggregate read deadline; a positive `timeout` limits the full read. Each chunk request remains bounded by `chunkTimeout`, which defaults to 30 seconds. Writes default to `overwrite: true`; set it to `false` to require a new destination. Uploading and executing are separate operations; create an empty file with `files.write({ path, data: new Uint8Array() })` rather than a second touch API. Remove an empty directory with `files.remove({ path: '/models', type: 'directory' })`; there is no implicit recursive deletion. `files.mkdir({ path, recursive: true })` creates missing parents.
 
 **Binary uploads (SDK 0.3.0):** text, model and image uploads share reliable raw binary `file.write` frames with 16 KiB blocks, continuous native VFS writes and SHA-256 commit. Matching firmware must advertise `file.write.binary`; missing support rejects with a firmware-upgrade message, without a slow upload fallback. File progress is not a durable commit. FAT replacement preserves an old-file backup until ordinary publication succeeds, with rollback on ordinary rename failure; it is not a power-loss-atomic journal. The filesystem must be mounted and allow writing, with room for the temporary upload and any existing destination file. File reads and directory operations currently use the REPL.
 
@@ -294,6 +302,8 @@ const devices = await device.discover({ timeout: 3000 });
 
 Results contain `deviceId`, `hostname` (without `.local`), `board`, `firmwareVersion`, `evMuxVersion`, `compatible`, `addresses`, `port`, and adapter-specific `expiresAt`/`connectionUrl`. Supply the selected result as `expectedDevice` when connecting: Core checks the stable ID and hostname before acquisition, protecting against stale DHCP addresses. This is identity matching, not authentication. Refresh expired bridge handles. Multicast filtering, VLANs and client isolation may require a manual address. Browsers have no native DNS-SD enumeration API; local-network permission does not remove the bridge requirement.
 
+Node-only adapters and passive serial inventory are exported from `@esp-vision/device-core/node`: `defaultPython`, `listSerial`, `filterSerialPorts`, `serialEntry`, `transportFor`, and `inventory`. `listSerial({ python, signal, timeout })` runs the bundled Python enumerator with a process timeout and cancellation signal; it lists ports without opening them. `inventory()` lists without probing by default. Pass `probe: true` to acquire each selected EV-MUX session and query metadata; this does not send Ctrl-C or run a REPL probe, and reported `vmReady` state is preserved. Creating a transport with `transportFor()` is passive and does not open the port.
+
 The root/browser entry points do not import Node networking modules. The optional Node discovery subpath dynamically loads `multicast-dns`. No Agent package is required.
 
 ## Migration from the session API
@@ -323,7 +333,7 @@ IDE and Agent adapters that construct sessions or call `session.repl` must migra
 
 ROM flashing remains a separate lifecycle under `@esp-vision/device-core/firmware`. Hosts inject the ROM loader, approved image manifest and reset policy. The adapter validates image integrity, chip/revision, security and partitions, verifies complete readback, and clears the P4 download latch before reset. It does not distribute firmware, open a browser picker or provide a flashing UI. EV-MUX `control({ action: 'bootloader' })` only requests entry into the downloader; it does not flash an image.
 
-Agent workflows, MCP tool mappings, model providers, CLI bundles and plugin packaging belong to the independent Agent project and are not included here.
+Agent workflows, MCP tool mappings, model providers and plugin packaging belong to their own integration packages and are not included here.
 
 ## Validation and release
 
@@ -358,7 +368,7 @@ npm --prefix node_modules/@esp-vision/device-core run test:hardware -- --help
 npm --prefix node_modules/@esp-vision/device-core run test:hardware -- --tcp 192.168.1.100:3232
 ```
 
-Inside the source or installed package directory, use `npm test` and `npm run test:hardware -- ...`. Unit tests require no device. The runner explicitly enumerates tests and fails when the suite is absent or empty, rather than passing zero cases. The management CLI uses `--port`; the dedicated hardware runner uses `--serial`, as shown in its help.
+Inside the source or installed package directory, use `npm test` and `npm run test:hardware -- ...`. Unit tests require no device. The runner explicitly enumerates tests and fails when the suite is absent or empty, rather than passing zero cases. The dedicated hardware runner uses `--serial`, as shown in its help.
 
 Run the source or installed SDK against one idle device using Node.js 22. These checks use the public `createDevice()` API and release the session and transport afterwards. The default check reads identity/capabilities/runtime and executes a short `print()` without creating a device file. Connecting negotiates the REPL, so use a device whose running Python application may safely be interrupted. The check does not configure Wi-Fi, reset the board or erase storage.
 
@@ -379,7 +389,7 @@ These functional checks intentionally exercise sensor settings, image processing
 
 `--screen-output PATH` explicitly requests an LCD screenshot: it adds the `display` check when needed, draws red/green/blue/white bars with `ESP-VISION CI` text, validates backlight changes, captures that same display with `capture({ source: 'screen' })`, verifies JPEG completeness and panel dimensions, and writes the JPEG on the host before releasing the display. Missing LCD or screen capture support makes this explicit request fail instead of skip. Camera capture stays a separate source. Output images and logs should be placed under your project-local artifact directory when running this suite.
 
-TCP needs only Node.js. Serial additionally needs a Python interpreter with the optional [pyserial](https://pyserial.readthedocs.io/) dependency installed in your environment (`python3 -m pip install pyserial`, BSD-3-Clause; not vendored or included in the npm package). Select another interpreter with `--python /path/to/python`. The Apache-2.0-licensed serial adapter in `src/node_serial.py` is shared by the CLI and hardware runner; it enumerates ports without opening them, forwards bytes and configures RTS/DTR before opening; serial control-line behavior still depends on the board and OS driver. The same hardware runner, unit tests and Python fixture ship in the source tree and npm tarball; no firmware/build outputs or device credentials are included.
+TCP needs only Node.js. Serial additionally needs a Python interpreter with the optional [pyserial](https://pyserial.readthedocs.io/) dependency installed in your environment (`python3 -m pip install pyserial`, BSD-3-Clause; not vendored or included in the npm package). Select another interpreter with the `python` option when listing ports or configuring a serial adapter. The Apache-2.0-licensed serial adapter in `src/node_serial.py` is shared by the public Node transport and hardware runner; it enumerates ports without opening them, forwards bytes and configures RTS/DTR before opening; serial control-line behavior still depends on the board and OS driver. The same hardware runner, unit tests and Python fixture ship in the source tree and npm tarball; no firmware/build outputs or device credentials are included.
 
 ## License
 
