@@ -1,0 +1,106 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+mcp_release_contract_checks:
+  stage: check
+  image: python:3.12-alpine
+  tags: [build]
+  script:
+    - python -m unittest discover -s tools/ci/mcp -p 'test_*.py'
+
+# Main owns the server image. Website only receives the immutable digest.
+build_knowledge_mcp_image:
+  stage: deploy
+  extends: .rules:mcp:build
+  tags: [build, internet, amd64]
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: ['']
+  needs:
+    - job: package_knowledge_mcp
+      artifacts: true
+    - job: knowledge_mcp_checks
+    - job: mcp_release_contract_checks
+  script:
+    - cp .cache/knowledge-npm/knowledge-mcp.tgz host/knowledge-mcp/knowledge-mcp.tgz
+    - mkdir -p /kaniko/.docker
+    - AUTH="$(printf '%s' "$CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')"
+    - printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$AUTH" > /kaniko/.docker/config.json
+    - >-
+      /kaniko/executor --context "$CI_PROJECT_DIR/host/knowledge-mcp"
+      --dockerfile "$CI_PROJECT_DIR/host/knowledge-mcp/Dockerfile"
+      --destination "$CI_REGISTRY_IMAGE/knowledge-mcp:$CI_COMMIT_SHA-$CI_PIPELINE_ID"
+      --digest-file "$CI_PROJECT_DIR/mcp-image.digest"
+      --build-arg "MCP_NPM_SHA256=$(sha256sum .cache/knowledge-npm/knowledge-mcp.tgz | cut -d ' ' -f1)"
+  artifacts:
+    paths: [mcp-image.digest]
+    expire_in: 1 month
+
+verify_knowledge_mcp_container:
+  stage: deploy
+  extends: .rules:mcp:build
+  image: docker:latest
+  tags: [appserver]
+  needs:
+    - job: build_knowledge_mcp_image
+      artifacts: true
+    - job: package_knowledge_mcp
+      artifacts: true
+  script:
+    - unset DOCKER_AUTH_CONFIG
+    - echo "$CI_JOB_TOKEN" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+    - export MCP_EXPECTED_NPM_SHA256="$(sha256sum .cache/knowledge-npm/knowledge-mcp.tgz | cut -d ' ' -f1)"
+    - export MCP_EXPECTED_PACK_SHA256="$(sha256sum .cache/knowledge-npm/mcp-pack.json | cut -d ' ' -f1)"
+    - export MCP_EXPECTED_SOURCE_COMMIT="$CI_COMMIT_SHA"
+    - export MCP_ACCEPTANCE_IMAGE="$CI_REGISTRY_IMAGE/knowledge-mcp@$(cat mcp-image.digest)"
+    - sh tools/ci/mcp/container_acceptance.sh
+
+publish_mcp_release:
+  stage: post_deploy
+  extends: .rules:release
+  image: python:3.12-alpine
+  tags: [build]
+  resource_group: mcp-release-publication
+  needs:
+    - job: build_mcp_pack
+      artifacts: true
+    - job: build_knowledge_mcp_image
+      artifacts: true
+    - job: package_knowledge_mcp
+      artifacts: true
+    - job: publish_knowledge_mcp_npm
+      artifacts: false
+    - job: qualify_firmware_release
+      artifacts: false
+    - job: upload-dl-trigger
+      artifacts: false
+    - job: verify_knowledge_mcp_container
+      artifacts: false
+  script:
+    - >-
+      python tools/ci/mcp/release.py --pack mcp-pack.json
+      --npm-tarball .cache/knowledge-npm/knowledge-mcp.tgz
+      --version "$CI_COMMIT_TAG" --source-commit "$CI_COMMIT_SHA"
+      --image-repository "$CI_REGISTRY_IMAGE/knowledge-mcp"
+      --image-digest-file mcp-image.digest --output mcp-release --publish
+  artifacts:
+    paths: [mcp-release/]
+    expire_in: 1 month
+
+trigger_website_mcp_release:
+  stage: post_deploy
+  extends: .rules:release
+  needs:
+    - job: publish_mcp_release
+      artifacts: false
+  variables:
+    RELEASE_BUILD_SITE: "0"
+    RELEASE_BUILD_MCP: "1"
+    ESP_VISION_MCP_PACKAGE_VERSION: "$CI_COMMIT_TAG"
+    ESP_VISION_MCP_PROJECT_ID: "$CI_PROJECT_ID"
+    ESP_VISION_MCP_IMAGE_REPOSITORY: "$CI_REGISTRY_IMAGE/knowledge-mcp"
+    RELEASE_EXPECTED_SOURCE_COMMIT: "$CI_COMMIT_SHA"
+  trigger:
+    project: services/esp-vision-website
+    branch: master
+    strategy: depend
