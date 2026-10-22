@@ -8,6 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { dirname, resolve } from "node:path";
 import MiniSearch from "minisearch";
 
 // Accept loose target spellings from AI clients (esp32-p4, p4, ESP32P4, ...).
@@ -42,6 +43,14 @@ interface SearchDoc {
 
 export class Pack {
   private packSha256?: string;
+  private provenance?: {
+    schemaVersion: 1;
+    packageName: string;
+    packageVersion: string;
+    packVersion: string;
+    sourceCommit: string;
+    packSha256: string;
+  };
   private data: any;
   private meta: any;
   modules: Record<string, Module> = {};
@@ -79,6 +88,19 @@ export class Pack {
     const bytes = readFileSync(path);
     const pack = new Pack(JSON.parse(bytes.toString("utf-8")));
     pack.packSha256 = createHash("sha256").update(bytes).digest("hex");
+    try {
+      const provenance = JSON.parse(readFileSync(resolve(dirname(path), "provenance.json"), "utf-8"));
+      if (provenance.schemaVersion === 1 &&
+          provenance.packageName === "@esp-vision/knowledge-mcp" &&
+          typeof provenance.packageVersion === "string" &&
+          provenance.packVersion === pack.version() &&
+          provenance.sourceCommit === pack.meta.sourceCommit &&
+          provenance.packSha256 === pack.packSha256) {
+        pack.provenance = provenance;
+      }
+    } catch {
+      // Source-only packs and developer fixtures do not have npm provenance.
+    }
     return pack;
   }
 
@@ -266,8 +288,8 @@ export class Pack {
     return { type: "not_found", query };
   }
 
-  serverInfo(): Record<string, unknown> {
-    return {
+  serverInfo(options: { npmArtifactSha256?: string } = {}): Record<string, unknown> {
+    const info: Record<string, unknown> = {
       name: "esp-vision-mcp",
       version: this.version(),
       sourceCommit: this.meta.sourceCommit,
@@ -275,5 +297,10 @@ export class Pack {
       micropythonVersion: this.meta.micropythonVersion,
       counts: this.meta.counts ?? {},
     };
+    if (this.provenance) info.packageVersion = this.provenance.packageVersion;
+    if (typeof options.npmArtifactSha256 === "string" && /^[a-f0-9]{64}$/.test(options.npmArtifactSha256)) {
+      info.npmArtifactSha256 = options.npmArtifactSha256;
+    }
+    return info;
   }
 }

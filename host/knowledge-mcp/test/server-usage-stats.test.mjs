@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -196,4 +197,40 @@ test("invalid retention configuration disables collection but keeps the MCP serv
   assertSuccessfulTool(await callTool(server, "server_info", {}));
   assert.doesNotMatch(server.output(), new RegExp(canary));
   await assert.rejects(readFile(dbPath));
+});
+
+test("verified npm provenance and the optional artifact hash appear in HTTP health and server_info", async (t) => {
+  const dir = await temporaryDirectory(t);
+  const packBytes = await readFile(packPath);
+  const testPackPath = join(dir, "mcp-pack.json");
+  const pack = JSON.parse(packBytes.toString("utf8"));
+  const packSha256 = createHash("sha256").update(packBytes).digest("hex");
+  const artifactSha256 = "c".repeat(64);
+  await writeFile(testPackPath, packBytes);
+  await writeFile(join(dir, "provenance.json"), JSON.stringify({
+    schemaVersion: 1,
+    packageName: "@esp-vision/knowledge-mcp",
+    packageVersion: "0.1.0",
+    packVersion: pack.meta.version,
+    sourceCommit: pack.meta.sourceCommit,
+    packSha256,
+  }));
+
+  const server = await startServer(t, {
+    pack: testPackPath,
+    extraEnv: { MCP_NPM_ARTIFACT_SHA256: artifactSha256 },
+  });
+  const health = await fetch(`${server.baseUrl}/health`).then((response) => response.json());
+  assert.equal(health.packageVersion, "0.1.0");
+  assert.equal(health.packSha256, packSha256);
+  assert.equal(health.sourceCommit, pack.meta.sourceCommit);
+  assert.equal(health.npmArtifactSha256, artifactSha256);
+
+  await initialize(server);
+  const response = assertSuccessfulTool(await callTool(server, "server_info", {}));
+  const info = JSON.parse(response.content[0].text);
+  assert.equal(info.packageVersion, "0.1.0");
+  assert.equal(info.packSha256, packSha256);
+  assert.equal(info.sourceCommit, pack.meta.sourceCommit);
+  assert.equal(info.npmArtifactSha256, artifactSha256);
 });

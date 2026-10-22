@@ -8,6 +8,7 @@
 #
 #     python tools/ci/mcp/validate_schema.py mcp-pack.json
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -133,10 +134,12 @@ def _semantic_checks(pack: dict) -> list:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print('usage: validate_schema.py <pack.json>', file=sys.stderr)
-        return 2
-    pack = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('pack', type=Path)
+    parser.add_argument('--require-micropython', action='store_true')
+    parser.add_argument('--expected-version')
+    args = parser.parse_args()
+    pack = json.loads(args.pack.read_text(encoding='utf-8'))
     schema = json.loads(SCHEMA_PATH.read_text(encoding='utf-8'))
 
     errors = []
@@ -151,6 +154,12 @@ def main() -> int:
               'checks only (install jsonschema in CI for full validation).')
 
     errors.extend(_semantic_checks(pack))
+    if args.expected_version and pack.get('meta', {}).get('version') != args.expected_version:
+        errors.append('Knowledge version does not match the requested release')
+    if args.require_micropython:
+        mpy = [module for module in pack.get('modules', []) if module.get('source') == 'micropython']
+        if not mpy or not any(module.get('symbols') for module in mpy):
+            errors.append('Complete MicroPython knowledge is required')
 
     if errors:
         print('FAIL: {} problem(s):'.format(len(errors)), file=sys.stderr)
