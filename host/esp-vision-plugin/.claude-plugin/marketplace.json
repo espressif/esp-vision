@@ -1,0 +1,15 @@
+{
+  "name": "esp-vision",
+  "owner": {
+    "name": "Espressif Systems (Shanghai) CO LTD",
+    "url": "https://vision.espressif.com/"
+  },
+  "plugins": [
+    {
+      "name": "esp-vision",
+      "source": "./",
+      "description": "ESP-VISION firmware knowledge and local device development tools."
+    }
+  ],
+  "description": "ESP-VISION local device tools and online firmware knowledge"
+}

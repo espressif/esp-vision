@@ -1,0 +1,20 @@
+{
+  "name": "esp-vision",
+  "interface": {
+    "displayName": "ESP-VISION"
+  },
+  "plugins": [
+    {
+      "name": "esp-vision",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

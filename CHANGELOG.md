@@ -10,6 +10,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Added mandatory target regressions for P4 camera/LCD coexistence and shutdown/restart, unsupported Image keyword rejection, caller-owned snapshot buffers, and the configured allocation policy.
 - Expose passive Node device inventory and adapter asset URLs as public Device Core APIs.
 - Add @esp-vision/device-cli with Python, binary file, camera/screen capture, sequential batch and bounded watch commands; provide versioned JSON results, streamed events and cancellation from a self-contained npm executable.
+- Package the official ESP-VISION logo and provide WorkBuddy local Skill ZIP imports and official Knowledge MCP configuration through the npm installer, with explicit pending-import status and immutable versioned payloads.
+- Bundle a fixed standalone Device CLI and the official Knowledge HTTP MCP in a Codex/Claude plugin with one capability-oriented Skill and an npm installer supporting verified upgrades and failure recovery.
 
 ### Changed
 
@@ -23,7 +25,6 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 ### Fixed
 
 - Pin standalone CLI builds to the reviewed Device Core 0.5.1 tarball and its verified registry integrity.
-
 - Make the packaged SDK execution-deadline regression deterministic under CI scheduling and cover expiry before VM entry; prepare the test-only correction as Device Core 0.5.1 and remove stale publication-state wording from its README.
 - Removed the unsupported `copy_to_fb` keyword from `image.Image` construction and `Image.to_*()` conversion, and removed it from those stubs and docs; `image.ImageIO.read(copy_to_fb=...)` remains supported.
 - Removed the unsupported `transform` keyword from the ESP-VISION `Image.copy()` and `Image.draw_image()` signatures and stubs.
@@ -47,6 +48,11 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Bind Device CLI startup acknowledgements to VM entry and update the bilingual standalone CLI reference and detached-output guidance.
 - Pin the SDK lifecycle fix so acknowledging a detached CLI run and exiting does not send a remote stop.
 - Refresh the staged SDK integrity after aligning its installation documentation; retain the same runtime sources.
+- Guide continuous application verification and consent-based development feedback in the plugin Skill, with a packaged workflow reference grounded in real P4 application findings.
+- Resolve plugin smoke-test artifacts from TMPDIR or a local project cache without depending on a maintainer home directory.
+- Bundle VM-confirmed detached startup and clarify that new sessions cannot reattach to previous Python stdout.
+- Bundle the non-interrupting device CLI and explain detached execution acknowledgement, passive observation and session-local runtime fields.
+- Bundle the corrected detached-run cancellation lifecycle so local CLI exit preserves an acknowledged application.
 
 ## [2026.10.19]
 

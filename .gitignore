@@ -72,3 +72,6 @@ host/**/*.tgz
 # Generated standalone CLI bundle and dependency notices
 host/device-cli/dist/
 host/device-cli/licenses/
+
+# Generated plugin CLI payload
+host/esp-vision-plugin/cli/
