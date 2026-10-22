@@ -30,7 +30,11 @@ publish_device_cli_npm:
   stage: deploy
   image: node:24-bookworm-slim
   tags: [build, internet, amd64]
-  needs: [device_cli_checks]
+  needs:
+    - job: device_cli_checks
+      artifacts: true
+    - job: evmux_host_checks
+      artifacts: false
   resource_group: host-tools-npm-release
   variables:
     GIT_SUBMODULE_STRATEGY: none

@@ -5,21 +5,21 @@ Integrating the Device Core npm Package
 
 For the SDK overview and complete API index, see :doc:`device-core/index <index>`; application parameters/results/events are in :doc:`device-core/api <api>` and all advanced exports in :doc:`device-core/advanced <advanced>`. This page retains runnable integration examples.
 
-This page targets host developers connecting an IDE, Agent, CLI or custom host application to a device. ``@esp-vision/device-core`` is the shared UI-independent library. Hosts supply physical byte connections without copying the reference Python client or implementing another protocol stack. See :doc:`communication/wire-protocol <../communication/wire-protocol>` for framing and :doc:`communication/interfaces <../communication/interfaces>` for physical interfaces.
+This page targets host developers connecting an IDE, Device CLI, agent workflow or custom host application to a device. ``@esp-vision/device-core`` is the shared UI-independent library. Hosts supply physical byte connections without copying the reference Python client or implementing another protocol stack. Agent device operations use the CLI; Knowledge MCP serves documentation over HTTP. See :doc:`communication/wire-protocol <../communication/wire-protocol>` for framing and :doc:`communication/interfaces <../communication/interfaces>` for physical interfaces.
 
 Source, versions and installation
 ---------------------------------
 
-Device Core is maintained in ``host/device-core/`` in the ESP-VISION firmware repository. ``host/`` contains code running on the host, not firmware modules. IDE and Agent are npm consumers; Agent MCP mappings, model providers and plugins remain in their independent project. Protocol changes should align firmware, Core, documentation and tests in one MR.
+Device Core is maintained in ``host/device-core/`` in the ESP-VISION firmware repository. ``host/`` contains code running on the host, not firmware modules. IDEs and custom applications consume the SDK directly; agent workflows use the separately packaged Device CLI for device control. Protocol changes should align firmware, Core, documentation and tests in one MR.
 
-The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.4.0`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Install the version after the public npm registry confirms publication; a dry run or an open MR alone does not publish it.
+The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.5.1`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Verify that exact version in the public npm registry before installing; a dry run or an open MR alone does not publish it.
 
 .. code-block:: console
 
-   npm view @esp-vision/device-core@0.4.0 version dist.integrity
-   npm install --save-exact @esp-vision/device-core@0.4.0
+   npm view @esp-vision/device-core@0.5.1 version dist.integrity
+   npm install --save-exact @esp-vision/device-core@0.5.1
 
-Node.js 22 is the Node host baseline. Browsers need a bundler/import map for package specifiers and Web Serial or a binary WebSocket bridge. The package contains no serial driver, network bridge, model, IDE UI or Agent runtime. Node mDNS discovery uses the optional ``multicast-dns`` peer. Before publication, install a local ``npm pack`` tarball for verification; production consumers should pin npm versions and update lockfiles.
+Node.js 22 is the Node host baseline. Browsers need a bundler/import map for package specifiers and Web Serial or a binary WebSocket bridge. Device Core contains no serial driver, network bridge, model or IDE UI. Node serial enumeration requires Python with pyserial; Node mDNS discovery uses ``multicast-dns``. The separate Device CLI installs as ``@esp-vision/device-cli@0.1.0`` and provides the supported agent-facing device command. Pin npm versions and update lockfiles.
 
 Application, Core and transport responsibilities
 ------------------------------------------------
@@ -28,7 +28,7 @@ Application, Core and transport responsibilities
    :align: center
    :alt: Host applications, Device Core, EV-MUX and firmware
 
-   IDE / Agent / CLI / custom tools → Device Core → EV-MUX → firmware
+   IDE / Device CLI / custom host apps → Device Core → EV-MUX → firmware; Knowledge MCP → documentation over HTTP
 
 The same SVG is used by the project README and system architecture chapter. Host applications select devices and provide UI/workflow policy; Device Core owns the shared API, protocol and session state; EV-MUX defines runtime communication with the firmware. Byte adapters supply serial/socket I/O without parsing another protocol stack. Representative APIs in the figure do not replace the full API reference. Discovery and ROM flashing have separate lifecycles; the ROM loader does not carry image writes through EV-MUX.
 
@@ -203,7 +203,17 @@ Install the optional ``multicast-dns`` peer for Node discovery:
        console.log(await device.inspect({ fields: ['identity'] }))
    } finally { await device.disconnect() }
 
-Applications call ``device.discover()``. ``createNodeDiscovery()`` and ``createBridgeDiscovery()`` return providers with ``list({ timeout, signal })``, not ``discover()``; inject them through ``createDevice({ discovery: provider })``. Starting in 0.1.1, official ``tcpTransport({ host, port })`` and ``serialTransport({ serial, python })`` adapters are exported by ``@esp-vision/device-core/node``. Constructors do not open links; serial requires pyserial in the selected interpreter. See :doc:`advanced`.
+Applications call ``device.discover()``. ``createNodeDiscovery()`` and ``createBridgeDiscovery()`` return providers with ``list({ timeout, signal })``, not ``discover()``; inject them through ``createDevice({ discovery: provider })``. SDK 0.5.1 exports ``inventory``, ``listSerial``, ``filterSerialPorts``, ``serialEntry``, ``transportFor``, ``defaultPython`` and ``nodeAdapterAssets`` from ``@esp-vision/device-core/node``. Inventory is passive unless ``probe: true``; transport constructors do not open links. Serial enumeration requires pyserial. See :doc:`advanced`.
+
+.. code-block:: javascript
+
+   import { inventory } from '@esp-vision/device-core/node'
+
+   const { devices, warnings } = await inventory({ timeout: 3000 })
+   console.log(devices.map(({ interface, address, status }) => ({ interface, address, status })))
+   console.warn(warnings)
+
+The Node inventory combines OS serial enumeration and LAN discovery and returns ``devices``, ``warnings`` and ``sourcesAvailable``. By default it does not open candidates; ``probe: true`` connects to each one and may interrupt running Python. Use :doc:`advanced` for option defaults, candidate filtering and bundler asset handling.
 
 Browsers inject ``createBridgeDiscovery('ws://127.0.0.1:8766/device')`` from ``@esp-vision/device-core/discovery`` using a local bridge. Browsers cannot natively enumerate DNS-SD. Results contain ``deviceId``, ``hostname``, ``board``, ``firmwareVersion``, ``addresses``, ``port`` and ``compatible``; bridge results may also contain ``connectionUrl``. The host builds a transport from the selection and passes ``expectedDevice`` to match ID and hostname before acquisition, protecting against stale DHCP addresses. This is not authentication. VLANs, multicast filtering and AP isolation may require manual addresses; refresh expired bridge handles.
 
@@ -240,7 +250,7 @@ Core coordinates a new ready epoch and REPL barrier for soft reset. Inspect curr
 
 ROM flashing remains a separate lifecycle under ``@esp-vision/device-core/firmware``. Hosts inject a ROM loader, approved images, chip/partition constraints and reset policy. Core ships no images and does not carry ROM download commands over EV-MUX. ``control({ action: 'bootloader' })`` only requests downloader entry; it does not flash. See :doc:`communication/interfaces <../communication/interfaces>` for physical handoff.
 
-Package source, protocol tests and release automation are maintained together under ``host/device-core/``. IDE and Agent consume pinned published npm versions without long-lived source copies. SDK-only changes run JS tests, schema/package checks and publication dry runs without a firmware build matrix. Package releases are independent of firmware versions; publication jobs and ``npm view`` establish registry availability. Version/capability negotiation and hardware validation still determine actual compatibility; see :doc:`communication/validation <../communication/validation>` for acceptance evidence.
+Package source, protocol tests and release automation are maintained together under ``host/device-core/``. IDEs and custom applications consume pinned npm versions; agent device workflows use the Device CLI. SDK-only changes run JS tests, schema/package checks and publication dry runs without a firmware build matrix. Package releases are independent of firmware versions; publication jobs and ``npm view`` establish registry availability. Version/capability negotiation and hardware validation still determine actual compatibility; see :doc:`communication/validation <../communication/validation>` for acceptance evidence.
 
 Firmware update application entry
 ------------------------------------------
@@ -249,10 +259,10 @@ Use ``device.firmware.check()`` to fetch the official release feed and per-versi
 
 Node hosts import ``openNodeRom`` from ``@esp-vision/device-core/node`` and pass ``openLoader: ({ signal }) => openNodeRom({ port, signal })``; no custom loader implementation is needed. Browser hosts provide ``openLoader`` for their Web Serial environment. Set ``mode: 'install'`` on check and update to provision a blank board; the default updates only the application.
 
-Browser ROM flashing (unreleased)
+Browser ROM flashing
 ---------------------------------
 
-The new ``/browser`` entry point is not present in npm 0.3.0; build this branch or wait for the next SDK release. Use webpack, Vite or esbuild in a Web Serial-capable browser over HTTPS or localhost. No Python installation, host-maintained tasmota adapter or package-manager patch is needed.
+SDK 0.5.1 includes the ``/browser`` entry point. Use webpack, Vite or esbuild in a Web Serial-capable browser over HTTPS or localhost. No Python installation, host-maintained tasmota adapter or package-manager patch is needed.
 
 .. code-block:: javascript
 

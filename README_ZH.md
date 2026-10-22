@@ -49,6 +49,8 @@ IDE、Agent、CLI 和自定义工具共用 Device Core，通过 EV-MUX 与设备
 
 [许可证清单](docs/zh_CN/license/index.rst)记录了上游组件与适配文件，包括用于 EV-MUX 会话隔离、保留 MIT 许可证的 MicroPython 执行与线程 overlay。
 
+面向 AI 客户端，[本地插件](host/esp-vision-plugin/README.md)内置固定版本的 [Device CLI](host/device-cli/README.md)，并连接官方在线 Knowledge MCP。主仓生成知识与服务产物，website 部署经过验证的不可变镜像。参见 [MCP 架构及发布流程](docs/mcp-release.md)。通过 `npx -y @esp-vision/plugin install codex` 或 `npx -y @esp-vision/plugin install claude` 安装已发布版本。WorkBuddy 用户运行 `npx -y @esp-vision/plugin install workbuddy` 准备本地 Skill ZIP 和官方 Knowledge MCP 配置，再按说明在 WorkBuddy 界面完成导入。
+
 ## 快速开始
 
 环境要求：ESP32-P4/S3 使用 ESP-IDF v5.5.6，ESP32-S31 使用 release/v6.1（已 source `export.sh`，`idf.py` 可用），以及一块 [受支持的开发板](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/target-support/index.html)。
