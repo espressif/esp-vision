@@ -35,6 +35,7 @@ variables:
 include:
   - local: '.gitlab/ci/rules.yml'
   - local: '.gitlab/ci/device-core.yml'
+  - local: '.gitlab/ci/host-tools.yml'
   - local: '.gitlab/ci/target_test.yml'
   - local: '.gitlab/ci/docs.yml'
   - local: '.gitlab/ci/deploy.yml'

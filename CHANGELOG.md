@@ -9,21 +9,20 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Added a unified GitHub Issues reporting entry in both READMEs and English-language issue forms for IDE, website, Host Device Core, and firmware problems.
 - Added mandatory target regressions for P4 camera/LCD coexistence and shutdown/restart, unsupported Image keyword rejection, caller-owned snapshot buffers, and the configured allocation policy.
 - Expose passive Node device inventory and adapter asset URLs as public Device Core APIs.
+- Add @esp-vision/device-cli with Python, binary file, camera/screen capture, sequential batch and bounded watch commands; provide versioned JSON results, streamed events and cancellation from a self-contained npm executable.
 
 ### Changed
 
 - Require an explicit manual action for protected default-branch npm publication, separating merge approval from public release.
-
 - Unified ESP-VISION-owned heap allocation around `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` while retaining requested DMA capabilities; set a 16 KiB internal-memory boundary on PSRAM-enabled P4 boards and the P4 template.
 - Qualify ESP32-P4/S3 firmware and hardware CI on pinned ESP-IDF v5.5.6, retain release/v6.1 for ESP32-S31, and align release packaging dependencies with this board-specific matrix. Document the required IDF environments and possible build/runtime/Python API changes with other versions in English and Chinese.
 - Release Device Core 0.5.0 as an SDK-only package; move the management command to the standalone Device CLI with an explicit 0.4.x migration path.
-
-### Changed
-
 - Unified ESP-VISION-owned heap allocation around `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` while retaining requested DMA capabilities; set a 16 KiB internal-memory boundary on PSRAM-enabled P4 boards and the P4 template.
 - Qualify ESP32-P4/S3 firmware and hardware CI on pinned ESP-IDF v5.5.6, retain release/v6.1 for ESP32-S31, and align release packaging dependencies with this board-specific matrix. Document the required IDF environments and possible build/runtime/Python API changes with other versions in English and Chinese.
 
 ### Fixed
+
+- Pin standalone CLI builds to the reviewed Device Core 0.5.1 tarball and its verified registry integrity.
 
 - Make the packaged SDK execution-deadline regression deterministic under CI scheduling and cover expiry before VM entry; prepare the test-only correction as Device Core 0.5.1 and remove stale publication-state wording from its README.
 - Removed the unsupported `copy_to_fb` keyword from `image.Image` construction and `Image.to_*()` conversion, and removed it from those stubs and docs; `image.ImageIO.read(copy_to_fb=...)` remains supported.
@@ -42,6 +41,12 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Expose passive Device Core connections and keep metadata inventory probes from interrupting running Python programs; document session-local execution state.
 - Honor omitted aggregate Python and file-read deadlines, including short in-memory Python sources; retain bounded protocol setup and chunk waits with cancellation and session cleanup.
 - Lock POSIX serial adapters before opening and drain child diagnostics before classifying failures so concurrent CLI attempts report SERIAL_BUSY without stealing device bytes.
+- Preserve rejected CLI command identities, clarify action-specific flags, and verify validation failures from installed npm archives using device development feedback.
+- Keep installed CLI package checks portable by resolving temporary artifacts from TMPDIR or a repository-local cache.
+- Keep detached CLI start results as acknowledgements and connect passively for RPC-only device commands so observation does not stop continuous applications.
+- Bind Device CLI startup acknowledgements to VM entry and update the bilingual standalone CLI reference and detached-output guidance.
+- Pin the SDK lifecycle fix so acknowledging a detached CLI run and exiting does not send a remote stop.
+- Refresh the staged SDK integrity after aligning its installation documentation; retain the same runtime sources.
 
 ## [2026.10.19]
 

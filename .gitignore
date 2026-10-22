@@ -68,3 +68,7 @@ esp-iot-solution
 # Host SDK dependencies and local package output
 host/**/node_modules/
 host/**/*.tgz
+
+# Generated standalone CLI bundle and dependency notices
+host/device-cli/dist/
+host/device-cli/licenses/
