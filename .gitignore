@@ -75,3 +75,6 @@ host/device-cli/licenses/
 
 # Generated plugin CLI payload
 host/esp-vision-plugin/cli/
+# Knowledge MCP build artifacts
+host/knowledge-mcp/dist/
+host/knowledge-mcp/mcp-pack.json

@@ -60,6 +60,7 @@
                            "attribute", "exception"]
                 },
                 "name": {"type": "string"},
+                "aliasOf": {"type": "string"},
                 "signatures": {"type": "array", "items": {"type": "string"}},
                 "params": {
                   "type": "array",

@@ -12,6 +12,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Add @esp-vision/device-cli with Python, binary file, camera/screen capture, sequential batch and bounded watch commands; provide versioned JSON results, streamed events and cancellation from a self-contained npm executable.
 - Package the official ESP-VISION logo and provide WorkBuddy local Skill ZIP imports and official Knowledge MCP configuration through the npm installer, with explicit pending-import status and immutable versioned payloads.
 - Bundle a fixed standalone Device CLI and the official Knowledge HTTP MCP in a Codex/Claude plugin with one capability-oriented Skill and an npm installer supporting verified upgrades and failure recovery.
+- Own the online Knowledge MCP runtime and anonymous daily aggregate statistics in the main repository, with a private locked Node 24 package, immutable-image build context and 18 HTTP/privacy/reporting regression tests.
 
 ### Changed
 
@@ -23,6 +24,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Qualify ESP32-P4/S3 firmware and hardware CI on pinned ESP-IDF v5.5.6, retain release/v6.1 for ESP32-S31, and align release packaging dependencies with this board-specific matrix. Document the required IDF environments and possible build/runtime/Python API changes with other versions in English and Chinese.
 
 ### Fixed
+
+- Separate SQLite statistics initialization contention from concurrent acknowledged-write atomicity tests, using ready writer processes and an explicit start barrier.
 
 - Pin standalone CLI builds to the reviewed Device Core 0.5.1 tarball and its verified registry integrity.
 - Make the packaged SDK execution-deadline regression deterministic under CI scheduling and cover expiry before VM entry; prepare the test-only correction as Device Core 0.5.1 and remove stale publication-state wording from its README.
@@ -53,6 +56,9 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Bundle VM-confirmed detached startup and clarify that new sessions cannot reattach to previous Python stdout.
 - Bundle the non-interrupting device CLI and explain detached execution acknowledgement, passive observation and session-local runtime fields.
 - Bundle the corrected detached-run cancellation lifecycle so local CLI exit preserves an acknowledged application.
+- Build the full Knowledge snapshot with the check-stage Python interpreter immediately after its source checks, so generator failures surface before unrelated firmware builds finish.
+- Preserve return annotations from stub source spans so Knowledge pack generation also works on the Python 3.8 documentation builder.
+- Retain Knowledge API return types and public display aliases, including canonical documentation links and normalized histogram value semantics.
 
 ## [2026.10.19]
 

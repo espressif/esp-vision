@@ -1,0 +1,5 @@
+node_modules
+dist
+test
+.cache
+npm-debug.log
