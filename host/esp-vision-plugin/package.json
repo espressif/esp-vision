@@ -1,0 +1,47 @@
+{
+  "name": "@esp-vision/plugin",
+  "version": "0.1.0",
+  "description": "ESP-VISION plugin with a bundled local device CLI and official online firmware knowledge.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/espressif/esp-vision.git",
+    "directory": "host/esp-vision-plugin"
+  },
+  "homepage": "https://vision.espressif.com/",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "esp-vision-plugin": "bin/esp-vision-plugin.mjs"
+  },
+  "files": [
+    "assets",
+    "workbuddy",
+    "bin/esp-vision-plugin.mjs",
+    "src/installer.mjs",
+    ".agents/plugins/marketplace.json",
+    ".claude-plugin/marketplace.json",
+    ".claude-plugin/plugin.json",
+    ".mcp.json",
+    "DEVICE_CORE_NOTICE.md",
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "mcp.json",
+    "plugin.json",
+    "cli",
+    "skills"
+  ],
+  "scripts": {
+    "build": "npm --prefix ../device-cli run build && node scripts/package.mjs && npm run check:package",
+    "check:package": "node scripts/check-package.mjs && node scripts/smoke-plugin.mjs",
+    "archive": "npm run build && node scripts/archive.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "esp-vision-knowledge": {
+      "type": "streamableHttp",
+      "url": "https://mcp.vision.espressif.com/mcp",
+      "timeout": 30000
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "esp-vision",
+  "version": "0.1.0",
+  "description": "ESP-VISION device operations through a bundled local CLI and official online firmware knowledge.",
+  "icon": "./assets/esp-vision-logo.png",
+  "author": {
+    "name": "Espressif Systems (Shanghai) CO LTD",
+    "url": "https://vision.espressif.com/"
+  },
+  "homepage": "https://vision.espressif.com/",
+  "repository": "https://github.com/espressif/esp-vision",
+  "license": "Apache-2.0",
+  "keywords": [
+    "esp-vision",
+    "MicroPython",
+    "ESP32",
+    "MCP"
+  ]
+}

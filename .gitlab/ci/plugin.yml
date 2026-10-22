@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+plugin_checks:
+  stage: check
+  image: node:24-bookworm-slim
+  tags: [build, internet, amd64]
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-serial
+  script:
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/plugin-tmp" TMP="$CI_PROJECT_DIR/.cache/plugin-tmp" TEMP="$CI_PROJECT_DIR/.cache/plugin-tmp"
+    - mkdir -p "$TMPDIR"
+    - node tools/ci/mcp/install_host.mjs --output .cache/plugin-core-artifacts
+    - npm --prefix host/esp-vision-plugin run build
+    - npm --prefix host/esp-vision-plugin test
+    - export ESP_VISION_NPM_TARBALL_DIR="$CI_PROJECT_DIR/.cache/plugin-npm-tarballs"
+    - node tools/ci/mcp/release_npm.mjs --dry-run --package host/esp-vision-plugin
+  artifacts:
+    paths: [.cache/plugin-npm-tarballs/]
+    expire_in: 1 month
+
+publish_plugin_npm:
+  when: manual
+  allow_failure: false
+  stage: deploy
+  image: node:24-bookworm-slim
+  tags: [build, internet, amd64]
+  needs: [plugin_checks]
+  resource_group: host-tools-npm-release
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes:
+        - "host/esp-vision-plugin/**/*"
+        - "tools/ci/mcp/release_npm.mjs"
+        - ".gitlab/ci/plugin.yml"
+    - when: never
+  script:
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/plugin-tmp" TMP="$CI_PROJECT_DIR/.cache/plugin-tmp" TEMP="$CI_PROJECT_DIR/.cache/plugin-tmp"
+    - mkdir -p "$TMPDIR"
+    - node tools/ci/mcp/release_npm.mjs --package host/esp-vision-plugin --tarball-dir .cache/plugin-npm-tarballs
