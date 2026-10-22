@@ -20,7 +20,7 @@ knowledge_mcp_checks:
 
 package_knowledge_mcp:
   stage: build_docs
-  extends: .rules:docs:build
+  extends: .rules:mcp:build
   image: node:24-bookworm-slim
   tags: [build, internet, amd64]
   variables:
@@ -46,3 +46,30 @@ package_knowledge_mcp:
   artifacts:
     paths: [.cache/knowledge-npm/]
     expire_in: 1 month
+
+# Each changed embedded snapshot needs a new npm package version. Publication
+# is tied to the protected release tag rather than every master source commit.
+publish_knowledge_mcp_npm:
+  stage: post_deploy
+  extends: .rules:release
+  image: node:24-bookworm-slim
+  tags: [build, internet, amd64]
+  resource_group: knowledge-mcp-npm-release
+  needs:
+    - job: package_knowledge_mcp
+      artifacts: true
+    - job: verify_knowledge_mcp_container
+      artifacts: false
+    - job: qualify_firmware_release
+      artifacts: false
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-jsonschema
+  script:
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/knowledge-tmp" TMP="$CI_PROJECT_DIR/.cache/knowledge-tmp" TEMP="$CI_PROJECT_DIR/.cache/knowledge-tmp"
+    - mkdir -p "$TMPDIR"
+    - npm --prefix host/knowledge-mcp ci --ignore-scripts --no-audit --no-fund
+    - node tools/ci/mcp/release_npm.mjs --package host/knowledge-mcp --tarball .cache/knowledge-npm/knowledge-mcp.tgz

@@ -41,6 +41,7 @@ include:
   - local: '.gitlab/ci/mcp-runtime.yml'
   - local: '.gitlab/ci/docs.yml'
   - local: '.gitlab/ci/deploy.yml'
+  - local: '.gitlab/ci/mcp.yml'
 
 pre_commit:
   stage: check
