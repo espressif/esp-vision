@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## 0.5.1
+
+### Fixed
+
+- Make packaged execution-deadline regressions deterministic with a controlled clock, including expiry before VM entry, and keep installation guidance independent of temporary publication state.
+
+## 0.5.0
 
 ### Changed
 
