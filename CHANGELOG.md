@@ -2,86 +2,58 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
-## [Unreleased]
+## [2026.10.23]
 
-### Fixed
-
-- Keep the Knowledge image repository allowlist in website deployment configuration, remove trigger-time registry expansion from the bridge, and exercise the actual consumer with its independent pin.
-
-- Validate CI npm archives with a local pack dry run so already published versions remain testable; retain immutable-version checks for real publication.
-
-- Mirror qualified release source commits to GitHub before DL model-source validation, independently of manual npm publication, with a mandatory CI ordering regression.
-
-## [2026.10.21]
-
-### Added
-
-- Added a unified GitHub Issues reporting entry in both READMEs and English-language issue forms for IDE, website, Host Device Core, and firmware problems.
-- Added mandatory target regressions for P4 camera/LCD coexistence and shutdown/restart, unsupported Image keyword rejection, caller-owned snapshot buffers, and the configured allocation policy.
-- Expose passive Node device inventory and adapter asset URLs as public Device Core APIs.
-- Add @esp-vision/device-cli with Python, binary file, camera/screen capture, sequential batch and bounded watch commands; provide versioned JSON results, streamed events and cancellation from a self-contained npm executable.
-- Package the official ESP-VISION logo and provide WorkBuddy local Skill ZIP imports and official Knowledge MCP configuration through the npm installer, with explicit pending-import status and immutable versioned payloads.
-- Bundle a fixed standalone Device CLI and the official Knowledge HTTP MCP in a Codex/Claude plugin with one capability-oriented Skill and an npm installer supporting verified upgrades and failure recovery.
-- Publish Knowledge MCP as a public npm package with a reusable server factory, isolated stdio transport, complete validated snapshot, provenance metadata and installed-artifact HTTP/statistics checks.
-- Own the online Knowledge MCP runtime and anonymous daily aggregate statistics in the main repository, with a locked Node 24 runtime, immutable-image build context and HTTP/privacy/reporting regression tests.
-- Build Knowledge MCP images from the exact checked npm archive; publish schema 2 GitLab release descriptors binding npm, snapshot, source and image identities, then trigger website deployment after qualification gates.
-- Provide retained-log SDK, CLI, plugin, Knowledge npm and website acceptance with optional P4 hardware and isolated native-client checks; maintain capability-oriented architecture, installation and release documentation.
+This release fixes publication and deployment reliability after 2026.10.21. Firmware runtime behavior is unchanged. Firmware tags and npm package versions are independent.
 
 ### Changed
 
-- Require an explicit manual action for protected default-branch npm publication, separating merge approval from public release.
-- Unified ESP-VISION-owned heap allocation around `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` while retaining requested DMA capabilities; set a 16 KiB internal-memory boundary on PSRAM-enabled P4 boards and the P4 template.
-- Qualify ESP32-P4/S3 firmware and hardware CI on pinned ESP-IDF v5.5.6, retain release/v6.1 for ESP32-S31, and align release packaging dependencies with this board-specific matrix. Document the required IDF environments and possible build/runtime/Python API changes with other versions in English and Chinese.
-- Release Device Core 0.5.0 as an SDK-only package; move the management command to the standalone Device CLI with an explicit 0.4.x migration path.
-- Unified ESP-VISION-owned heap allocation around `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` while retaining requested DMA capabilities; set a 16 KiB internal-memory boundary on PSRAM-enabled P4 boards and the P4 template.
-- Qualify ESP32-P4/S3 firmware and hardware CI on pinned ESP-IDF v5.5.6, retain release/v6.1 for ESP32-S31, and align release packaging dependencies with this board-specific matrix. Document the required IDF environments and possible build/runtime/Python API changes with other versions in English and Chinese.
-- Transfer Knowledge MCP releases through internal GitLab registries instead of the DL firmware distribution channel.
-- Document npm-delivered WorkBuddy Skill imports and official plugin branding alongside native Codex and Claude installation.
+- Prepare Knowledge MCP 0.1.1 for the 2026.10.23 knowledge snapshot and source provenance. Device Core remains at 0.5.1; Device CLI and Plugin remain at 0.1.0.
 
 ### Fixed
 
-- Separate SQLite statistics initialization contention from concurrent acknowledged-write atomicity tests, using ready writer processes and an explicit start barrier.
+- Validate npm archives locally with `npm pack --dry-run` so CI can qualify already published versions without attempting publication. Real publication still enforces immutable versions and exact archive integrity.
+- Mirror qualified release source commits to GitHub before DL validates model-source URLs, independently of manual npm publication; enforce the dependency order with a CI regression check.
+- Keep the Knowledge image repository allowlist in website deployment configuration and remove registry expansion from the upstream bridge. Verify the producer/consumer contract against the independently configured repository.
 
-- Pin standalone CLI builds to the reviewed Device Core 0.5.1 tarball and its verified registry integrity.
-- Make the packaged SDK execution-deadline regression deterministic under CI scheduling and cover expiry before VM entry; prepare the test-only correction as Device Core 0.5.1 and remove stale publication-state wording from its README.
-- Removed the unsupported `copy_to_fb` keyword from `image.Image` construction and `Image.to_*()` conversion, and removed it from those stubs and docs; `image.ImageIO.read(copy_to_fb=...)` remains supported.
-- Removed the unsupported `transform` keyword from the ESP-VISION `Image.copy()` and `Image.draw_image()` signatures and stubs.
-- Reduced the P4X_EYE SPI display transaction queue to one entry so camera startup and LCD transfers share a bounded DMA footprint.
-- Reset browser-flashed devices through the active stub loader so its two-byte command status is decoded correctly; preserve automatic-reset failure diagnostics for runtime handoff.
-- Separate the Chinese hardware-guide inline REPL limit literal from its following parenthesis so strict HTML/PDF documentation builds accept the new CI contract section.
-- Retain a Core-captured LCD test-pattern JPEG alongside the camera JPEG in CI hardware artifacts and require its dimensions to match the live display.
-- Preserve camera allocation, timeout and unexpected mode-switch errors as hardware-test failures; only explicit unsupported capabilities may be reported as unsupported. Keep identity checks compatible with firmware that does not advertise optional storage inspection.
-- Keep SDK-only hardware-fixture regression tests independent of an installed Python interpreter; verify bounded source reconstruction in Node and execute the fixture through real Core hardware acceptance.
-- Load hardware-test fixtures in RAM within the negotiated REPL input limit instead of requiring Flash file uploads for memory/camera/display checks. Report storage state separately and fail explicit file acceptance on unmounted volumes without formatting. Bind target-test startup and runtime checks to the selected board/build identity and require every selected CI check to pass. Ship the updated packaged hardware tools as Device Core 0.4.1 to avoid republishing changed 0.4.0 content.
-- Dispatch queued VM RPCs at bounded main-thread Python safe points so live camera/LCD applications can serve capture requests without returning to the REPL; preserve session authentication and output isolation.
-- Align the SDK installation example with the reviewed detached-execution version.
-- Keep acknowledged Python runs alive when disconnecting the host session while preserving caller-requested cancellation.
-- Confirm detached Python startup from VM execution before releasing the CLI session, so queued input cannot disappear behind a successful start result.
-- Expose passive Device Core connections and keep metadata inventory probes from interrupting running Python programs; document session-local execution state.
-- Honor omitted aggregate Python and file-read deadlines, including short in-memory Python sources; retain bounded protocol setup and chunk waits with cancellation and session cleanup.
-- Lock POSIX serial adapters before opening and drain child diagnostics before classifying failures so concurrent CLI attempts report SERIAL_BUSY without stealing device bytes.
-- Preserve rejected CLI command identities, clarify action-specific flags, and verify validation failures from installed npm archives using device development feedback.
-- Keep installed CLI package checks portable by resolving temporary artifacts from TMPDIR or a repository-local cache.
-- Keep detached CLI start results as acknowledgements and connect passively for RPC-only device commands so observation does not stop continuous applications.
-- Bind Device CLI startup acknowledgements to VM entry and update the bilingual standalone CLI reference and detached-output guidance.
-- Pin the SDK lifecycle fix so acknowledging a detached CLI run and exiting does not send a remote stop.
-- Refresh the staged SDK integrity after aligning its installation documentation; retain the same runtime sources.
-- Guide continuous application verification and consent-based development feedback in the plugin Skill, with a packaged workflow reference grounded in real P4 application findings.
-- Resolve plugin smoke-test artifacts from TMPDIR or a local project cache without depending on a maintainer home directory.
-- Bundle VM-confirmed detached startup and clarify that new sessions cannot reattach to previous Python stdout.
-- Bundle the non-interrupting device CLI and explain detached execution acknowledgement, passive observation and session-local runtime fields.
-- Bundle the corrected detached-run cancellation lifecycle so local CLI exit preserves an acknowledged application.
-- Build the full Knowledge snapshot with the check-stage Python interpreter immediately after its source checks, so generator failures surface before unrelated firmware builds finish.
-- Preserve return annotations from stub source spans so Knowledge pack generation also works on the Python 3.8 documentation builder.
-- Retain Knowledge API return types and public display aliases, including canonical documentation links and normalized histogram value semantics.
-- Ship release-version and complete-MicroPython snapshot validation with the Knowledge npm package pipeline, keeping it independently buildable before deployment integration.
-- Validate Knowledge factory and transport versions against the selected snapshot so complete release snapshots exercise the same tests as fixtures.
-- Schedule disposable Knowledge container checks on the available main-project appserver runner and produce snapshots independently of firmware builds while retaining release qualification gates.
-- Require CLI and shared host regressions before CLI/plugin publication and align public SDK documentation with Core 0.5.1.
-- Align integration acceptance with the exact reviewed runtime and host package versions.
-- Require screen capture to succeed from a separate CLI process while a tight Python bytecode loop is active, covering VM dispatch independently of sleep polling.
-- Stop bounded display-readiness retries before another connection cannot fit the remaining setup budget, preserving the not-ready diagnosis and normal cleanup.
-- Exercise a detached persistent camera/LCD application across independent CLI connections, native file signaling and verified cleanup instead of inferring global execution from session-local state.
+## [2026.10.21]
+
+This release improves camera/LCD coexistence and live application control, and introduces the standalone Device CLI, official plugin and npm-delivered Knowledge MCP. The published host packages are Device Core 0.5.1, Device CLI 0.1.0, Knowledge MCP 0.1.0 and Plugin 0.1.0.
+
+### Added
+
+- Add mandatory P4 target regressions for camera/LCD coexistence, shutdown/restart, unsupported Image keywords, caller-owned snapshot buffers and the configured allocation policy.
+- Expose passive Node device inventory and adapter asset URLs through public Device Core APIs.
+- Add the standalone `@esp-vision/device-cli` package with Python execution, binary file operations, camera/screen capture, sequential batches and bounded observation; provide versioned JSON results, streamed events and cancellation.
+- Add `@esp-vision/plugin` with a fixed bundled Device CLI, one capability-oriented Skill and the official Knowledge HTTP MCP. Support verified native Codex/Claude installation, upgrades and failure recovery, and prepare WorkBuddy Skill ZIP imports with explicit manual activation status and the official ESP-VISION logo.
+- Publish `@esp-vision/knowledge-mcp` with a reusable service factory, stdio and HTTP transports, a complete validated knowledge snapshot and source provenance. Keep the official plugin connected to the online service.
+- Maintain the Knowledge HTTP runtime and anonymous daily aggregate statistics in the main repository, with Node 24, privacy/reporting regressions and persistent-volume container checks.
+- Build Knowledge images from the exact verified npm archive and publish GitLab release descriptors binding npm, snapshot, source and image identities; trigger website deployment after qualification gates.
+- Add unified retained-log acceptance for SDK, CLI, plugin, Knowledge npm and website integration, with optional P4 hardware and isolated native-client checks.
+- Add a shared GitHub Issues reporting entry and English issue forms for IDE, website, Device Core and firmware problems.
+
+### Changed
+
+- Unify ESP-VISION-owned heap allocations around `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL`, preserve requested DMA capabilities, and set a 16 KiB internal-memory boundary on PSRAM-enabled P4 boards and the P4 template.
+- Qualify ESP32-P4/S3 on pinned ESP-IDF v5.5.6 and retain release/v6.1 for ESP32-S31; align release packaging and bilingual environment guidance with the board-specific matrix.
+- Make Device Core 0.5.x an SDK-only package and move the management command to Device CLI, with an explicit migration path from Core 0.4.x and consumers pinned to Core 0.5.1.
+- Require a manual action for protected default-branch npm publication. Transfer Knowledge releases through internal GitLab registries rather than the DL firmware channel; publish Knowledge npm from qualified protected firmware tags.
+
+### Fixed
+
+- Remove unsupported `copy_to_fb` arguments from Image construction/conversion and unsupported `transform` arguments from Image copy/drawing, including stubs and documentation. Preserve supported `ImageIO.read(copy_to_fb=...)` behavior.
+- Reduce the P4X_EYE SPI display transaction queue to one entry so camera startup and LCD transfers share a bounded DMA footprint.
+- Dispatch queued VM RPCs at bounded main-thread Python safe points so live camera/LCD applications can serve capture requests while preserving session authentication and output isolation.
+- Confirm detached Python startup at VM entry before releasing the CLI session, preserve acknowledged runs after host disconnect, and retain explicit cancellation behavior. Use passive connections for observation and document that execution metadata and stdout belong to the current session.
+- Honor omitted aggregate Python and file-read deadlines while retaining bounded setup/protocol waits, cancellation and cleanup. Make packaged execution-deadline regressions deterministic, including expiry before VM entry.
+- Lock POSIX serial adapters before opening them and drain diagnostics before reporting `SERIAL_BUSY`, preventing concurrent CLI processes from stealing device bytes.
+- Reset browser-flashed devices through the active stub loader to decode status correctly, while preserving automatic-reset failure diagnostics.
+- Load hardware fixtures in RAM within the negotiated REPL input limit; bind checks to the selected board/build identity, preserve allocation/timeout/mode-switch failures, and report unmounted storage without formatting it.
+- Retain camera and LCD test-pattern JPEGs in hardware artifacts, verify live display dimensions, and require cross-process screen capture while a tight Python loop is active. Exercise persistent camera/LCD applications across independent CLI sessions with verified cleanup.
+- Correct CLI validation results, command-specific flags and detached-output guidance; resolve temporary package artifacts through project-local paths or `TMPDIR`. Guide continuous application verification and consent-based feedback in the plugin Skill.
+- Preserve Knowledge API return types, public display aliases and canonical documentation links, including normalized histogram semantics. Generate complete snapshots early with the check-stage interpreter and preserve stub annotations on Python 3.8 documentation builders.
+- Validate Knowledge versions and complete MicroPython snapshots in packaged acceptance; separate SQLite initialization contention from concurrent acknowledged-write atomicity using ready writers and an explicit start barrier.
+- Require shared host regressions before CLI/plugin publication, verify pinned Core archive integrity, and align acceptance with exact package versions. Correct strict Chinese hardware-guide markup and keep SDK-only fixture regressions independent of a local Python interpreter.
 
 ## [2026.10.19]
 
