@@ -8,14 +8,17 @@ import { createDevice } from './index.js'
 import { serialTransport, tcpTransport } from './node_transport.js'
 
 export const defaultPython = process.platform === 'win32' ? 'python' : 'python3'
-export async function listSerial({ python = defaultPython, signal } = {}) {
+export async function listSerial({ python = defaultPython, signal, timeout = 10000 } = {}, dependencies = {}) {
+  if (!Number.isFinite(timeout) || timeout <= 0) throw new RangeError('Serial enumeration timeout must be positive')
   try {
-    const { stdout } = await promisify(execFile)(python, [fileURLToPath(new URL('./node_serial.py', import.meta.url)), '--list'], { signal, timeout: 10000, maxBuffer: 1024 * 1024, windowsHide: true })
+    const run = dependencies.execFile ?? promisify(execFile)
+    const { stdout } = await run(python, [fileURLToPath(new URL('./node_serial.py', import.meta.url)), '--list'], { signal, timeout, maxBuffer: 1024 * 1024, windowsHide: true })
     const ports = JSON.parse(stdout)
     if (!Array.isArray(ports)) throw new Error('Invalid serial list')
     return ports
   } catch (cause) {
     if (signal?.aborted) throw signal.reason
+    if (cause?.code === 'ETIMEDOUT') throw Object.assign(new Error('Serial enumeration timed out'), { code: 'TIMEOUT', cause })
     throw Object.assign(new Error('Serial enumeration unavailable: install Python and pyserial, or select --python'), { code: 'SERIAL_UNAVAILABLE', cause })
   }
 }
@@ -53,7 +56,7 @@ export function serialEntry(port) {
     : usb ? 'serial' : 'uart'
   return { interface: kind, address: port.path, status: 'unprobed', identity: null, usb: { vendorId: vid ?? null, productId: pid ?? null, serialNumber: port.serialNumber ?? null, product: port.product ?? null, manufacturer: port.manufacturer ?? null }, interfaceSource: 'descriptor-candidate' }
 }
-export function transportFor(entry, options) {
+export function transportFor(entry, options = {}) {
   return entry.interface === 'tcp' ? tcpTransport({ host: entry.host, port: entry.port })
     : serialTransport({ serial: entry.address, role: entry.interface, python: options.python ?? defaultPython })
 }
@@ -84,7 +87,7 @@ export async function inventory(options = {}, dependencies = {}) {
     signal?.throwIfAborted()
     const device = (dependencies.createDevice ?? createDevice)({ transport: (dependencies.transportFor ?? transportFor)(row, options) })
     try {
-      const result = await device.connect({ role: row.interface === 'serial' ? 'unknown' : row.interface, timeout: options.probeTimeout ?? 5000, signal, ...(row.advertisement ? { expectedDevice: row.advertisement } : {}) })
+      const result = await device.connect({ role: row.interface === 'serial' ? 'unknown' : row.interface, timeout: options.probeTimeout ?? 5000, signal, probeRepl: false, ...(row.advertisement ? { expectedDevice: row.advertisement } : {}) })
       row.identity = result.identity; row.inspection = await device.inspect({ fields: options.fields, signal }); row.status = 'identified'
     } catch (error) {
       if (signal?.aborted) throw error

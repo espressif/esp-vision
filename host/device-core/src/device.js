@@ -106,14 +106,24 @@ class Device {
     source?.addEventListener('abort', abortSource, { once: true })
     if (lifecycle.aborted) abortLifecycle()
     if (source?.aborted) abortSource()
-    const cleanup = () => {
+    const cleanupLifecycle = () => {
       lifecycle.removeEventListener('abort', abortLifecycle)
+    }
+    const cleanup = () => {
+      cleanupLifecycle()
       source?.removeEventListener('abort', abortSource)
     }
     try {
       const result = await api[domain][method]({ ...request, signal: controller.signal })
-      // A started Python run retains cancellation until its completion.
-      if (result?.done instanceof Promise) { result.done.then(cleanup, cleanup); return result }
+      if (result?.done instanceof Promise) {
+        // Once Python reports that a run started, disconnect releases the
+        // session but does not reinterpret that acknowledgement as a request
+        // to interrupt the device program. The caller's own signal remains
+        // attached until completion.
+        if (domain === 'python' && method === 'execute') cleanupLifecycle()
+        result.done.then(cleanup, cleanup)
+        return result
+      }
       cleanup()
       return result
     } catch (error) { cleanup(); throw error }
@@ -125,10 +135,11 @@ class Device {
   }
 
   async connect(options = {}) {
-    object(options, ['transport', 'role', 'expectedDevice', 'timeout', 'signal'], 'connect')
-    const { role = 'unknown', expectedDevice = null, timeout = 30000, signal } = options
+    object(options, ['transport', 'role', 'expectedDevice', 'timeout', 'signal', 'probeRepl'], 'connect')
+    const { role = 'unknown', expectedDevice = null, timeout = 30000, signal, probeRepl = true } = options
     if (!['unknown', 'usj', 'usb', 'uart', 'tcp'].includes(role)) throw new TypeError('role must be usj, usb, uart or tcp')
     if (!Number.isFinite(timeout) || timeout <= 0) throw new RangeError('timeout must be positive')
+    if (typeof probeRepl !== 'boolean') throw new TypeError('probeRepl must be a boolean')
     if (signal !== undefined && (!signal || typeof signal.addEventListener !== 'function' || typeof signal.aborted !== 'boolean')) throw new TypeError('signal must be an AbortSignal')
     if (signal?.aborted) throw cancellation(signal)
     if (this.#updating || this.#connecting || this.#disconnecting || this.#session) throw failure('DEVICE_BUSY', 'Disconnect before opening another connection')
@@ -173,7 +184,7 @@ class Device {
       this.#unsubscribe = transport.subscribe({ data: bytes => { if (this.#session === session) session.feedBytes(bytes) }, error: lost, close: () => lost() })
       if (typeof this.#unsubscribe !== 'function') throw new TypeError('Transport subscribe must synchronously return an unsubscribe function')
       if (transport.connect) await abortable(transport.connect({ signal: lifecycle.signal }), lifecycle.signal)
-      await abortable(session.negotiate({ role, expectedDevice, signal: lifecycle.signal }), lifecycle.signal)
+      await abortable(session.negotiate({ role, expectedDevice, probeRepl, signal: lifecycle.signal }), lifecycle.signal)
       if (lifecycle.signal.aborted || this.#session !== session) throw cancellation(lifecycle.signal)
       this.#api = {
         python: createPythonApi({ session, state: this.#state }),

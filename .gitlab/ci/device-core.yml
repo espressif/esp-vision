@@ -43,6 +43,8 @@ device_core_checks:
     - node scripts/release-npm.mjs --dry-run
 
 publish_device_core_npm:
+  when: manual
+  allow_failure: false
   image: node:22-bookworm
   stage: deploy
   tags: [build, internet, amd64]

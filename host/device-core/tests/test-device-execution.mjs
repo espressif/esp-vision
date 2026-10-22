@@ -1,28 +1,70 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createPythonApi } from '../src/device_python.js'
 import { DeviceSession } from '../src/device_session.js'
 import { EvMuxParser, makeEvMuxFrame } from '../src/evmux.js'
 import { EvRepl } from '../src/evrepl.js'
 
-function executionFixture({ short = false, failWrite = false, failStop = false, stalledReset = false } = {}) {
+function executionFixture({ short = false, failWrite = false, failStop = false, stalledReset = false, deferExec = false, deferRun = false, deferStart = false, features = ['file.write.binary', 'script.run', 'device.control'] } = {}) {
   const requests = []
   let running = false
   let sentinel = null
+  let startMarker = null
+  let startMarkerEmitted = false
+  let pendingExec = null
   let terminal = ''
+  let startAndCompletionInSameFrame = false
   let session
   let resetRequested = false
   let resetPolls = 0
   let uploaded = 0
-  const stdout = (payload) => session.feedBytes(makeEvMuxFrame({
-    channel: 'repl.stdout', type: 'data', sessionId: session.sessionId, vmEpoch: session.vmEpoch, payload,
-  }))
+  const stdout = (payload) => {
+    if (startMarker && sentinel?.marker && String(payload).includes(startMarker) && String(payload).includes(sentinel.marker)) {
+      startAndCompletionInSameFrame = true
+    }
+    session.feedBytes(makeEvMuxFrame({
+      channel: 'repl.stdout', type: 'data', sessionId: session.sessionId, vmEpoch: session.vmEpoch, payload,
+    }))
+  }
+  const finishFast = () => {
+    if (startMarker && !startMarkerEmitted && sentinel) {
+      startMarkerEmitted = true
+      running = true
+      const completionMarker = sentinel.marker
+      stdout(`${startMarker}\r\n${completionMarker}\r\n>>> `)
+      running = false
+      sentinel = null
+      startMarker = null
+      startMarkerEmitted = false
+      return
+    }
+    finish()
+  }
+  const enter = () => {
+    if (!startMarker || startMarkerEmitted) return
+    startMarkerEmitted = true
+    running = true
+    const split = Math.floor(startMarker.length / 2)
+    stdout(startMarker.slice(0, split))
+    stdout(`${startMarker.slice(split)}\r`)
+    stdout('\n')
+  }
   const finish = () => {
+    if (startMarker && !startMarkerEmitted) enter()
     running = false
     if (sentinel) {
-      stdout(`${sentinel.line}${sentinel.marker}\r\n>>> `)
+      stdout(`${sentinel.startMarker ? '' : sentinel.line}${sentinel.marker}\r\n>>> `)
       sentinel = null
+      startMarker = null
+      startMarkerEmitted = false
     }
+  }
+  const finishExec = () => {
+    if (!pendingExec) return
+    const command = pendingExec
+    pendingExec = null
+    stdout(`${command}>>> `)
   }
   const parser = new EvMuxParser({
     filterFrame: (metadata, bytes) => {
@@ -35,10 +77,27 @@ function executionFixture({ short = false, failWrite = false, failStop = false, 
           resetRequested = true
           return
         }
-        const match = /print\("(~~EVSCRIPT-END:[^"]+)"\)/.exec(text)
-        if (match) {
-          sentinel = { line: text, marker: match[1] }
-          if (short) finish()
+        const marker = /~~EVSCRIPT-END:[A-Za-z0-9-]+~~/.exec(text)?.[0]
+        if (marker) {
+          startMarker = /~~EVSCRIPT-START:[A-Za-z0-9-]+~~/.exec(text)?.[0] ?? null
+          startMarkerEmitted = false
+          sentinel = { line: text.trimEnd(), marker, startMarker }
+          if (startMarker) {
+            const echoSplit = Math.floor(text.length / 2)
+            stdout(text.slice(0, echoSplit))
+            stdout(`${text.slice(echoSplit)}\r\n`)
+          }
+          if (deferRun) {
+            if (startMarker && !deferStart) enter()
+            running = true
+            stdout('')
+          } else if (short && startMarker && !deferStart) finishFast()
+          else {
+            if (startMarker && !deferStart) enter()
+            if (short) finish()
+          }
+        } else if (deferExec && text.startsWith('exec(')) {
+          pendingExec = text
         } else {
           stdout(`${text}\r\n>>> `)
         }
@@ -85,9 +144,78 @@ function executionFixture({ short = false, failWrite = false, failStop = false, 
   session.vmEpoch = 1
   session.vmReady = true
   session.limits.fileWriteChunkMax = 16384
-  session.capabilities = { features: ['file.write.binary', 'script.run', 'device.control'] }
-  return { session, requests, finish, get terminal() { return terminal }, get running() { return running } }
+  session.capabilities = { features }
+  return { session, requests, finish, enter, finishExec, get terminal() { return terminal }, get running() { return running },
+    get startAndCompletionInSameFrame() { return startAndCompletionInSameFrame } }
 }
+
+test('inline source assignment splits at the REPL limit without changing source text', () => {
+  const repl = new EvRepl({ writeEvmux: async () => {} })
+  const variableName = '__evcore_python_boundary'
+  const source = `${'x'.repeat(470)}😀\nprint("done")`
+  assert.ok(repl.execInputBytes(source) <= repl.inputMaxBytes)
+  const assignments = repl.createInlineSourceAssignments(source, variableName)
+  assert.ok(assignments.length > 1, 'the private assignment prefix requires safe chunks at this boundary')
+  assert.ok(assignments.every(statement => repl.execInputBytes(statement) <= repl.inputMaxBytes))
+  const rebuilt = assignments.map((statement, index) => JSON.parse(statement.slice(variableName.length + (index === 0 ? 1 : 2)))).join('')
+  assert.equal(rebuilt, source)
+  const command = repl.createInlineScriptRunCommand(variableName)
+  assert.ok(new TextEncoder().encode(command).length <= repl.inputMaxBytes)
+  assert.match(command, new RegExp(`exec\\(${variableName}\\)`))
+  assert.match(command, new RegExp(`del ${variableName}`))
+})
+
+test('python.execute small source waits past 30 seconds without requiring device storage', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const fixture = executionFixture({ deferRun: true, features: [] })
+  t.after(() => fixture.session.close())
+  let settled = false
+  const execution = fixture.session.executePython('while True: pass').then(output => {
+    settled = true
+    return output
+  })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(fixture.session.runCapture?.timer, null, 'omitted timeout leaves completion pending')
+  assert.equal(fixture.session.runCapture?.path, null, 'small source does not create a device file')
+  assert.ok(fixture.requests.some(({ metadata, payload }) => metadata.channel === 'repl.stdin' && String(payload).includes('__evcore_python_')))
+  assert.ok(!fixture.requests.some(({ metadata }) => ['file.write', 'script.run'].includes(metadata.method)))
+  t.mock.timers.tick(31000)
+  await Promise.resolve()
+  assert.equal(settled, false, 'silent Python still waits beyond the former fixed completion timeout')
+  fixture.finish()
+  assert.match(await execution, /^\s*$/)
+})
+
+test('Python deadlines include REPL setup and cancellation releases API ownership', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const timed = executionFixture({ deferExec: true })
+  t.after(() => timed.session.close())
+  const state = {}
+  const python = createPythonApi({ session: timed.session, state })
+  const execution = python.execute({ source: 'print(42)', timeout: 1000 })
+  const timedOut = assert.rejects(execution, { code: 'TIMEOUT' })
+  await new Promise(resolve => setImmediate(resolve))
+  t.mock.timers.tick(1000)
+  await timedOut
+  assert.equal(state.operation, null, 'deadline releases the operation lock even during setup')
+
+  const cancelled = executionFixture({ deferRun: true })
+  t.after(() => cancelled.session.close())
+  const cancelledState = {}
+  const cancelledPython = createPythonApi({ session: cancelled.session, state: cancelledState })
+  const controller = new AbortController()
+  const cancellation = cancelledPython.execute({ source: 'while True: pass', signal: controller.signal })
+  const aborted = assert.rejects(cancellation, { name: 'AbortError' })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(cancelledState.operation, 'the operation remains owned while Python is still running')
+  controller.abort()
+  await aborted
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(cancelledState.operation, null, 'cancellation releases the operation lock')
+  assert.equal(cancelledState.run, null, 'cancellation does not leave a false active-run claim')
+  assert.ok(cancelled.requests.some(({ metadata, payload }) => metadata.method === 'device.control' && payload.action === 'stop'),
+    'cancellation requests a stop but the API still reports cancellation, not success')
+})
 
 test('interactive execution survives the bounded-run deadline, streams output, and completes on shared stop', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
@@ -111,11 +239,75 @@ test('interactive execution survives the bounded-run deadline, streams output, a
   assert.ok(!fixture.terminal.includes('~~EVSCRIPT-END'), 'shared completion markers never leak into terminal output')
 })
 
-test('short scripts can complete while startScript is returning', async () => {
+test('startScript waits for the VM-entry marker and ignores the echoed marker in its command', async () => {
+  const fixture = executionFixture({ deferStart: true })
+  let resolved = false
+  const starting = fixture.session.startScript('/main.py', undefined, { inlineCompletion: true }).then(run => {
+    resolved = true
+    return run
+  })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(resolved, false, 'a successful stdin write is not evidence that MicroPython entered the runner')
+  assert.equal(fixture.running, false)
+  assert.equal(fixture.session.runCapture?.timer, null, 'interactive start acknowledgement does not create an aggregate run deadline')
+  fixture.enter()
+  const run = await starting
+  assert.equal(fixture.running, true)
+  assert.doesNotMatch(fixture.terminal, /~~EVSCRIPT-START:/, 'the private entry marker is filtered from terminal output')
+  fixture.finish()
+  await run.done
+  fixture.session.close()
+})
+
+test('startScript entry acknowledgement has a bounded setup wait', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const fixture = executionFixture({ deferStart: true })
+  const starting = fixture.session.startScript('/main.py', undefined, { inlineCompletion: true })
+  const timedOut = assert.rejects(starting, { code: 'SCRIPT_START_TIMEOUT' })
+  await new Promise(resolve => setImmediate(resolve))
+  t.mock.timers.tick(5000)
+  await timedOut
+  assert.equal(fixture.session.scriptRunSnapshot(), null)
+  fixture.session.close()
+})
+
+test('cancellation while waiting for VM entry rejects start and releases the run capture', async () => {
+  const fixture = executionFixture({ deferStart: true })
+  const controller = new AbortController()
+  const starting = fixture.session.startScript('/main.py', undefined, {
+    inlineCompletion: true,
+    signal: controller.signal,
+  })
+  const cancelled = assert.rejects(starting, { name: 'AbortError' })
+  await new Promise(resolve => setImmediate(resolve))
+  controller.abort()
+  await cancelled
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(fixture.session.scriptRunSnapshot(), null)
+  assert.ok(fixture.requests.some(({ metadata, payload }) => metadata.method === 'device.control' && payload.action === 'stop'))
+  fixture.session.close()
+})
+
+test('closing the transport while waiting for VM entry rejects start and releases the run capture', async () => {
+  const fixture = executionFixture({ deferStart: true })
+  const starting = fixture.session.startScript('/main.py', undefined, { inlineCompletion: true })
+  const disconnected = assert.rejects(starting, /device disconnected/)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(fixture.session.repl.scriptStartWaiter, 'startup is waiting for the VM-entry acknowledgement')
+  fixture.session.close(new Error('device disconnected'))
+  await disconnected
+  assert.equal(fixture.session.scriptRunSnapshot(), null)
+  assert.equal(fixture.session.repl.scriptStartWaiter, null)
+  assert.doesNotMatch(fixture.terminal, /~~EVSCRIPT-START:/)
+})
+
+test('short scripts can complete in the same frame while startScript is returning', async () => {
   const fixture = executionFixture({ short: true })
-  const run = await fixture.session.startScript('/short.py', 'print(1)')
+  const run = await fixture.session.startScript('/short.py', undefined, { inlineCompletion: true })
+  assert.equal(fixture.startAndCompletionInSameFrame, true)
   assert.equal((await run.done).path, '/short.py')
   assert.equal(fixture.session.scriptRunSnapshot(), null)
+  assert.doesNotMatch(fixture.terminal, /~~EVSCRIPT-START:/)
   fixture.session.close()
 })
 

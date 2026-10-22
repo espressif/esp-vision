@@ -53,7 +53,8 @@ function validateRequest(request) {
   if (path) validateDevicePath(request.path)
   const completion = request.completion ?? 'wait'
   if (!['wait', 'start'].includes(completion)) throw new TypeError('Python completion must be wait or start')
-  if (request.timeout !== undefined && (!Number.isFinite(request.timeout) || request.timeout <= 0)) throw new RangeError('Python timeout must be positive')
+  if (request.timeout !== undefined && request.timeout !== null
+      && (!Number.isFinite(request.timeout) || request.timeout <= 0)) throw new RangeError('Python timeout must be positive or null')
   if (request.maxOutputChars !== undefined && (!Number.isSafeInteger(request.maxOutputChars) || request.maxOutputChars < 0)) throw new RangeError('maxOutputChars must be a nonnegative integer')
   if (completion === 'start' && request.timeout !== undefined) throw new TypeError('timeout only applies to completion wait')
   return { source, completion }
@@ -79,7 +80,7 @@ export function createPythonApi({ session, state = {} }) {
     async execute(request) {
       request = snapshotRequest(request, ['source', 'path', 'completion', 'timeout', 'signal', 'maxOutputChars'], 'Python execution')
       const { source, completion } = validateRequest(request)
-      const { signal = null, timeout = 10000, maxOutputChars } = request
+      const { signal = null, timeout = null, maxOutputChars } = request
       checkAbort(signal)
       if (state.operation || state.run || session.runCapture || session.runStarting) throw deviceBusy()
       const token = { kind: 'python.execute', interactive: false }
@@ -93,7 +94,7 @@ export function createPythonApi({ session, state = {} }) {
         if (released) return
         released = true
         try {
-          if (temporary) {
+          if (temporary && session.state === 'ready') {
             if (failed && session.stopForRepl) {
               const ready = await session.stopForRepl({ timeout: 3000 })
               if (!ready) throw Object.assign(new Error('Cannot clean up Python source until REPL is ready'), { code: 'REPL_UNAVAILABLE' })

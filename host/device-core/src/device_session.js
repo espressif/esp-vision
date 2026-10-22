@@ -11,6 +11,8 @@
 export const EV_MUX_PAYLOAD_LIMIT = 1800
 export const EV_MUX_SCRIPT_CHUNK_BYTES = 900
 export const EV_MUX_VERSION = 4
+const INLINE_PYTHON_REPL_TIMEOUT_MS = 5000
+const SCRIPT_START_ACK_TIMEOUT_MS = 5000
 // MicroPython has a 128-byte VFS path buffer; script.write also appends .tmp.
 export const EV_MUX_PATH_MAX_BYTES = 123
 export const EV_MUX_DEFAULT_LIMITS = Object.freeze({
@@ -188,6 +190,24 @@ function awaitWithSignal(promise, signal) {
   })
 }
 
+function createOperationDeadline(signal, timeout, timeoutError = Object.assign(new Error('Python execution timed out'), { code: 'TIMEOUT' })) {
+  if (timeout === null) return { signal, dispose() {} }
+  const controller = new AbortController()
+  const abortFromCaller = () => controller.abort(abortError(signal))
+  signal?.addEventListener('abort', abortFromCaller, { once: true })
+  if (signal?.aborted) abortFromCaller()
+  const timer = controller.signal.aborted
+    ? null
+    : setTimeout(() => controller.abort(timeoutError), timeout)
+  return {
+    signal: controller.signal,
+    dispose() {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', abortFromCaller)
+    },
+  }
+}
+
 function withTimeout(operation, timeout, message, signal = null) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -321,7 +341,7 @@ export class DeviceSession {
     this.runStarting = false
 
     this.repl = new EvRepl({
-      writeEvmux: (channel, type, method, payload) => this.writeFrame(channel, type, method, payload),
+      writeEvmux: (channel, type, method, payload, options) => this.writeFrame(channel, type, method, payload, options),
     })
     this.repl.onScriptEnd = () => this._handleScriptEnd()
 
@@ -521,7 +541,7 @@ export class DeviceSession {
       if (this.runCapture) {
         clearTimeout(this.runCapture.timer)
         this.runCapture = null
-        this.repl.cancelScriptEndSentinel()
+        this.repl.cancelScriptEndSentinel(error)
       }
       this.parser.resetReplTextDecoders?.()
       this.repl.resetEpoch(error)
@@ -1201,44 +1221,59 @@ export class DeviceSession {
     return tracked
   }
 
-  async executePython(source, { timeout = 8000, signal = null } = {}) {
+  async executePython(source, { timeout = null, signal = null } = {}) {
+    if (timeout !== null && (!Number.isFinite(timeout) || timeout <= 0)) {
+      throw new RangeError('Python execution timeout must be positive or null')
+    }
     if (signal?.aborted) throw abortError(signal)
-    const commandBytes = this.repl.execInputBytes
-      ? this.repl.execInputBytes(source)
-      : new TextEncoder().encode(`exec(${JSON.stringify(source)})\r\n`).length
-    const inputLimit = this.repl.inputMaxBytes || 511
-    if (commandBytes <= inputLimit) {
-      return this.repl.execPy(source, { timeout, signal })
-    }
-    if (!this.hasFeature('file.write.binary') || !this.hasFeature('script.run')) {
-      throw new Error(
-        `Python source requires ${commandBytes} REPL bytes, above the firmware limit ${inputLimit}; ` +
-        'upgrade firmware with file.write.binary and script.run support.',
-      )
-    }
-
-    const path = `/.__espvision_exec_${Date.now().toString(36)}_${this.sequence}.py`
-    let primaryError = null
-    let cleanupError = null
-    let output = null
-    this._diagnostic('python.execute.chunked', { path, sourceBytes: new TextEncoder().encode(source).length, commandBytes })
+    const operation = createOperationDeadline(signal, timeout)
+    signal = operation.signal
     try {
-      const result = await this.runScript(path, source, { timeout, signal, inlineCompletion: true })
-      output = result.output
-    } catch (error) {
-      primaryError = error
-    } finally {
-      if (primaryError) await this.stopForRepl().catch(() => false)
-      try {
-        await this.repl.removeFile(path)
-      } catch (error) {
-        cleanupError = error
-        this._diagnostic('python.execute.cleanup_failed', { path, error: error.message })
+      if (signal?.aborted) throw abortError(signal)
+      const commandBytes = this.repl.execInputBytes
+        ? this.repl.execInputBytes(source)
+        : new TextEncoder().encode(`exec(${JSON.stringify(source)})\r\n`).length
+      const inputLimit = this.repl.inputMaxBytes || 511
+      if (commandBytes <= inputLimit) {
+        const result = await this.runScript(null, source, {
+          timeout: null, signal, inlineSource: true,
+        })
+        return result.output
       }
+      if (!this.hasFeature('file.write.binary') || !this.hasFeature('script.run')) {
+        throw new Error(
+          `Python source requires ${commandBytes} REPL bytes, above the firmware limit ${inputLimit}; ` +
+          'upgrade firmware with file.write.binary and script.run support.',
+        )
+      }
+
+      const path = `/.__espvision_exec_${Date.now().toString(36)}_${this.sequence}.py`
+      let primaryError = null
+      let cleanupError = null
+      let output = null
+      this._diagnostic('python.execute.chunked', { path, sourceBytes: new TextEncoder().encode(source).length, commandBytes })
+      try {
+        const result = await this.runScript(path, source, {
+          timeout: null, signal, inlineCompletion: true,
+        })
+        output = result.output
+      } catch (error) {
+        primaryError = error
+      } finally {
+        if (primaryError) await this.stopForRepl().catch(() => false)
+        try {
+          await this.repl.removeFile(path)
+        } catch (error) {
+          cleanupError = error
+          this._diagnostic('python.execute.cleanup_failed', { path, error: error.message })
+        }
+      }
+      if (primaryError) throw primaryError
+      if (cleanupError) throw cleanupError
+      return output
+    } finally {
+      operation.dispose()
     }
-    if (primaryError) throw primaryError
-    if (cleanupError) throw cleanupError
-    return output
   }
 
   async interrupt() {
@@ -1344,21 +1379,46 @@ export class DeviceSession {
     return false
   }
 
-  async runScript(path, content, {
+  async runScript(path, content, options = {}) {
+    const timeout = options.timeout === undefined ? 10000 : options.timeout
+    if (timeout !== null && (!Number.isFinite(timeout) || timeout <= 0)) {
+      throw new RangeError('Script timeout must be a positive number or null for an interactive run')
+    }
+    const timeoutError = Object.assign(new Error(`script run timeout after ${timeout}ms`), { code: 'SCRIPT_TIMEOUT' })
+    const operation = createOperationDeadline(options.signal ?? null, timeout, timeoutError)
+    try {
+      return await this._runScript(path, content, {
+        ...options,
+        timeout: null,
+        signal: operation.signal,
+      })
+    } finally {
+      operation.dispose()
+    }
+  }
+
+  async _runScript(path, content, {
     timeout = 10000,
     signal = null,
     onStarted = null,
     maxOutputChars = Number.POSITIVE_INFINITY,
     trial = null,
     inlineCompletion = false,
+    inlineSource = false,
   } = {}) {
     if (signal?.aborted) throw abortError(signal)
-    validateRpcPath(path)
+    if (inlineSource) {
+      if (path !== null || typeof content !== 'string' || inlineCompletion || trial) {
+        throw new TypeError('Inline Python source must run without a device path or typed trial')
+      }
+    } else {
+      validateRpcPath(path)
+    }
     if (inlineCompletion && trial) throw new Error('Typed trial execution cannot use an inline runner')
     if (timeout !== null && (!Number.isFinite(timeout) || timeout <= 0)) {
       throw new RangeError('Script timeout must be a positive number or null for an interactive run')
     }
-    if ((content !== undefined && !this.hasFeature('file.write.binary')) || !this.hasFeature('script.run')) {
+    if (!inlineSource && ((content !== undefined && !this.hasFeature('file.write.binary')) || !this.hasFeature('script.run'))) {
       throw new Error('Running scripts requires script.run and uploading source also requires file.write.binary')
     }
     if (this.runCapture || this.runStarting) {
@@ -1376,11 +1436,27 @@ export class DeviceSession {
       throw error
     }
     this.runStarting = true
+    let inlineSourceVariable = null
+    let inlineSourcePrepared = false
     try {
       if (!await this.stopForRepl({ timeout: timeout === null ? 5000 : Math.min(timeout, 5000), signal })) {
         throw new Error('could not stop the running script (no REPL answer after Ctrl-C)')
       }
-      if (content !== undefined) await this.writeScript(path, content, { signal })
+      if (inlineSource) {
+        inlineSourceVariable = `__evcore_python_${Date.now().toString(36)}_${++this.sequence}`
+        const assignments = this.repl.createInlineSourceAssignments(content, inlineSourceVariable)
+        for (const assignment of assignments) {
+          inlineSourcePrepared = true
+          await this.repl.execPy(assignment, { timeout: INLINE_PYTHON_REPL_TIMEOUT_MS, signal })
+        }
+      } else if (content !== undefined) {
+        await this.writeScript(path, content, { signal })
+      }
+    } catch (error) {
+      if (inlineSourcePrepared) {
+        await this.repl.execPy(`del ${inlineSourceVariable}`, { timeout: 3000 }).catch(() => {})
+      }
+      throw error
     } finally {
       this.runStarting = false
     }
@@ -1427,10 +1503,18 @@ export class DeviceSession {
     completion.catch(() => {})
 
     try {
-      if (inlineCompletion) {
-        const command = this.repl.createScriptRunCommand(path)
+      if (inlineSource) {
+        const command = this.repl.createInlineScriptRunCommand(inlineSourceVariable)
+        await this.repl.writeStdin(command, { signal })
+      } else if (inlineCompletion) {
+        const command = this.repl.createScriptRunCommand(path, { acknowledgeStart: Boolean(onStarted) })
         if (this.repl.scriptRunPrelude) await this.repl.execPy(this.repl.scriptRunPrelude, { timeout: timeout === null ? 5000 : timeout, signal })
-        await this.repl.writeStdin(command)
+        const startAcknowledgement = onStarted
+          ? this.repl.waitForScriptStart({ timeout: SCRIPT_START_ACK_TIMEOUT_MS, signal })
+          : null
+        startAcknowledgement?.catch(() => {})
+        await this.repl.writeStdin(command, { signal })
+        if (startAcknowledgement) await startAcknowledgement
       } else {
         const sentinelLine = this.repl.createScriptEndSentinel()
         const request = { path }
@@ -1440,7 +1524,7 @@ export class DeviceSession {
           request.trial_source_hash = trial.source_hash
         }
         await this.rpc('script.run', request, { timeout: 4000, signal })
-        await this.repl.writeStdin(sentinelLine)
+        await this.repl.writeStdin(sentinelLine, { signal })
       }
       await onStarted?.({ path, trial: trial ? structuredClone(trial) : null })
       return await completion
@@ -1448,7 +1532,7 @@ export class DeviceSession {
       const capture = this.runCapture
       this.runCapture = null
       clearTimeout(capture?.timer)
-      this.repl.cancelScriptEndSentinel()
+      this.repl.cancelScriptEndSentinel(err)
       capture?.reject(err)
       try {
         await completion

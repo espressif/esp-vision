@@ -11,18 +11,36 @@ const capabilities = { ok: true, protocol: { evMuxVersion: 4 },
   features: [...EV_MUX_REQUIRED_FEATURES, 'debug.capture_frame', 'script.write', 'script.run', 'device.control'],
   channels: EV_MUX_REQUIRED_CHANNELS, limits: { ...EV_MUX_DEFAULT_LIMITS, txLargePayloadMax: 262144 },
   session: { policy: 'firstCome', leaseMs: 15000, keepaliveMs: 5000 } }
-function peer({ silent = false, screen = false } = {}) {
+function peer({ silent = false, screen = false, vmReady = true, interactiveScripts = false } = {}) {
   let handlers, subscriptions = 0, disconnects = 0
   const requests = [], order = [], id = 'a'.repeat(32)
+  const requestWaiters = []
   const stdout = payload => handlers?.data(makeEvMuxFrame({ channel: 'repl.stdout', type: 'data', sessionId: id, vmEpoch: 1, payload }))
+  const recordRequest = request => {
+    requests.push(request)
+    for (let i = requestWaiters.length - 1; i >= 0; i -= 1) {
+      if (requestWaiters[i].predicate(request)) {
+        requestWaiters.splice(i, 1)[0].resolve(request)
+      }
+    }
+  }
+  const waitForRequest = predicate => {
+    const existing = requests.find(predicate)
+    return existing ? Promise.resolve(existing) : new Promise(resolve => requestWaiters.push({ predicate, resolve }))
+  }
   const parser = new EvMuxParser({ filterFrame(metadata, bytes) {
     if (silent) return false
     const payload = metadata.channel.endsWith('.rpc') ? JSON.parse(new TextDecoder().decode(bytes)) : new TextDecoder().decode(bytes)
-    requests.push({ metadata, payload })
-    if (metadata.channel === 'repl.stdin') { stdout(`${payload}\r\n${payload.includes('EVIDE_BOOT_OK') ? 'EVIDE_BOOT_OK' : 'result'}\r\n>>> `); return false }
+    recordRequest({ metadata, payload })
+    if (metadata.channel === 'repl.stdin') {
+      const startMarker = interactiveScripts && /~~EVSCRIPT-START:[A-Za-z0-9-]+~~/.exec(payload)?.[0]
+      if (startMarker) stdout(`${payload}\r\n${startMarker}\r\n`)
+      else stdout(`${payload}\r\n${payload.includes('EVIDE_BOOT_OK') ? 'EVIDE_BOOT_OK' : 'result'}\r\n>>> `)
+      return false
+    }
     if (!metadata.channel.endsWith('.rpc')) return false
     let result = { ok: true }
-    if (metadata.method === 'hello') result = { ok: true, evMuxVersion: 4, deviceId: 'e8f60ae75642', hostname: 'esp-vision-test', board: 'TEST', firmware: { version: 'test' }, vmReady: true, session: { id, vmEpoch: 1, leaseMs: 15000, keepaliveMs: 5000 } }
+    if (metadata.method === 'hello') result = { ok: true, evMuxVersion: 4, deviceId: 'e8f60ae75642', hostname: 'esp-vision-test', board: 'TEST', firmware: { version: 'test' }, vmReady, session: { id, vmEpoch: 1, leaseMs: 15000, keepaliveMs: 5000 } }
     if (metadata.method === 'capabilities') result = { ...capabilities, features: [...capabilities.features, ...(screen ? ['debug.capture_screen'] : [])] }
     if (metadata.method === 'session.keepalive') result = { ok: true, sessionId: id, vmEpoch: 1 }
     if (metadata.method === 'debug.capture_frame' || (screen && metadata.method === 'debug.capture_screen')) {
@@ -37,7 +55,7 @@ function peer({ silent = false, screen = false } = {}) {
     async disconnect() { disconnects++; order.push('disconnect') },
     async writeBytes(bytes) { parser.feedBytes(bytes) },
   }
-  return { transport, requests, order, stdout, close: () => handlers.close(), get subscriptions() { return subscriptions }, get disconnects() { return disconnects } }
+  return { transport, requests, order, stdout, waitForRequest, close: () => handlers.close(), get subscriptions() { return subscriptions }, get disconnects() { return disconnects } }
 }
 
 test('root exports only the application API; protocols remain explicit adapters', () => {
@@ -57,6 +75,8 @@ test('facade subscribes before connection, negotiates, streams input and dispose
   assert.equal(ready.identity.deviceId, 'e8f60ae75642')
   assert.deepEqual(p.order.slice(0, 2), ['subscribe','connect'])
   assert.equal(p.subscriptions, 1)
+  assert.ok(p.requests.some(x => x.metadata.channel === 'repl.signal'), 'default connection retains the REPL readiness probe')
+  assert.ok(p.requests.some(x => x.metadata.channel === 'repl.stdin' && x.payload.includes('EVIDE_BOOT_OK')))
   await d.python.input('print(2)\r')
   assert.ok(output.some(text => text.includes('result')))
   unsubscribe(); const count = output.length; p.stdout('ignored\r\n'); assert.equal(output.length,count)
@@ -64,6 +84,28 @@ test('facade subscribes before connection, negotiates, streams input and dispose
   assert.equal(p.subscriptions,0); assert.equal(p.disconnects,1)
   assert.ok(p.requests.some(x => x.metadata.method === 'session.release'))
   await assert.rejects(d.files.read({path:'/x'}), {code:'DEVICE_NOT_READY'})
+})
+
+test('connect can acquire and inspect a session without interrupting the REPL', async () => {
+  const p = peer({ vmReady: false }), d = api.createDevice({ transport: p.transport })
+  try {
+    const ready = await d.connect({ role: 'tcp', probeRepl: false })
+    assert.equal(ready.runtime.vmReady, false, 'passive negotiation preserves the device readiness report')
+    assert.ok(p.requests.some(x => x.metadata.method === 'hello' && x.payload.acquire === true))
+    assert.ok(p.requests.some(x => x.metadata.method === 'capabilities'))
+    assert.equal(p.requests.some(x => x.metadata.channel === 'repl.signal' || x.metadata.channel === 'repl.stdin'), false)
+    await assert.rejects(d.python.execute({ source: 'print(1)' }), /requires a ready VM/)
+    assert.equal(p.requests.some(x => x.metadata.channel === 'repl.signal' || x.metadata.channel === 'repl.stdin'), false)
+  } finally { await d.disconnect() }
+})
+
+test('connect validates probeRepl before opening the transport', async () => {
+  const p = peer(), d = api.createDevice({ transport: p.transport })
+  for (const probeRepl of [null, 'false', 0]) {
+    await assert.rejects(d.connect({ role: 'tcp', probeRepl }), { name: 'TypeError' })
+  }
+  assert.deepEqual(p.order, [])
+  assert.deepEqual(p.requests, [])
 })
 
 test('capture returns binary bytes and unsupported LCD capture never captures the camera', async () => {
@@ -102,6 +144,53 @@ test('transport loss clears the connection and permits reconnection',async()=>{
   await d.connect({role:'tcp'});await d.disconnect();assert.equal(p.disconnects,2)
 })
 
+test('disconnect releases the session without interrupting a publicly started run', async () => {
+  const p = peer({ interactiveScripts: true }), d = api.createDevice({ transport: p.transport })
+  try {
+    await d.connect({ role: 'tcp', probeRepl: false })
+    const run = await d.python.execute({ path: '/main.py', completion: 'start' })
+    const doneRejected = assert.rejects(run.done)
+    const beforeDisconnect = p.requests.length
+    await d.disconnect()
+    await doneRejected
+    const released = p.requests.slice(beforeDisconnect)
+    assert.ok(released.some(request => request.metadata.method === 'session.release'))
+    assert.equal(released.some(request => request.metadata.channel === 'repl.signal'
+      || (request.metadata.method === 'device.control' && request.payload.action === 'stop')), false)
+  } finally { await d.disconnect() }
+})
+
+test('caller AbortSignal still interrupts a publicly started run', async () => {
+  const p = peer({ interactiveScripts: true }), d = api.createDevice({ transport: p.transport })
+  const controller = new AbortController()
+  try {
+    await d.connect({ role: 'tcp', probeRepl: false })
+    const run = await d.python.execute({ path: '/main.py', completion: 'start', signal: controller.signal })
+    const doneRejected = assert.rejects(run.done, { name: 'AbortError' })
+    const beforeAbort = p.requests.length
+    controller.abort()
+    await doneRejected
+    assert.ok(p.requests.slice(beforeAbort).some(request => request.metadata.method === 'device.control'
+      && request.payload.action === 'stop'))
+  } finally { await d.disconnect() }
+})
+
+test('disconnect still interrupts Python execution in completion-wait mode', async () => {
+  const p = peer(), d = api.createDevice({ transport: p.transport })
+  try {
+    await d.connect({ role: 'tcp', probeRepl: false })
+    const execution = d.python.execute({ path: '/main.py' })
+    await p.waitForRequest(request => request.metadata.channel === 'repl.stdin'
+      && String(request.payload).includes('~~EVSCRIPT-END:'))
+    const failed = assert.rejects(execution)
+    const beforeDisconnect = p.requests.length
+    await d.disconnect()
+    await failed
+    assert.ok(p.requests.slice(beforeDisconnect).some(request => request.metadata.method === 'device.control'
+      && request.payload.action === 'stop'))
+  } finally { await d.disconnect() }
+})
+
 test('discovery works before any transport is connected',async()=>{
   const d=api.createDevice({discovery:{async list(){return [{deviceId:'e8f60ae75642',hostname:'esp-vision-test',board:'TEST',firmwareVersion:'1',evMuxVersion:4,port:3232,addresses:['192.168.1.2']}]}}})
   assert.equal((await d.discover({timeout:50}))[0].compatible,true)
@@ -126,8 +215,9 @@ test('long Unicode paths stay within REPL budget for directory reads and inline 
   repl.execPy=async source=>{commands.push(source);assert.ok(repl.execInputBytes(source)<=511);return source.includes('__EVLIST__')?'__EVLIST__[]\n':''}
   assert.deepEqual(await repl.listFs(path),[])
   assert.equal(commands.length,2,'Long escaped paths are assigned separately from directory code')
-  const command=repl.createScriptRunCommand(path)
+  const command=repl.createScriptRunCommand(path,{acknowledgeStart:true})
   assert.ok(new TextEncoder().encode(command).length<=511)
+  assert.match(command,/EVSCRIPT-START:/)
   if(repl.scriptRunPrelude)assert.ok(repl.execInputBytes(repl.scriptRunPrelude)<=511)
   repl.cancelScriptEndSentinel()
 })

@@ -133,7 +133,7 @@ Framed MicroPython REPL coordinator. io.writeEvmux(channel, type, method, payloa
 ``EvRepl.walkFs({ signal = null } = {})``
     Return the legacy nested filesystem tree.
 
-``EvRepl.readFile(fn, { timeout = 30000, signal = null, maxBytes = null } = {})``
+``EvRepl.readFile(fn, { timeout = null, chunkTimeout = 30000, signal = null, maxBytes = null } = {})``
     Return complete Uint8Array file contents; reject changed, oversized or incomplete reads.
 
 ``EvRepl.touchFile(fn)``
@@ -216,7 +216,7 @@ Low-level v4 interpreter. Inject transport, EvMuxParser, EvRepl and makeEvMuxFra
 ``DeviceSession.release({ timeout = 1200 } = {})``
     Release the EV-MUX session lease; Promise of RPC result.
 
-``DeviceSession.executePython(source, { timeout = 8000, signal = null } = {})``
+``DeviceSession.executePython(source, { timeout = null, signal = null } = {})``
     Execute source through framed REPL and return output.
 
 ``DeviceSession.interrupt()``

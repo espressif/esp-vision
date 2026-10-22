@@ -7,6 +7,7 @@ import { createFilesApi } from '../src/device_files.js'
 function fixture() {
   const calls = [], state = {}
   const session = {
+    state: 'ready',
     repl: { writeStdin: async data => calls.push(['input', data]), removeFile: async path => calls.push(['remove', path]) },
     executePython: async (source, options) => { calls.push(['source', source, options]); return '42\r\n' },
     runScript: async (path, content, options) => { calls.push(['run', path, content, options]); return { ok: true, output: 'existing', outputTruncated: false } },
@@ -19,16 +20,26 @@ test('source wait and path wait return the same result shape without rewriting p
   const { python, calls } = fixture()
   assert.deepEqual(await python.execute({ source: 'print(42)' }), { ok: true, path: null, output: '42\n', outputTruncated: false })
   assert.deepEqual(await python.execute({ path: '/existing.py' }), { ok: true, path: '/existing.py', output: 'existing', outputTruncated: false })
+  assert.equal(calls[0][2].timeout, null, 'wait execution has no aggregate deadline by default')
   assert.deepEqual(calls[1].slice(0, 3), ['run', '/existing.py', undefined])
+  assert.equal(calls[1][3].timeout, null, 'path execution has no aggregate deadline by default')
   assert.equal(calls[1][3].inlineCompletion, true)
 })
 
 test('execution rejects ambiguous input, unsupported modes, unsafe paths and invalid deadlines before I/O', async () => {
   const { python, calls } = fixture()
-  for (const request of [{}, { source: '', path: '/a.py' }, { source: 0 }, { path: '../a.py' }, { path: '/a/../b.py' }, { source: '', completion: 'other' }, { source: '', timeout: 0 }, { source: '', completion: 'start', timeout: 3 }]) {
+  for (const request of [{}, { source: '', path: '/a.py' }, { source: 0 }, { path: '../a.py' }, { path: '/a/../b.py' }, { source: '', completion: 'other' }, { source: '', timeout: 0 }, { source: '', completion: 'start', timeout: 3 }, { source: '', completion: 'start', timeout: null }]) {
     await assert.rejects(python.execute(request))
   }
   assert.equal(calls.length, 0)
+})
+
+test('wait execution accepts null and forwards an explicit positive deadline', async () => {
+  const { python, calls } = fixture()
+  await python.execute({ source: 'print(42)', timeout: null })
+  await python.execute({ source: 'print(42)', timeout: 12000 })
+  assert.equal(calls[0][2].timeout, null)
+  assert.equal(calls[1][2].timeout, 12000)
 })
 
 test('pre-aborted execution never starts Python', async () => {
@@ -74,6 +85,21 @@ test('started source uses a private temporary file and removes it only after com
   finish({ ok: true, output: 'done' })
   assert.equal((await handle.done).output, 'done')
   assert.deepEqual(calls.at(-1), ['remove', handle.path])
+})
+
+test('disconnect skips remote cleanup for a started temporary source', async () => {
+  const { python, calls, session, state } = fixture()
+  let rejectDone
+  session.stopForRepl = async () => { calls.push(['stop']); return true }
+  session.startScript = async () => ({ done: new Promise((_resolve, reject) => { rejectDone = reject }) })
+  const handle = await python.execute({ source: 'while True: pass', completion: 'start' })
+  const disconnected = assert.rejects(handle.done, /device disconnected/)
+  session.state = 'disconnected'
+  rejectDone(new Error('device disconnected'))
+  await disconnected
+  assert.equal(calls.some(([kind]) => kind === 'stop' || kind === 'remove'), false)
+  assert.equal(state.operation, null)
+  assert.equal(state.run, null)
 })
 
 test('execution failures release the operation and retain the original error', async () => {
@@ -123,7 +149,8 @@ test('interactive script input receives only user data, never the completion mar
         stdout(`${text}\r\nreceived:${text.trim()}\r\n${session.repl.scriptEndMarker}\r\n>>> `)
       } else if (text.includes('/interactive.py')) {
         waitingForInput = true
-        stdout(`${text}\r\nNAME?`)
+        const startMarker = /~~EVSCRIPT-START:[A-Za-z0-9-]+~~/.exec(text)?.[0]
+        stdout(`${text}\r\n${startMarker ? `${startMarker}\r\n` : ''}NAME?`)
       } else stdout(`${text}\r\n>>> `)
       return
     }

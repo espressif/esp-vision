@@ -27,13 +27,14 @@ export function createFilesApi({ session, state = {} }) {
       }))
     },
     async read(request) {
-      request = snapshotRequest(request, ['path', 'encoding', 'timeout', 'maxBytes', 'signal'], 'files.read')
-      const { path, encoding = 'binary', timeout = 30000, maxBytes = null, signal = null } = request
+      request = snapshotRequest(request, ['path', 'encoding', 'timeout', 'chunkTimeout', 'maxBytes', 'signal'], 'files.read')
+      const { path, encoding = 'binary', timeout = null, chunkTimeout = 30000, maxBytes = null, signal = null } = request
       if (!['binary', 'utf-8'].includes(encoding)) throw new TypeError('File encoding must be binary or utf-8')
-      if (!Number.isFinite(timeout) || timeout <= 0) throw new RangeError('File read timeout must be positive')
+      if (timeout !== null && (!Number.isFinite(timeout) || timeout <= 0)) throw new RangeError('File read timeout must be positive or null')
+      if (!Number.isFinite(chunkTimeout) || chunkTimeout <= 0) throw new RangeError('File read chunk timeout must be positive')
       if (maxBytes !== null && (!Number.isSafeInteger(maxBytes) || maxBytes < 0 || maxBytes > 16 * 1024 * 1024)) throw new RangeError('maxBytes must be between zero and 16 MiB')
       return operate('read', request, async () => {
-        const bytes = await session.repl.readFile(path, { timeout, maxBytes, signal })
+        const bytes = await session.repl.readFile(path, { timeout, chunkTimeout, maxBytes, signal })
         return encoding === 'binary' ? bytes : new TextDecoder().decode(bytes)
       })
     },

@@ -1,6 +1,6 @@
 {
   "name": "@esp-vision/device-core",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Shared EV-MUX, framed REPL, device session, and action contracts for ESP Vision clients.",
   "type": "module",
   "exports": {
@@ -68,15 +68,11 @@
       "optional": true
     }
   },
-  "bin": {
-    "esp-vision-device": "./src/cli.js"
-  },
   "optionalDependencies": {
     "multicast-dns": "^7.2.5"
   },
   "dependencies": {
     "smol-toml": "^1.7.0",
-    "string-width": "^7.2.0",
     "tasmota-webserial-esptool": "9.4.2"
   },
   "devDependencies": {
