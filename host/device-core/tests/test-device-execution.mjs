@@ -341,18 +341,45 @@ test('failed stop does not claim execution has finished', async () => {
   fixture.session.close()
 })
 
-test('bounded Agent execution still times out and sends a shared interrupt', async () => {
+test('bounded Agent execution still times out and sends a shared interrupt', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
   const fixture = executionFixture()
+  t.after(() => fixture.session.close())
+  // Isolate the running-script deadline from the separately covered upload
+  // and REPL setup. A real 30 ms startup budget races CI scheduling.
+  fixture.session.stopForRepl = async () => true
+  fixture.session.writeScript = async () => {}
   let started
   const starting = new Promise(resolve => { started = resolve })
   const done = fixture.session.runScript('/trial.py', 'while True: pass', { timeout: 30, onStarted: started })
   const rejected = assert.rejects(done, (error) => error.code === 'SCRIPT_TIMEOUT')
   await starting
+  t.mock.timers.tick(30)
   await rejected
   assert.equal(fixture.session.scriptRunSnapshot(), null)
-  await new Promise(resolve => setTimeout(resolve, 0))
+  await new Promise(resolve => setImmediate(resolve))
   assert.ok(fixture.requests.some(({ metadata, payload }) => metadata.method === 'device.control' && payload.action === 'stop'))
-  fixture.session.close()
+})
+
+test('bounded start handles reject when the deadline precedes VM entry', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const fixture = executionFixture({ deferStart: true })
+  t.after(() => fixture.session.close())
+  fixture.session.stopForRepl = async () => true
+  fixture.session.writeScript = async () => {}
+  let started = false
+  const starting = fixture.session.startScript('/trial.py', undefined, {
+    inlineCompletion: true,
+    timeout: 30,
+    onStarted() { started = true },
+  })
+  const rejected = assert.rejects(starting, { code: 'SCRIPT_TIMEOUT' })
+  await new Promise(resolve => setImmediate(resolve))
+  t.mock.timers.tick(30)
+  await rejected
+  assert.equal(started, false)
+  assert.equal(fixture.session.scriptRunSnapshot(), null)
+  assert.equal(fixture.session.runStarting, false)
 })
 
 test('VM reset and disconnect settle interactive completion and allow the next VM run', async () => {

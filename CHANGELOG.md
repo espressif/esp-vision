@@ -25,6 +25,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Make the packaged SDK execution-deadline regression deterministic under CI scheduling and cover expiry before VM entry; prepare the test-only correction as Device Core 0.5.1 and remove stale publication-state wording from its README.
 - Removed the unsupported `copy_to_fb` keyword from `image.Image` construction and `Image.to_*()` conversion, and removed it from those stubs and docs; `image.ImageIO.read(copy_to_fb=...)` remains supported.
 - Removed the unsupported `transform` keyword from the ESP-VISION `Image.copy()` and `Image.draw_image()` signatures and stubs.
 - Reduced the P4X_EYE SPI display transaction queue to one entry so camera startup and LCD transfers share a bounded DMA footprint.
