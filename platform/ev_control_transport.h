@@ -37,9 +37,10 @@ esp_err_t ev_control_transport_rx(const ev_link_ref_t *link,
 void ev_control_transport_vm_reset_begin(void);
 void ev_control_transport_vm_ready(void);
 
-// VM-task entry points (mp_hal_stdin_rx_chr / mp_hal_stdio_poll only).
-// Frame reception, parsing and route maintenance run on the dedicated
-// transport task; these functions only bridge results into VM context.
+// VM-task entry points. Frame reception, parsing and route maintenance run on
+// the dedicated transport task; these functions only bridge results into VM
+// context. VM RPC dispatch is called from main-task bytecode, event-poll, and
+// millisecond-delay safe points, not only while the REPL waits for input.
 bool ev_control_transport_read_pending(int *out_chr);
 bool ev_control_transport_repl_pending(void);
 void ev_control_transport_vm_poll(void);
