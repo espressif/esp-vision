@@ -2,7 +2,7 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
-## [Unreleased]
+## [2026.10.21]
 
 ### Added
 
@@ -12,10 +12,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Add @esp-vision/device-cli with Python, binary file, camera/screen capture, sequential batch and bounded watch commands; provide versioned JSON results, streamed events and cancellation from a self-contained npm executable.
 - Package the official ESP-VISION logo and provide WorkBuddy local Skill ZIP imports and official Knowledge MCP configuration through the npm installer, with explicit pending-import status and immutable versioned payloads.
 - Bundle a fixed standalone Device CLI and the official Knowledge HTTP MCP in a Codex/Claude plugin with one capability-oriented Skill and an npm installer supporting verified upgrades and failure recovery.
-- Own the online Knowledge MCP runtime and anonymous daily aggregate statistics in the main repository, with a private locked Node 24 package, immutable-image build context and 18 HTTP/privacy/reporting regression tests.
 - Publish Knowledge MCP as a public npm package with a reusable server factory, isolated stdio transport, complete validated snapshot, provenance metadata and installed-artifact HTTP/statistics checks.
 - Own the online Knowledge MCP runtime and anonymous daily aggregate statistics in the main repository, with a locked Node 24 runtime, immutable-image build context and HTTP/privacy/reporting regression tests.
 - Build Knowledge MCP images from the exact checked npm archive; publish schema 2 GitLab release descriptors binding npm, snapshot, source and image identities, then trigger website deployment after qualification gates.
+- Provide retained-log SDK, CLI, plugin, Knowledge npm and website acceptance with optional P4 hardware and isolated native-client checks; maintain capability-oriented architecture, installation and release documentation.
 
 ### Changed
 
@@ -26,6 +26,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Unified ESP-VISION-owned heap allocation around `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL` while retaining requested DMA capabilities; set a 16 KiB internal-memory boundary on PSRAM-enabled P4 boards and the P4 template.
 - Qualify ESP32-P4/S3 firmware and hardware CI on pinned ESP-IDF v5.5.6, retain release/v6.1 for ESP32-S31, and align release packaging dependencies with this board-specific matrix. Document the required IDF environments and possible build/runtime/Python API changes with other versions in English and Chinese.
 - Transfer Knowledge MCP releases through internal GitLab registries instead of the DL firmware distribution channel.
+- Document npm-delivered WorkBuddy Skill imports and official plugin branding alongside native Codex and Claude installation.
 
 ### Fixed
 
@@ -66,6 +67,11 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Ship release-version and complete-MicroPython snapshot validation with the Knowledge npm package pipeline, keeping it independently buildable before deployment integration.
 - Validate Knowledge factory and transport versions against the selected snapshot so complete release snapshots exercise the same tests as fixtures.
 - Schedule disposable Knowledge container checks on the available main-project appserver runner and produce snapshots independently of firmware builds while retaining release qualification gates.
+- Require CLI and shared host regressions before CLI/plugin publication and align public SDK documentation with Core 0.5.1.
+- Align integration acceptance with the exact reviewed runtime and host package versions.
+- Require screen capture to succeed from a separate CLI process while a tight Python bytecode loop is active, covering VM dispatch independently of sleep polling.
+- Stop bounded display-readiness retries before another connection cannot fit the remaining setup budget, preserving the not-ready diagnosis and normal cleanup.
+- Exercise a detached persistent camera/LCD application across independent CLI connections, native file signaling and verified cleanup instead of inferring global execution from session-local state.
 
 ## [2026.10.19]
 

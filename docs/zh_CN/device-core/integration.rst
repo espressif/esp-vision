@@ -5,21 +5,21 @@ Device Core npm 包对接
 
 完整的 SDK 介绍与 API 索引见 :doc:`device-core/index <index>`，应用 API 参数、返回值和事件见 :doc:`device-core/api <api>`，所有高级导出见 :doc:`device-core/advanced <advanced>`。本页保留可直接运行的接入示例。
 
-本页面向把设备接入 IDE、Agent、CLI 或自定义主机应用 的主机开发者。``@esp-vision/device-core`` 是无 UI 的共享通信包；主机只提供物理字节连接，不需要复制参考 Python 客户端或实现第二套协议。完整帧格式见 :doc:`communication/wire-protocol <../communication/wire-protocol>`，物理接口见 :doc:`communication/interfaces <../communication/interfaces>`。
+本页面向把设备接入 IDE、Device CLI、Agent 工作流或自定义主机应用的开发者。``@esp-vision/device-core`` 是无 UI 的共享通信包；主机只提供物理字节连接，不需要复制参考 Python 客户端或实现第二套协议。Agent 设备操作使用 CLI；Knowledge MCP 通过 HTTP 提供文档。完整帧格式见 :doc:`communication/wire-protocol <../communication/wire-protocol>`，物理接口见 :doc:`communication/interfaces <../communication/interfaces>`。
 
 源码、版本与安装
 ----------------
 
-Device Core 源码在 ESP-VISION 固件仓库的 ``host/device-core/`` 维护。``host/`` 表示运行在主机的代码，不是固件模块；IDE 与 Agent 是 npm 包的消费者，Agent 的 MCP、模型提供方和插件仍在独立项目维护。协议变更应在同一个 MR 对齐固件、Core、文档与测试。
+Device Core 源码在 ESP-VISION 固件仓库的 ``host/device-core/`` 维护。``host/`` 表示运行在主机的代码，不是固件模块；IDE 和自定义应用直接使用 SDK，Agent 设备控制工作流使用单独打包的 Device CLI。协议变更应在同一个 MR 对齐固件、Core、文档与测试。
 
-包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.4.0``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。确认公开 npm registry 已发布该版本后再安装；后续版本仍以实际发布结果为准，dry run 或创建 MR 不等于发布。
+包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.5.1``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。安装前请在公开 npm registry 确认此精确版本；dry run 或创建 MR 不等于发布。
 
 .. code-block:: console
 
-   npm view @esp-vision/device-core@0.4.0 version dist.integrity
-   npm install --save-exact @esp-vision/device-core@0.4.0
+   npm view @esp-vision/device-core@0.5.1 version dist.integrity
+   npm install --save-exact @esp-vision/device-core@0.5.1
 
-Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析包名，以及 Web Serial 或二进制 WebSocket 桥。包不附带串口驱动、网络桥、模型、IDE UI 或 Agent 运行时；Node mDNS 发现使用可选 peer ``multicast-dns``。发布前可安装本地 ``npm pack`` 产物验证，正式消费者应固定 npm 版本并更新 lockfile。
+Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析包名，以及 Web Serial 或二进制 WebSocket 桥。Device Core 不附带串口驱动、网络桥、模型或 IDE UI。Node 串口枚举需要安装 pyserial 的 Python；Node mDNS 发现使用 ``multicast-dns``。单独的 Device CLI 以 ``@esp-vision/device-cli@0.1.0`` 安装，是 Agent 设备操作的受支持命令。固定 npm 版本并更新 lockfile。
 
 应用、Core 与传输的职责
 -----------------------
@@ -28,7 +28,7 @@ Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析�
    :align: center
    :alt: 主机应用、Device Core、EV-MUX 与固件
 
-   IDE / Agent / CLI / 自定义工具 → Device Core → EV-MUX → 固件
+   IDE / Device CLI / 自定义主机应用 → Device Core → EV-MUX → 固件；Knowledge MCP → HTTP 文档
 
 本图与项目 README、系统架构章节复用同一 SVG。主机应用负责设备选择及界面/流程策略，Device Core 负责共享 API、协议和会话状态，EV-MUX 定义与固件的运行时通信；字节适配器提供串口/socket I/O，不维护另一套协议栈。图中代表性 API 不替代完整参考；发现与 ROM 烧写各有独立生命周期，ROM loader 不通过 EV-MUX 写镜像。
 
@@ -203,7 +203,17 @@ Node 安装可选 ``multicast-dns`` peer 后使用：
        console.log(await device.inspect({ fields: ['identity'] }))
    } finally { await device.disconnect() }
 
-应用调用 ``device.discover()``。``createNodeDiscovery()`` 和 ``createBridgeDiscovery()`` 返回 provider，契约为 ``list({ timeout, signal })``，不提供 ``discover()``；通过 ``createDevice({ discovery: provider })`` 注入。0.1.1 起，官方 ``tcpTransport({ host, port })`` 和 ``serialTransport({ serial, python })`` 适配器由 ``@esp-vision/device-core/node`` 导出，构造时不打开连接；串口所选解释器需安装 pyserial。见 :doc:`advanced`。
+应用调用 ``device.discover()``。``createNodeDiscovery()`` 和 ``createBridgeDiscovery()`` 返回 provider，契约为 ``list({ timeout, signal })``，不提供 ``discover()``；通过 ``createDevice({ discovery: provider })`` 注入。SDK 0.5.1 从 ``@esp-vision/device-core/node`` 导出 ``inventory``、``listSerial``、``filterSerialPorts``、``serialEntry``、``transportFor``、``defaultPython`` 和 ``nodeAdapterAssets``。默认 inventory 只枚举，不连接；传输构造也不会打开连接。串口枚举需要 pyserial。见 :doc:`advanced`。
+
+.. code-block:: javascript
+
+   import { inventory } from '@esp-vision/device-core/node'
+
+   const { devices, warnings } = await inventory({ timeout: 3000 })
+   console.log(devices.map(({ interface, address, status }) => ({ interface, address, status })))
+   console.warn(warnings)
+
+Node inventory 汇总系统串口枚举和局域网发现，并返回 ``devices``、``warnings`` 与 ``sourcesAvailable``。默认不打开候选端口；``probe: true`` 会逐一连接，可能中断正在运行的 Python。选项默认值、候选筛选和打包器资源处理见 :doc:`advanced`。
 
 浏览器使用 ``@esp-vision/device-core/discovery`` 中的 ``createBridgeDiscovery('ws://127.0.0.1:8766/device')`` 注入本地桥。浏览器没有原生 DNS-SD 枚举能力。结果包含 ``deviceId``、``hostname``、``board``、``firmwareVersion``、``addresses``、``port``、``compatible``，桥接结果还可能有 ``connectionUrl``。宿主据此构造连接适配器，使用 ``expectedDevice`` 在获取会话前核验 ID 与主机名，防止 DHCP 地址陈旧；这不是认证。VLAN、组播过滤和 AP 隔离可能需要手动地址，过期桥接句柄需要重新发现。
 
@@ -240,7 +250,7 @@ Node 安装可选 ``multicast-dns`` peer 后使用：
 
 ROM 烧写仍使用独立子路径 ``@esp-vision/device-core/firmware``；宿主注入 ROM loader、已批准镜像、芯片/分区约束和复位策略。Core 不附带镜像，不在 EV-MUX 上执行 ROM 下载协议。``control({ action: 'bootloader' })`` 只请求进入下载模式，不进行烧写。物理交接见 :doc:`communication/interfaces <../communication/interfaces>`。
 
-包的源码、协议测试与发布流程在 ``host/device-core/`` 同仓维护；IDE、Agent 固定依赖发布到 npm 的版本，不长期复制源码。仅修改 SDK 时运行 JS 测试、schema/package 检查与发布 dry run，不应触发固件编译矩阵。发布与固件版本独立，正式 registry 可用性以发布 job 和 ``npm view`` 为准。协议能力仍需由版本/能力协商与真机测试确认，验收见 :doc:`communication/validation <../communication/validation>`。
+包的源码、协议测试与发布流程在 ``host/device-core/`` 同仓维护；IDE 和自定义应用固定 npm 版本，Agent 设备工作流使用 Device CLI。仅修改 SDK 时运行 JS 测试、schema/package 检查与发布 dry run，不应触发固件编译矩阵。发布与固件版本独立，正式 registry 可用性以发布 job 和 ``npm view`` 为准。协议能力仍需由版本/能力协商与真机测试确认，验收见 :doc:`communication/validation <../communication/validation>`。
 
 应用层固件更新入口
 ------------------------------------------
@@ -249,10 +259,10 @@ ROM 烧写仍使用独立子路径 ``@esp-vision/device-core/firmware``；宿主
 
 Node 宿主可从 ``@esp-vision/device-core/node`` 导入 ``openNodeRom``，传入 ``openLoader: ({ signal }) => openNodeRom({ port, signal })``，无需自己实现烧写器。浏览器宿主提供 Web Serial ROM 适配器。空白设备在 check/update 中显式设置 ``mode: 'install'``，默认模式仅更新应用。
 
-浏览器 ROM 烧录（尚未发布）
+浏览器 ROM 烧录
 -----------------------------
 
-新 ``/browser`` 入口尚未包含在 npm 0.3.0；请从此分支构建或等待下一个 SDK。须使用 webpack、Vite 或 esbuild 打包，在支持 Web Serial 的浏览器中通过 HTTPS 或 localhost 运行。无需 Python、主机端 tasmota 适配器或包管理器补丁。
+SDK 0.5.1 已包含 ``/browser`` 入口。须使用 webpack、Vite 或 esbuild 打包，在支持 Web Serial 的浏览器中通过 HTTPS 或 localhost 运行。无需 Python、主机端 tasmota 适配器或包管理器补丁。
 
 .. code-block:: javascript
 

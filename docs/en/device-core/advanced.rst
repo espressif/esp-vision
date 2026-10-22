@@ -1255,11 +1255,32 @@ Promise<Uint8Array>: validate v4, exact byte size, application partition bounds 
 @esp-vision/device-core/node
 ------------------------------------------------------------------
 
+``defaultPython``
+    Platform default Python executable: ``python`` on Windows and ``python3`` elsewhere.
+
+``listSerial({ python = defaultPython, signal, timeout = 10000 } = {}, dependencies = {})``
+    Enumerate OS serial ports with pyserial. Requires Python and pyserial; the optional dependency object can inject the process runner.
+
+``filterSerialPorts(ports, { platform = process.platform, allPorts = false } = {})``
+    Filter OS-enumerated records by platform path and USB descriptor hints without opening ports or claiming firmware identity.
+
+``serialEntry(port)``
+    Convert one serial descriptor into an unprobed interface/address candidate with USB metadata; descriptor classification is not device identity.
+
+``transportFor(entry, options = {})``
+    Create a passive TCP or serial byte transport for an inventory entry; serial options may select ``python``.
+
+``inventory(options = {}, dependencies = {})``
+    Return ``{ devices, warnings, sourcesAvailable }`` from serial enumeration and LAN discovery. Defaults to a passive scan; ``probe: true`` connects to each candidate. Use ``timeout``, ``interfaces``, ``python``, ``allPorts`` and ``signal`` to control the scan.
+
+``nodeAdapterAssets()``
+    Return a frozen object of ``serial`` and ``rom`` URLs for ``node_serial.py`` and ``node_rom.py``. Node bundlers must copy both assets beside the bundled entry point at its expected asset paths.
+
 ``tcpTransport({ host, port })``
     Return a passive Node TCP byte adapter. Core opens it during ``device.connect({ role: 'tcp' })``.
 
 ``serialTransport({ serial, python })``
-    Return the shared Node/Python serial byte adapter. Use an explicit serial device name/path and an interpreter with pyserial (for example ``python3``). Core opens/closes it; choose role ``usj``, ``usb`` or ``uart`` for the actual interface. The adapters carry bytes, not another device session. This Node-only export is available starting in 0.1.1.
+    Return the shared Node/Python serial byte adapter. Use an explicit serial device name/path and an interpreter with pyserial (for example ``python3``). Core opens/closes it; choose role ``usj``, ``usb`` or ``uart`` for the actual interface. The adapters carry bytes, not another device session.
 
 
 ``openNodeRom({ port, python?, signal? })``
@@ -1326,9 +1347,9 @@ After verified readback, flash returns ``{ verified: true, needsReset: boolean }
 ------------------------------------------------------------------
 
 ``openBrowserRom({ port, logger = {}, signal? })``
-    Unreleased API; absent from npm 0.3.0. Return a passive browser ROM adapter for a selected Web Serial ``SerialPort``. Request the port in the user gesture and release any runtime connection first. ``initialize()`` lazily loads pinned tasmota 9.4.2, opens/detects the chip and exposes ``chipName/chipFamily/chipRevision``; it does not start a stub. The adapter implements ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` for ``firmware.update``. Core checks the approved image and ROM security before starting the stub and owns all write/readback/reset semantics. ``logger`` optionally provides ``log/error/debug`` functions. ``signal`` cancels initialization; it never closes a started write/readback. ``disconnect()`` is idempotent and releases the port; initialization failures also close acquired resources. A disconnected adapter cannot be reused. Use a browser bundler; direct upstream native ESM loading is unsupported. See :doc:`integration` for the complete example. This subpath imports no Node modules; the root and Node paths do not load this browser backend.
+    Included in SDK 0.5.1. Return a passive browser ROM adapter for a selected Web Serial ``SerialPort``. Request the port in the user gesture and release any runtime connection first. ``initialize()`` lazily loads pinned tasmota 9.4.2, opens/detects the chip and exposes ``chipName/chipFamily/chipRevision``; it does not start a stub. The adapter implements ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` for ``firmware.update``. Core checks the approved image and ROM security before starting the stub and owns all write/readback/reset semantics. ``logger`` optionally provides ``log/error/debug`` functions. ``signal`` cancels initialization; it never closes a started write/readback. ``disconnect()`` is idempotent and releases the port; initialization failures also close acquired resources. A disconnected adapter cannot be reused. Use a browser bundler; direct upstream native ESM loading is unsupported. See :doc:`integration` for the complete example. This subpath imports no Node modules; the root and Node paths do not load this browser backend.
 
-Release readers in @esp-vision/device-core/firmware (0.4.0)
+Release readers in @esp-vision/device-core/firmware (0.5.1)
 ------------------------------------------------------------------
 
 ``loadOfficialFirmware({ board?, version?, fetch = globalThis.fetch, signal? })``

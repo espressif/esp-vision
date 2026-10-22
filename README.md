@@ -47,6 +47,8 @@ v4 still uses `EVMUX/1` framing. Hosts must implement explicit acquisition and k
 
 IDE, Agent, CLI and custom tools share Device Core; EV-MUX connects that host SDK to device firmware. See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html) for the role of each layer.
 
+For AI clients, the [local plugin](host/esp-vision-plugin/README.md) bundles a fixed [Device CLI](host/device-cli/README.md) and connects to the official online Knowledge MCP. The main repository owns knowledge/server artifacts; website deploys verified immutable images. See [MCP architecture and release flow](docs/mcp-release.md). Install a published version with `npx -y @esp-vision/plugin install codex` or `npx -y @esp-vision/plugin install claude`. For WorkBuddy, `npx -y @esp-vision/plugin install workbuddy` prepares a local Skill ZIP and official Knowledge MCP configuration; complete the documented imports in the WorkBuddy UI.
+
 The [license inventory](docs/en/license/index.rst) records upstream components and adaptations, including the MIT-licensed MicroPython execution and thread overlays used for EV-MUX session isolation.
 
 ## Quickstart

@@ -392,12 +392,12 @@ Node 宿主可直接复用随包提供的 ROM 适配器：
      openLoader: ({ signal }) => openNodeRom({ port: selectedRomPort, signal }),
    })
 
-尚未发布的浏览器 ROM 适配器为 ``@esp-vision/device-core/browser`` 的 ``openBrowserRom({ port, logger?, signal? })``，复用上述安装/升级契约；用户手势串口授权和打包器要求见 :doc:`integration`。npm 0.3.0 尚不含此 API。
+SDK 0.5.1 已包含浏览器 ROM 适配器 ``@esp-vision/device-core/browser`` 的 ``openBrowserRom({ port, logger?, signal? })``，复用上述安装/升级契约；用户手势串口授权和打包器要求见 :doc:`integration`。
 
 不可变发布快照与单 BIN 升级（0.4.0）
 ------------------------------------
 
-此源码正在准备 SDK 0.4.0；发布是单独步骤。``loadOfficialFirmware`` 与 ``loadReleaseManifest`` 从 ``@esp-vision/device-core/firmware`` 导入；根入口仍只导出 ``createDevice``。
+SDK 0.5.1 已包含这些发布读取器。``loadOfficialFirmware`` 与 ``loadReleaseManifest`` 从 ``@esp-vision/device-core/firmware`` 导入；根入口仍只导出 ``createDevice``。
 
 ``loadOfficialFirmware({ board?, version?, fetch = globalThis.fetch, signal? })`` 优先读取 ``config.toml`` 的 ``[publication]``：``schemaVersion: 1``、``version``、40 位 ``sourceCommit``、``manifestUrl``、原始字节 ``manifestSha256`` 及 ``releases: [{ version, manifestUrl, manifestSha256, boards }]``。历史版本不重复，各板集非空且唯一；发布器的其他事务字段保留但不改变读取逻辑。指定板型/版本必须存在于该引用。仅下载所选版本的一份 manifest，不遍历历史板型 × 版本矩阵；``firmware.check({ version })`` 会传递版本给 reader。显式 publication、引用或 manifest 无效时明确失败，包括 404 或哈希不匹配，不作回退。只有完全不含 ``publication`` 的配置保留旧 feed；指定版本也会约束旧元数据请求范围。
 

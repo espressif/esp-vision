@@ -1255,11 +1255,32 @@ Promise<Uint8Array>，校验 v4、精确字节数、应用分区边界和 SHA-25
 @esp-vision/device-core/node
 ------------------------------------------------------------------
 
+``defaultPython``
+    平台默认 Python 可执行文件：Windows 为 ``python``，其他系统为 ``python3``。
+
+``listSerial({ python = defaultPython, signal, timeout = 10000 } = {}, dependencies = {})``
+    使用 pyserial 枚举系统串口。需要 Python 与 pyserial；可选依赖对象允许注入进程执行器。
+
+``filterSerialPorts(ports, { platform = process.platform, allPorts = false } = {})``
+    按平台路径及 USB 描述符提示筛选系统枚举记录，不打开端口，也不认定固件身份。
+
+``serialEntry(port)``
+    将串口描述符转换为未探测的接口/地址候选并附带 USB 元数据；描述符分类不等于设备身份。
+
+``transportFor(entry, options = {})``
+    为枚举项创建被动 TCP 或串口字节传输；串口选项可指定 ``python``。
+
+``inventory(options = {}, dependencies = {})``
+    从串口枚举和局域网发现返回 ``{ devices, warnings, sourcesAvailable }``。默认只扫描，不连接；``probe: true`` 会连接每个候选。可用 ``timeout``、``interfaces``、``python``、``allPorts`` 和 ``signal`` 控制扫描。
+
+``nodeAdapterAssets()``
+    返回包含 ``serial`` 和 ``rom`` URL 的冻结对象，分别指向 ``node_serial.py`` 与 ``node_rom.py``。Node 打包器须将两个资源复制到已约定的打包入口旁路径。
+
 ``tcpTransport({ host, port })``
     返回被动构造的 Node TCP 字节适配器。由 Core 在 ``device.connect({ role: 'tcp' })`` 时打开。
 
 ``serialTransport({ serial, python })``
-    返回共用的 Node/Python 串口字节适配器。指定设备名称/路径及已安装 pyserial 的解释器（例如 ``python3``）；由 Core 打开和关闭，按实际接口选择 ``usj``、``usb`` 或 ``uart`` 角色。适配器只传字节，不维护另一套设备会话。此 Node 专用导出从 0.1.1 起可用。
+    返回共用的 Node/Python 串口字节适配器。指定设备名称/路径及已安装 pyserial 的解释器（例如 ``python3``）；由 Core 打开和关闭，按实际接口选择 ``usj``、``usb`` 或 ``uart`` 角色。适配器只传字节，不维护另一套设备会话。
 
 
 ``openNodeRom({ port, python?, signal? })``
@@ -1326,9 +1347,9 @@ FirmwareFlashSession.flash 返回值
 ------------------------------------------------------------------
 
 ``openBrowserRom({ port, logger = {}, signal? })``
-    此 API 尚未发布，npm 0.3.0 不含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载锁定的 tasmota 9.4.2，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、完整回读和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化，不中断已开始的写入与回读。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块，根与 Node 入口也不加载浏览器后端。
+    SDK 0.5.1 已包含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载锁定的 tasmota 9.4.2，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、完整回读和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化，不中断已开始的写入与回读。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块，根与 Node 入口也不加载浏览器后端。
 
-@esp-vision/device-core/firmware 发布读取器（0.4.0）
+@esp-vision/device-core/firmware 发布读取器（0.5.1）
 ------------------------------------------------------
 
 ``loadOfficialFirmware({ board?, version?, fetch = globalThis.fetch, signal? })``

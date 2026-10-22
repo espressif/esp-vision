@@ -392,12 +392,12 @@ Node hosts can reuse the shipped ROM adapter directly:
      openLoader: ({ signal }) => openNodeRom({ port: selectedRomPort, signal }),
    })
 
-The unreleased browser ROM adapter is ``openBrowserRom({ port, logger?, signal? })`` from ``@esp-vision/device-core/browser``. It uses the same install/update contract above; see :doc:`integration` for user-gesture serial permission and bundler requirements. npm 0.3.0 does not contain this API.
+SDK 0.5.1 includes the browser ROM adapter ``openBrowserRom({ port, logger?, signal? })`` from ``@esp-vision/device-core/browser``. It uses the same install/update contract above; see :doc:`integration` for user-gesture serial permission and bundler requirements.
 
 Immutable release snapshots and single-BIN updates (0.4.0)
 ----------------------------------------------------------
 
-This source prepares SDK 0.4.0; publication is a separate step. Import ``loadOfficialFirmware`` and ``loadReleaseManifest`` from ``@esp-vision/device-core/firmware``. The root still exports only ``createDevice``.
+SDK 0.5.1 includes these release readers. Import ``loadOfficialFirmware`` and ``loadReleaseManifest`` from ``@esp-vision/device-core/firmware``. The root still exports only ``createDevice``.
 
 ``loadOfficialFirmware({ board?, version?, fetch = globalThis.fetch, signal? })`` prioritizes ``config.toml``'s ``[publication]``: ``schemaVersion: 1``, ``version``, 40-character ``sourceCommit``, ``manifestUrl``, raw-byte ``manifestSha256``, and ``releases: [{ version, manifestUrl, manifestSha256, boards }]``. The history has no duplicate versions and each board set is nonempty and unique. Additional publisher transaction fields are preserved but do not change reader behavior. A selected board/version must exist in that reference. Only the selected manifest is downloaded, never the historical board × version matrix; ``firmware.check({ version })`` forwards its version to this reader. An explicit invalid publication/reference/manifest rejects, including a 404 or hash mismatch, without fallback. Only configs lacking ``publication`` use the legacy feed. Explicit versions also restrict legacy metadata requests.
 
