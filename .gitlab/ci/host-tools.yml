@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+device_cli_checks:
+  stage: check
+  image: node:24-bookworm-slim
+  tags: [build, internet, amd64]
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-serial
+  script:
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/host-tmp" TMP="$CI_PROJECT_DIR/.cache/host-tmp" TEMP="$CI_PROJECT_DIR/.cache/host-tmp"
+    - mkdir -p "$TMPDIR"
+    - node tools/ci/mcp/install_host.mjs --output .cache/host-artifacts
+    - npm --prefix host/device-cli run build
+    - npm --prefix host/device-cli test
+    - node --test tools/ci/mcp/test_release_npm.mjs
+    - export ESP_VISION_NPM_TARBALL_DIR="$CI_PROJECT_DIR/.cache/host-npm-tarballs"
+    - node tools/ci/mcp/release_npm.mjs --dry-run --package host/device-cli
+  artifacts:
+    paths: [.cache/host-artifacts/, .cache/host-npm-tarballs/]
+    expire_in: 1 month
+
+publish_device_cli_npm:
+  when: manual
+  allow_failure: false
+  stage: deploy
+  image: node:24-bookworm-slim
+  tags: [build, internet, amd64]
+  needs: [device_cli_checks]
+  resource_group: host-tools-npm-release
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes:
+        - "host/device-cli/**/*"
+        - "tools/ci/mcp/release_npm.mjs"
+        - ".gitlab/ci/host-tools.yml"
+    - when: never
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-serial
+  script:
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/host-tmp" TMP="$CI_PROJECT_DIR/.cache/host-tmp" TEMP="$CI_PROJECT_DIR/.cache/host-tmp"
+    - mkdir -p "$TMPDIR"
+    # These jobs consume the checked archives. No source is rebuilt for publish.
+    - node tools/ci/mcp/install_host.mjs --output .cache/publish-dependencies
+    - node tools/ci/mcp/release_npm.mjs --package host/device-cli --tarball-dir .cache/host-npm-tarballs

@@ -1,0 +1,49 @@
+{
+  "name": "@esp-vision/device-cli",
+  "version": "0.1.0",
+  "description": "Standalone command line interface for ESP-VISION devices.",
+  "type": "module",
+  "bin": {
+    "esp-vision-device": "./dist/device-cli.mjs"
+  },
+  "files": [
+    "dist/",
+    "licenses/",
+    "README.md",
+    "LICENSE",
+    "DEVICE_CORE_NOTICE.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.mjs",
+    "prepack": "npm run build"
+  },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "homepage": "https://vision.espressif.com/",
+  "keywords": [
+    "esp-vision",
+    "espressif",
+    "esp32",
+    "micropython",
+    "cli"
+  ],
+  "devDependencies": {
+    "@esp-vision/device-core": "0.5.1",
+    "esbuild": "0.25.12",
+    "multicast-dns": "7.2.5",
+    "string-width": "7.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/espressif/esp-vision.git",
+    "directory": "host/device-cli"
+  }
+}

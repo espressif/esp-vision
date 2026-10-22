@@ -3,129 +3,106 @@ Device management CLI
 
 :link_to_translation:`zh_CN:[中文]`
 
-The npm package installs ``esp-vision-device`` for management. Its four commands are inspect, configure, control and firmware (check/update). It calls the same public createDevice API as the IDE. There are no separate discover/info/status/capabilities commands, Python shell or file-manager commands.
+The standalone ``@esp-vision/device-cli`` npm package installs ``esp-vision-device``. The CLI uses the public ``@esp-vision/device-core`` API and supports discovery, device management, Python execution, device files, capture, batch plans, and bounded event watches. Requires Node.js 22 or newer.
 
-Installation and platforms
+Installation and host requirements
 ----------------------------------------
 
 .. code-block:: console
 
-   npm install -g @esp-vision/device-core@0.4.0
+   npm install -g @esp-vision/device-cli
    esp-vision-device --help
    esp-vision-device inspect
 
-Installation requires the first npm publication. Use Node.js 22. Windows, Linux and macOS use the same command parser and system-port enumeration through Python/pyserial. Windows defaults to python; other systems default to python3. Use --python to select an interpreter with pyserial installed. No Linux-specific device scanning is used. LAN discovery uses optional multicast-dns, installed with npm unless optional dependencies are omitted; missing discovery dependencies produce a warning while successful sources remain usable.
+Serial access requires Python with ``pyserial``. Windows defaults to ``python`` and macOS/Linux to ``python3``; use ``--python`` to select another interpreter. Firmware flashing also requires ``esptool>=5.3,<6`` in that interpreter. LAN discovery uses the CLI's bundled multicast-DNS client.
 
-.. code-block:: console
-
-   python -m pip install pyserial
-   esp-vision-device inspect --python python
-
-Enumerating and querying
+Discovery and inspection
 ----------------------------------------
 
-Without a target, inspect enumerates OS serial ports and DNS-SD announcements without opening serial ports or acquiring a device session. Serial board/version fields remain unknown even when a USB product string resembles a board name. USB VID/PID/product/serial are descriptor hints only: Espressif USJ, ESP-VISION USB-OTG candidates, USB-to-UART converters remain visible by default; native UART ports are available with --all-ports. ROM/unflashed candidates are not discarded. Firmware cannot be inferred from an unanswered probe. A USB device exposing no OS serial port cannot be enumerated by this serial backend; USB/ROM modes without a serial endpoint require a separate host USB adapter.
-
-Filtering follows the OS enumeration, then checks platform names and USB descriptors; it never guesses ports by generating filenames or limits discovery to Espressif VID/PID. Windows accepts COM1 and higher (including COM10+ and extended device paths); Linux normally exposes USB serial ports as /dev/ttyACM*, /dev/ttyUSB* or /dev/ttyXRUSB*; macOS uses /dev/cu.* and /dev/tty.*, preferring cu.* when both endpoints exist. USB descriptors also retain custom driver names. Missing board identity or firmware does not remove a USB candidate.
-
-By default, only USB serial candidates appear. --all-ports additionally shows OS-enumerated native UART, Bluetooth and other serial ports: ttyS*, ttyAMA*, ttyTHS* and rfcomm* are legitimate Linux ports, not invalid names. Windows COM names alone cannot distinguish USB from native/virtual serial; without USB descriptors they require --all-ports. macOS Bluetooth/debug ports likewise require --all-ports. An explicit --port bypasses discovery filtering, including Linux /dev/serial/by-id/... aliases. Neither mode opens ports just to test their presence.
-
-The rules follow `pySerial enumeration <https://pyserial.readthedocs.io/en/latest/tools.html#serial.tools.list_ports.comports>`_, `Microsoft serial handles <https://learn.microsoft.com/en-us/windows/win32/devio/communications-resource-handles>`_, `Linux serial device names <https://www.kernel.org/doc/html/latest/admin-guide/devices.html>`_ and `Apple serial device access <https://developer.apple.com/library/archive/documentation/DeviceDrivers/Conceptual/WorkingWSerial/WWSerial_SerialDevs/SerialDevices.html>`_. The CLI command inspect matches the JavaScript method device.inspect().
+Without a target, ``inspect`` enumerates OS serial ports and LAN advertisements without opening serial ports or acquiring device sessions. USB descriptors are candidate hints, not firmware identity. USB serial candidates are shown by default; ``--all-ports`` includes other OS-enumerated serial ports. ``--interface`` accepts comma-separated ``all``, ``serial``, ``usb``, ``usj``, ``uart``, and ``tcp`` filters. An explicit ``--port`` bypasses discovery filtering. Linux ``/dev/serial/by-id/...`` aliases are accepted.
 
 .. code-block:: console
 
    esp-vision-device inspect --json
-   esp-vision-device inspect --interface serial
    esp-vision-device inspect --interface serial --all-ports
    esp-vision-device inspect --interface usj,usb --probe
-   esp-vision-device inspect --interface tcp
-   esp-vision-device inspect --select 1 --fields identity,capabilities
-
-Results have per-invocation numbers. Identified devices sort before LAN advertisements, unprobed ports and failed probes. Successful identification assigns a shared group to the same deviceId across interfaces, preserving each endpoint. Unidentified/busy/inaccessible ports remain present with error codes; a failed probe does not prove firmware is absent. USB serial numbers are displayed independently from firmware deviceId. --select uses the same enumeration snapshot in that invocation, then connects its selected endpoint; scripts should use an explicit address. A LAN advertisement is not proof of current reachability.
-
---probe explicitly connects and can interrupt Python. Probe timeout defaults to 5000 ms per endpoint; --probe-timeout changes it. --interface restricts enumeration to all/serial/usb/usj/uart/tcp (comma-separated); serial includes every wired port admitted by the enumeration policy. Default LAN collection is 3000 ms, bounded to 10000 ms. Platform-specific paths are accepted without rewriting.
-
-.. code-block:: console
-
-   esp-vision-device inspect --port COM3
+   esp-vision-device inspect --select 1 --fields identity,capabilities,runtime
    esp-vision-device inspect --port /dev/ttyACM0 --role usj
-   esp-vision-device inspect --port /dev/cu.usbmodem1101 --role usb
-   esp-vision-device inspect --tcp 192.168.1.100:3232
-   esp-vision-device inspect --tcp esp-vision-board.local:3232 --fields identity,capabilities,runtime,network,storage --json
+   esp-vision-device inspect --tcp esp-vision-board.local:3232 --fields identity,network,storage
 
-A target always opens a Core session, queries and releases it. Default fields are identity/capabilities/runtime; add network/storage as needed. --fields without a target requires --probe or --select. --role is optional for explicit serial targets (default unknown); selecting a discovered descriptor candidate uses its candidate role. Port/IP identification still relies on the firmware negotiation. Hostname TCP connections depend on host DNS/mDNS resolution; use the discovered IP if .local resolution is unavailable. TCP supports bracketed IPv6 addresses but current DNS-SD records supply IPv4 endpoints. No claim of passive protocol probing is made.
+``--probe`` queries discovered candidates and ``--select`` connects to the selected result from that invocation. Both use passive EV-MUX acquisition; they do not send Ctrl-C to the running application. ``--probe-timeout`` defaults to 5000 ms per candidate and accepts up to 60000 ms. Inventory collection defaults to 3000 ms; LAN collection is capped at 10000 ms. Targeted inspection defaults to identity, capabilities, and runtime; ``--fields`` also accepts ``network`` and ``storage``. A targeted inspect, configure, firmware check, capture, watch, and native ``files write`` use passive acquisition. Python execution, REPL-backed ``files list/read/remove/mkdir``, control, firmware update, and all batch plans use the normal REPL connection probe and can send Ctrl-C. For an explicit serial target, ``--role`` accepts ``usj``, ``usb``, ``uart``, or ``unknown`` and requires ``--port``; the default is ``unknown``.
 
+Runtime fields ``scriptRunning`` and ``run`` reflect work tracked by the current SDK session. A fresh CLI process cannot use those fields to determine whether a detached program is still running on the device. ``vmReady`` means the VM is ready; it does not mean the VM is idle.
 
-CLI and SDK naming
-----------------------------------------
-
-Command names match SDK methods: inspect, configure, control and firmware check/update. CLI options use kebab-case and JavaScript uses camelCase or nested objects; this changes syntax, not the underlying operation. The table omits transport selection and cleanup for brevity.
-
-.. list-table::
-   :header-rows: 1
-   :widths: 40 60
-
-   * - CLI
-     - SDK
-   * - ``inspect --fields identity,network``
-     - ``device.inspect({ fields: ["identity", "network"] })``
-   * - ``configure --network-enabled true``
-     - ``device.configure({ network: { enabled: true } })``
-   * - ``configure --ssid NAME``
-     - ``device.configure({ network: { credentials: { ssid, password } } })``
-   * - ``configure --forget-wifi``
-     - ``device.configure({ network: { credentials: null } })``
-   * - ``control --action reset --mode soft``
-     - ``device.control({ action: "reset", mode: "soft" })``
-   * - ``firmware check --version VERSION``
-     - ``device.firmware.check({ version })``
-   * - ``firmware update --version VERSION``
-     - ``device.firmware.check({ version })`` → ``device.firmware.update({ release, openLoader })``
-
-Without a target, CLI inspect is a host inventory operation that combines OS serial enumeration with LAN discovery; it does not call device.inspect() on a disconnected device. SDK device.discover() lists LAN advertisements through its discovery adapter, while device.inspect() queries an established session. --port/--tcp select the host transport; --probe/--select/--all-ports/--json are CLI presentation or discovery options, not additional SDK API names. --ssid obtains the password from a prompt/stdin; configuration output intentionally shows only ok, avoiding credential disclosure. --image maps local bytes to firmware.update data, while --version first selects a release through firmware.check.
-
-CLI --timeout defaults to 30000 ms for explicit targets, overriding the SDK method defaults when forwarded to connect/inspect/configure/control; it is not an aggregate deadline for the entire command. Firmware check/update use cancellation signals rather than this timeout for download/flashing. SDK configuration defaults to 45000 ms and control to 15000 ms when called directly without a timeout.
-
-Configuration and control
+Configuration, control, and firmware
 ----------------------------------------
 
 .. code-block:: console
 
    esp-vision-device configure --port COM3 --ssid MyWiFi
-   esp-vision-device configure --port /dev/ttyACM0 --ssid MyWiFi --password-stdin
-   esp-vision-device configure --port /dev/ttyACM0 --network-enabled false
-   esp-vision-device configure --port /dev/ttyACM0 --forget-wifi
+   esp-vision-device configure --port COM3 --ssid MyWiFi --password-stdin
+   esp-vision-device configure --port COM3 --network-enabled false
+   esp-vision-device configure --port COM3 --forget-wifi
    esp-vision-device control --tcp 192.168.1.100 --action stop
    esp-vision-device control --port COM3 --action reset --mode soft
-   esp-vision-device control --port COM3 --action reset --mode hard
    esp-vision-device control --port COM3 --action bootloader
-
-SSID configuration prompts for a hidden password; --password-stdin reads it from standard input (one final newline is stripped). There is no command-line password argument. Configuration outputs only ok:true, never credentials. An empty password selects an open network. Wi-Fi changes can break TCP, so prefer serial provisioning. Control reset requires an explicit soft/hard mode; successful reset/download acknowledgement does not imply a reconnected device. Enumeration never resets or writes a device.
-
-Firmware management
-----------------------------------------
-
-.. code-block:: console
-
-   esp-vision-device firmware check --port COM3
    esp-vision-device firmware check --port COM3 --version 2026.10.15
    esp-vision-device firmware check --board ESP32_P4X_EYE --json
    esp-vision-device firmware update --port COM3 --version 2026.10.15
 
-check reads https://dl.espressif.com/AE/esp-vision/config.toml automatically, then fetches per-board/per-version metadata under firmware/<board>/<version>.json. It returns all listed versions; historical versions without qualified update metadata remain visible with compatible:false and reason UPDATE_METADATA_UNAVAILABLE, and cannot be flashed through this application-only update flow. --version selects an exact qualified version. --catalog is an optional advanced override, not a required input. Offline checks need only --board; --current-version is optional and defaults to unknown.
+Configuration prompts for a hidden Wi-Fi password; ``--password-stdin`` reads it from standard input. There is no command-line password option. Configuration output does not include credentials. Reset requires ``--mode soft`` or ``--mode hard``; an acknowledgement does not mean the device has reconnected.
 
-update requires a local --port and explicit --version. The built-in serial flasher internally calls separately installed Python esptool>=5.3,<6; install it once with python -m pip install "esptool>=5.3,<6". No JavaScript loader module or --loader argument is accepted. --python selects the interpreter, not a user adapter. An explicit --board allows qualified recovery without acquiring a live v4 session, but the physical chip/security/partition checks still apply. TCP is not OTA. Image download, application-only flashing, complete readback and reset handling reuse Core's update API. --image is an advanced local-bin override.
+Firmware checks use the official feed by default; ``--catalog`` accepts a local catalog file or HTTPS URL. An offline check needs ``--board`` and optionally accepts ``--current-version``. Update requires a local ``--port`` and explicit ``--version``; the built-in serial flasher uses ``esptool>=5.3,<6``. TCP is not OTA. The default ``--mode update`` writes the application and preserves the existing layout and user data. ``--mode install`` requires ``--board`` and writes a complete image, replacing data in its written range; use a ROM-capable USJ/UART port for blank-board installation. ``--image`` supplies local firmware bytes and does not bypass release integrity checks.
 
-The firmware release pipeline generates application bins plus SHA-256, actual partition bounds/table hashes and image-header silicon revision ranges from built artifacts. It publishes them additively beside the existing merged full-flash images; the website's existing flashing flow is unchanged. The six legacy releases present during this implementation lack this metadata; they can be listed, but no qualified official upgrade is available until the new firmware release is published. No fake successful update or guessed compatibility is reported.
+Python execution
+----------------------------------------
 
-Blank-device installation uses the same command with explicit ``--mode install`` and ``--board``; no EV-MUX session is acquired. Select a ROM-capable USJ/UART port and enter download mode. The default mode is application-only update. Installation replaces existing data in the complete image's written range, validates chip/security/capacity and verifies every written byte. A release must include approved complete-install metadata; a legacy download URL alone is insufficient. ``--image`` overrides bytes for the selected mode, not its integrity checks. TCP OTA and application USB-OTG discovery on a blank device are not supported.
+Choose exactly one Python input: inline ``--source CODE``, local ``--file LOCAL.py``, or device ``--path DEVICE.py``. ``--completion wait`` is the default and waits for completion. A positive ``--timeout MS`` cancels a waiting execution when it expires. ``--max-output-chars`` bounds captured output (16,384 by default, up to 1 MiB).
 
 .. code-block:: console
 
-   esp-vision-device firmware check --board ESP32_P4X_EYE --mode install --json
-   esp-vision-device firmware update --port COM3 --board ESP32_P4X_EYE --mode install --version <firmware-version>
+   esp-vision-device python --source 'print(42)' --port COM3
+   esp-vision-device python --file ./main.py --port COM3 --timeout 30000
+   esp-vision-device python --path /main.py --completion start --port COM3
 
-Output and cancellation
+``--completion start`` accepts only ``--path`` and acknowledges after the device VM enters its runner. This does not confirm application initialization or completion. The CLI releases the connection and exits; it does not keep watching or resume the script. EV-MUX pins Python stdout to the session that started the program. Use foreground ``--completion wait`` for live Python output; a later watch cannot reattach to a detached run's stdout. Use captures or device-written progress artifacts to verify a detached application.
+
+Foreground Python execution and Python steps in a batch stream ``python.output``, ``python.log``, and ``python.state`` NDJSON events on stderr. Output is bounded by ``--max-output-chars`` with one truncation marker. The stdout result contains metadata, not a duplicate of streamed Python text.
+
+Device files and capture
 ----------------------------------------
 
---json writes one result object to stdout; default enumeration uses spaces padded to Unicode display widths, with numbered device blocks on narrow terminals and a column-aligned table when it fits, and other operations print formatted JSON. Partial enumeration warnings go to stderr (or the JSON warnings array). If all enumeration sources fail, the command fails; a successful empty source is a valid empty list. Errors are bounded code/message objects on stderr with a nonzero exit code, without raw device tracebacks or configuration data. Ctrl-C/SIGTERM cancels discovery and Core operations and releases resources; Core deliberately completes verification once flash writing starts. Terminal control characters in tabular device data are escaped. Current live-device coverage is Linux; Windows/macOS argument/descriptor behavior is covered by automated tests, not a claim of completed hardware tests on those systems.
+.. code-block:: console
+
+   esp-vision-device files list --path / --recursive --port COM3
+   esp-vision-device files read /main.py --output ./main.py --port COM3
+   esp-vision-device files write /backup.bin --file ./backup.bin --port COM3
+   esp-vision-device files remove /old.bin --type file --port COM3
+   esp-vision-device files mkdir /data --recursive --port COM3
+   esp-vision-device capture camera --output ./frame.jpg --quality 80 --port COM3
+   esp-vision-device capture screen --output ./screen.jpg --port COM3
+
+File reads and JPEG captures write binary data to the requested local ``--output`` and return path, byte count, and metadata. Files read/capture are capped at 16 MiB by default; ``--max-bytes`` may lower the cap. ``files write`` sends local bytes with the binary file RPC. Images and file contents are not embedded in JSON.
+
+Batch and watch
+----------------------------------------
+
+``batch PLAN.json`` validates the entire ``schemaVersion: 1`` plan before connecting, executes operations sequentially over one connection, and stops at the first failure. A report lists completed operations and the failure. Supported operations are ``python``, ``files.list``, ``files.read``, ``files.write``, ``files.remove``, ``files.mkdir``, and ``capture``. Python steps wait for completion. Local file paths are relative to the plan file; device paths are absolute. Batch uses the normal REPL connection probe because a plan may run Python or REPL-backed file operations.
+
+.. code-block:: json
+
+   {
+     "schemaVersion": 1,
+     "operations": [
+       { "op": "python", "source": "print('hello')" },
+       { "op": "files.read", "path": "/boot.py", "output": "./boot.py" },
+       { "op": "capture", "source": "screen", "output": "./screen.jpg" }
+     ]
+   }
+
+``watch --duration MS`` requires ``--port`` or ``--tcp`` and a duration from 1 ms to 1 hour. It passively observes output, logs, state changes, and diagnostics available to the currently acquired session, then releases the connection. Watch does not launch scripts, reconnect, or reattach to a prior detached run's Python stdout. SIGINT/SIGTERM cancel the command and release ownership.
+
+Output, timeouts, and cancellation
+----------------------------------------
+
+``--json`` writes one ``schemaVersion: 1`` JSON envelope to stdout. Status, Python output, logs, firmware phases, cancellation, errors, and duration are NDJSON events on stderr. Binary content is always written to local files. ``--timeout`` accepts 1..600000 ms. It applies to inspect/configure/control and inventory collection; ``--probe-timeout`` sets the timeout for each discovered candidate probe. When explicitly supplied, ``--timeout`` also applies to foreground Python, file reads, captures, and those operations in a batch. It is not a connection timeout: device connection setup uses 30000 ms. Python ``--completion start`` rejects ``--timeout``; watch uses ``--duration``; firmware operations do not use this option but support signal cancellation. During firmware update, once writing begins, Core completes readback verification and reset handling. File list/write/remove/mkdir support signal cancellation without a per-operation timeout. SIGINT exits with code 130, SIGTERM with 143, argument/plan errors with 2, other failures with 1, and success with 0. Busy or uncertain operations are not retried automatically. See ``esp-vision-device --help --json`` for the machine-readable command and capability reference.
