@@ -13,6 +13,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Package the official ESP-VISION logo and provide WorkBuddy local Skill ZIP imports and official Knowledge MCP configuration through the npm installer, with explicit pending-import status and immutable versioned payloads.
 - Bundle a fixed standalone Device CLI and the official Knowledge HTTP MCP in a Codex/Claude plugin with one capability-oriented Skill and an npm installer supporting verified upgrades and failure recovery.
 - Own the online Knowledge MCP runtime and anonymous daily aggregate statistics in the main repository, with a private locked Node 24 package, immutable-image build context and 18 HTTP/privacy/reporting regression tests.
+- Publish Knowledge MCP as a public npm package with a reusable server factory, isolated stdio transport, complete validated snapshot, provenance metadata and installed-artifact HTTP/statistics checks.
+- Own the online Knowledge MCP runtime and anonymous daily aggregate statistics in the main repository, with a locked Node 24 runtime, immutable-image build context and HTTP/privacy/reporting regression tests.
 
 ### Changed
 
@@ -59,6 +61,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Build the full Knowledge snapshot with the check-stage Python interpreter immediately after its source checks, so generator failures surface before unrelated firmware builds finish.
 - Preserve return annotations from stub source spans so Knowledge pack generation also works on the Python 3.8 documentation builder.
 - Retain Knowledge API return types and public display aliases, including canonical documentation links and normalized histogram value semantics.
+- Ship release-version and complete-MicroPython snapshot validation with the Knowledge npm package pipeline, keeping it independently buildable before deployment integration.
+- Validate Knowledge factory and transport versions against the selected snapshot so complete release snapshots exercise the same tests as fixtures.
 
 ## [2026.10.19]
 

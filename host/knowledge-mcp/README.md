@@ -1,20 +1,58 @@
-# ESP-VISION Knowledge MCP runtime
+# ESP-VISION Knowledge MCP
 
-This private Node 24 service exposes the ESP-VISION knowledge pack over stateless Streamable HTTP. It preserves the existing MCP tools, `esp-vision://module/{name}` resource, root and `/mcp` request addresses, and `/health` and `/mcp/health` health addresses. It does not implement stdio or distribute a local knowledge corpus; the service is built as an immutable server image and deployed by the website project.
+The public `@esp-vision/knowledge-mcp` npm package provides the ESP-VISION API knowledge pack over MCP stdio or Streamable HTTP. The `esp-vision-knowledge-mcp` command defaults to stdio for local MCP clients. It preserves the existing read-only HTTP service, its tools and `esp-vision://module/{name}` resource, the `/` and `/mcp` request addresses, and `/health` and `/mcp/health` health addresses. The official online endpoint remains `https://mcp.vision.espressif.com/mcp`; the website plugin continues to use HTTP.
 
-The main ESP-VISION repository owns knowledge generation and release. CI validates the selected release pack and provides it as `mcp-pack.json` at this directory's Docker build context root. The Dockerfile copies those exact bytes to `/srv/data/mcp-pack.json`; the running server does not fetch or refresh knowledge data. Deployments select the image digest bound to the same release descriptor.
+The npm archive bundles its JavaScript runtime dependencies and ships the selected immutable knowledge pack with `data/provenance.json`. It requires Node.js 24 and has no runtime npm dependencies. The package includes the Apache-2.0 license and bundled dependency licenses in `NOTICE` and `THIRD_PARTY_NOTICES.md`.
 
-The image listens on port 8080. Anonymous aggregate statistics use `/srv/stats/usage.sqlite`, with 90 days of retention by default. Statistics are never exposed through HTTP or an MCP tool. The internal read-only report command runs in the existing service container:
+## Stdio MCP
+
+Install the package or use `npx` from an MCP client configuration:
 
 ```sh
-MCP_STATS_DB_PATH=/srv/stats/usage.sqlite node dist/stats-cli.js --days 7 --format table
+npm install --global @esp-vision/knowledge-mcp
+esp-vision-knowledge-mcp
 ```
 
-Reports can also be emitted as JSON with `--format json`; the command reads the SQLite database without changing it. The database should remain on the project's local persistent stats volume.
+The stdio transport is the default. Its stdout contains MCP protocol messages only; diagnostics go to stderr. It does not read `MCP_STATS_*`, open a SQLite database, or make outbound requests. The npm package contains the immutable pack selected at release time. `MCP_PACK_PATH=/path/to/mcp-pack.json` or `--pack /path/to/mcp-pack.json` selects a different pack explicitly.
 
-## Local build and verification
+Example MCP client configuration:
 
-Use Node.js 24 and npm. Install from this package's independent lockfile, then build and run the 18 package tests:
+```json
+{
+  "mcpServers": {
+    "esp-vision": {
+      "command": "esp-vision-knowledge-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+## Streamable HTTP
+
+The `--transport http` option starts the same stateless HTTP service used by the online endpoint:
+
+```sh
+esp-vision-knowledge-mcp --transport http --port 8080
+```
+
+HTTP reads `PORT` (default `8080`) and `MCP_PACK_PATH` (default the pack in the installed npm archive). Anonymous aggregate usage statistics remain opt-in through `MCP_STATS_DB_PATH`; set `MCP_STATS_RETENTION_DAYS` to select retention from 1 through 3650 days (default 90). The `--stats-db` and `--stats-retention-days` command-line options configure the same HTTP-only settings. Statistics are never exposed by an HTTP endpoint or MCP tool.
+
+The internal read-only report command reads the configured SQLite database without changing it:
+
+```sh
+MCP_STATS_DB_PATH=/path/to/usage.sqlite node dist/stats-cli.js --days 7 --format table
+```
+
+The command can emit JSON with `--format json`. It requires `MCP_STATS_DB_PATH`.
+
+## Public service factory
+
+The package exports `createKnowledgeServer({ pack, usageStats? })` and `Pack` from `@esp-vision/knowledge-mcp` (or `@esp-vision/knowledge-mcp/service`). Call `Pack.load(path)` to load an explicitly selected pack. Importing the factory does not load a pack, read environment variables, open a database, create a transport, make a network request, or listen on a port. The caller connects the returned MCP server to its chosen transport.
+
+## Build, tests, and npm release
+
+Use Node.js 24 and npm. Install the locked development toolchain and run the package checks:
 
 ```sh
 npm ci
@@ -22,6 +60,16 @@ npm run build
 npm test
 ```
 
-The tests use a deliberately small real-format fixture at `test/fixtures/mcp-pack.json`, so they do not depend on the website repository or a full documentation build. To exercise the HTTP contract against a generated production pack, set `MCP_TEST_PACK_PATH` to its path when running `npm test`.
+The tests select `test/fixtures/mcp-pack.json` explicitly. Ordinary builds produce bundled code only and never select that fixture as production data. `npm pack` and release checks fail unless a validated production pack and matching provenance were generated.
 
-To run the HTTP service locally, set `MCP_PACK_PATH` to an explicitly selected pack file and optionally set `PORT` and `MCP_STATS_DB_PATH`. The server has no knowledge-pack download behavior. `npm run stats:report -- --days 7 --format table` reads the database configured through `MCP_STATS_DB_PATH`.
+To build a release archive, provide the exact pack selected by the main repository release:
+
+```sh
+MCP_PACK_PATH=/path/to/mcp-pack.json npm run build:release
+npm run check:package
+npm pack
+```
+
+The release build runs `tools/ci/mcp/validate_schema.py <pack> --require-micropython`, verifies a full 40-character lowercase `meta.sourceCommit`, copies the original pack bytes unchanged to `data/mcp-pack.json`, and writes provenance containing the package name/version, pack version/source commit, and SHA-256 of those exact bytes. Every new production pack snapshot requires a package-version bump. The protected firmware-release workflow binds the exact npm tarball SHA-256 to its image and release descriptor.
+
+To use a one-off pack with the built code, pass `MCP_PACK_PATH` or `--pack`. The server never downloads or refreshes knowledge data.

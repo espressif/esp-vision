@@ -78,3 +78,7 @@ host/esp-vision-plugin/cli/
 # Knowledge MCP build artifacts
 host/knowledge-mcp/dist/
 host/knowledge-mcp/mcp-pack.json
+
+# Generated Knowledge npm assets
+host/knowledge-mcp/data/mcp-pack.json
+host/knowledge-mcp/data/provenance.json

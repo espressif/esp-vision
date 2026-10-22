@@ -8,7 +8,41 @@ knowledge_mcp_checks:
   variables:
     GIT_SUBMODULE_STRATEGY: none
     npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-jsonschema
   script:
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/knowledge-tmp" TMP="$CI_PROJECT_DIR/.cache/knowledge-tmp" TEMP="$CI_PROJECT_DIR/.cache/knowledge-tmp"
+    - mkdir -p "$TMPDIR"
     - npm --prefix host/knowledge-mcp ci --ignore-scripts --no-audit --no-fund
     - npm --prefix host/knowledge-mcp run build
     - npm --prefix host/knowledge-mcp test
+
+package_knowledge_mcp:
+  stage: build_docs
+  extends: .rules:docs:build
+  image: node:24-bookworm-slim
+  tags: [build, internet, amd64]
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  needs:
+    - job: build_mcp_pack
+      artifacts: true
+    - job: knowledge_mcp_checks
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-jsonschema
+  script:
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/knowledge-tmp" TMP="$CI_PROJECT_DIR/.cache/knowledge-tmp" TEMP="$CI_PROJECT_DIR/.cache/knowledge-tmp"
+    - mkdir -p "$TMPDIR"
+    - npm --prefix host/knowledge-mcp ci --ignore-scripts --no-audit --no-fund
+    - >-
+      python3 tools/ci/mcp/prepare_knowledge.py --pack mcp-pack.json
+      --output .cache/knowledge-npm --expected-version "${CI_COMMIT_TAG:-$CI_COMMIT_REF_SLUG}"
+      --expected-source-commit "$CI_COMMIT_SHA"
+    - node tools/ci/mcp/release_npm.mjs --dry-run --package host/knowledge-mcp --tarball .cache/knowledge-npm/knowledge-mcp.tgz
+    - node tools/ci/mcp/smoke_knowledge.mjs --tarball .cache/knowledge-npm/knowledge-mcp.tgz
+  artifacts:
+    paths: [.cache/knowledge-npm/]
+    expire_in: 1 month
