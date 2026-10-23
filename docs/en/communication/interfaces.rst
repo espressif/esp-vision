@@ -3,6 +3,10 @@ Physical interfaces, connection generations and build configuration
 
 :link_to_translation:`zh_CN:[中文]`
 
+.. warning::
+
+   TCP control is a wireless development and debug interface for isolated, trusted local networks. It provides no peer authentication or transport encryption. Any reachable client can acquire an available session and perform development operations, including file uploads and script execution. Session ownership and CRC checks do not authenticate the operator. On boards with TCP transport enabled, the listener opens automatically when the enabled background network service is online; a station IPv4 bind does not enforce a same-subnet restriction. Do not expose it to the Internet or untrusted networks. To disable it, set ``ESP_VISION_ENABLE_TCP_TRANSPORT`` to ``0`` in the selected board's ``boardconfig.h`` and rebuild. See the repository's `Security Policy <https://github.com/espressif/esp-vision/blob/master/SECURITY.md>`_ for intended use, bounty scope, and private reporting.
+
 Sink types and actual links
 ---------------------------
 

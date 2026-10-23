@@ -3,6 +3,10 @@
 
 :link_to_translation:`en:[English]`
 
+.. warning::
+
+   TCP 控制接口用于隔离、可信本地网络中的无线开发和调试，不提供对端身份认证或传输加密。能够访问该接口的任意客户端均可取得空闲会话并执行文件上传、脚本运行等开发操作；会话所有权及 CRC 校验不提供操作者身份认证。启用 TCP 传输的开发板在已启用的后台网络服务上线后会自动开放监听，绑定 STA IPv4 地址并不限制客户端必须位于同一子网。请勿将该接口暴露到互联网或不可信网络。不需要该接口时，请在所选开发板的 ``boardconfig.h`` 中将 ``ESP_VISION_ENABLE_TCP_TRANSPORT`` 设为 ``0`` 并重新构建。使用定位、赏金范围及私下报告渠道详见仓库的 `安全政策 <https://github.com/espressif/esp-vision/blob/master/SECURITY.md>`_。
+
 sink 类型与实际 link
 --------------------
 

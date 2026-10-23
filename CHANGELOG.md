@@ -4,6 +4,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- Added a repository security policy defining ESP-VISION's development and DIY scope, exclusion from the Espressif Bug Bounty Program, private security reporting, and the trusted-network requirements of unauthenticated EV-MUX TCP debugging, with English and Chinese README notices and communication-guide warnings.
+
 ### Changed
 
 - Simplify host architecture nodes to component names and npm package names, remove operational annotations, and compact the shared diagram so the firmware layers remain prominent.

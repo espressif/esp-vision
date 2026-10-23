@@ -109,7 +109,7 @@ With the current overlay, v5.5.6 provides SSL/TLS, `cryptolib`, WebSocket, WebRE
 
 ## Report a problem
 
-Report all ESP-VISION problems in [espressif/esp-vision GitHub Issues](https://github.com/espressif/esp-vision/issues), including problems in the IDE, website, Host Device Core, and firmware. Search existing issues first, then choose one of the four forms below. All four forms use English.
+Report functional ESP-VISION problems in [espressif/esp-vision GitHub Issues](https://github.com/espressif/esp-vision/issues), including problems in the IDE, website, Host Device Core, and firmware. For suspected security issues, follow the private reporting instructions in [SECURITY.md](SECURITY.md). Search existing issues first, then choose one of the four forms below. All four forms use English.
 
 | Category | Scope | Report form |
 | --- | --- | --- |
@@ -119,6 +119,12 @@ Report all ESP-VISION problems in [espressif/esp-vision GitHub Issues](https://g
 | Firmware | Builds, boot, crashes, camera, display, storage, and on-device APIs | [Report a firmware problem](https://github.com/espressif/esp-vision/issues/new?template=firmware.yml) |
 
 Each form asks for environment and version details, reproduction steps, expected and actual behavior, and relevant logs or attachments. If the category is unclear, choose the closest match and describe the affected workflow. The form sources are in [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/).
+
+## Security and Intended Use
+
+ESP-VISION is intended for development, evaluation, prototyping, and personal DIY projects. Its firmware, board configurations, and examples are development references, not a production SDK or a ready-to-deploy configuration for mass-produced products. ESP-VISION is not currently included in the Espressif Bug Bounty Program.
+
+The EV-MUX TCP interface provides wireless debugging on trusted local networks and has no peer authentication or transport encryption. Reachable clients can acquire an available session and control the device, including uploading files and running scripts. Use an isolated, trusted development network, or disable the TCP transport when it is unnecessary. See [SECURITY.md](SECURITY.md) for the trust model, configuration guidance, bounty scope, and private reporting channel.
 
 ## Resources
 
