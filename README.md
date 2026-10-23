@@ -42,7 +42,7 @@ v4 still uses `EVMUX/1` framing. Hosts must implement explicit acquisition and k
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/_static/esp-vision-architecture.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/_static/esp-vision-architecture-light.svg">
-  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION layered architecture" width="960" height="1232">
+  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION layered architecture" width="960" height="1048">
 </picture>
 
 IDE and custom SDK applications use Device Core directly. AI clients and independent agents use the plugin Skill, invoke its bundled Device CLI for local device operations, and query the official online Knowledge MCP over HTTPS. Device CLI uses Device Core; EV-MUX connects the SDK to device firmware. See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html) for the role of each layer.

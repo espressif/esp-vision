@@ -6,6 +6,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Simplify host architecture nodes to component names and npm package names, remove operational annotations, and compact the shared diagram so the firmware layers remain prominent.
 - Refresh the shared dark/light/adaptive architecture diagrams and bilingual README/architecture guides for Plugin, standalone Device CLI, public Device Core and the official online Knowledge MCP; show all four public npm versions and package responsibilities in the READMEs.
 
 ## [2026.10.23]

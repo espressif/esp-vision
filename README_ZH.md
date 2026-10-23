@@ -42,7 +42,7 @@ v4 继续使用 `EVMUX/1` 帧格式。主机必须显式接管并保活，不支
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/_static/esp-vision-architecture.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/_static/esp-vision-architecture-light.svg">
-  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION 分层架构" width="960" height="1232">
+  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION 分层架构" width="960" height="1048">
 </picture>
 
 IDE 和自定义 SDK 应用直接使用 Device Core。AI 客户端与独立 Agent 使用插件的 Skill，通过内置 Device CLI 在本地操作设备，并通过 HTTPS 查询官方在线 Knowledge MCP。Device CLI 调用 Device Core，SDK 再通过 EV-MUX 与设备固件通信。各层职责见 [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)。
