@@ -109,7 +109,7 @@ CI 构建和发布固件使用以下开发板与 IDF 组合：
 
 ## 问题反馈
 
-ESP-VISION 的所有问题统一提交到 [espressif/esp-vision GitHub Issues](https://github.com/espressif/esp-vision/issues)，包括 IDE、官网、Host Device Core 和固件问题。请先搜索已有问题，再选择下面四类表单之一，四类表单统一使用英文。
+ESP-VISION 的功能问题统一提交到 [espressif/esp-vision GitHub Issues](https://github.com/espressif/esp-vision/issues)，包括 IDE、官网、Host Device Core 和固件问题。疑似安全问题请按照 [SECURITY.md](SECURITY.md) 中的说明私下报告。请先搜索已有问题，再选择下面四类表单之一，四类表单统一使用英文。
 
 | 分类 | 范围 | 报告入口 |
 | --- | --- | --- |
@@ -119,6 +119,12 @@ ESP-VISION 的所有问题统一提交到 [espressif/esp-vision GitHub Issues](h
 | 固件 | 编译、启动、崩溃、摄像头、显示、存储及设备端 API | [报告固件问题](https://github.com/espressif/esp-vision/issues/new?template=firmware.yml) |
 
 每类表单均包含环境与版本信息、复现步骤、预期行为、实际行为及相关日志或附件。不确定分类时，请选择最接近的一类，并描述出问题的操作流程。表单源文件位于 [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/)。
+
+## 安全与使用范围
+
+ESP-VISION 面向开发、评估、原型验证和个人 DIY 项目。仓库中的固件、开发板配置和示例用于开发参考，并非面向客户量产的 SDK 或可直接用于量产的配置。ESP-VISION 目前不在乐鑫漏洞赏金计划范围内。
+
+EV-MUX TCP 接口用于可信本地网络中的无线调试，不提供对端身份认证或传输加密。能够访问该接口的客户端可取得空闲会话并控制设备，包括上传文件和运行脚本。请使用隔离且参与者可信的开发网络，不需要无线调试时应禁用 TCP 传输。信任边界、配置建议、赏金范围及私下报告渠道详见 [SECURITY.md](SECURITY.md)。
 
 ## 资源
 
