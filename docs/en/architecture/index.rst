@@ -3,18 +3,21 @@ Solution Architecture
 
 :link_to_translation:`zh_CN:[中文]`
 
-ESP-VISION separates host applications from device firmware. IDE, Agent, CLI and custom tools share Device Core; the SDK implements the host side of EV-MUX v4 over board-supported USB CDC, USB Serial/JTAG, UART or TCP. Device firmware combines MicroPython, vision/inference modules, platform services and board backends. Firmware code is further layered by whether it touches MicroPython (``mp_obj_t`` / ``py/*.h``).
+ESP-VISION separates host tools, online knowledge and device firmware. IDE and custom SDK applications use Device Core directly. AI clients and independent agents use the plugin Skill, its bundled Device CLI for local device operations, and the official online Knowledge MCP over HTTPS. Device CLI calls Device Core; the SDK implements the host side of EV-MUX v4 over board-supported USB CDC, USB Serial/JTAG, UART or TCP. Device firmware combines MicroPython, vision/inference modules, platform services and board backends. Firmware code is further layered by whether it touches MicroPython (``mp_obj_t`` / ``py/*.h``).
 
 .. figure:: ../../_static/esp-vision-architecture-adaptive.svg
    :align: center
    :alt: ESP-VISION layered architecture
 
-   Host applications → Device Core → EV-MUX → device firmware
+   Local device control through Device CLI / Device Core, with a separate online Knowledge MCP service
 
 Layered Overview
 ----------------
 
-- **Host applications**: IDE presents editing/debugging UI, Agent runs automation workflows, CLI handles terminal commands, and custom tools supply their own application policy. These are peer consumers of the same SDK.
+- **Host applications**: IDE presents editing/debugging UI; custom applications use the SDK; AI clients and independent agents select tools for the task. Agents own their AI loop.
+- **Plugin** (``host/esp-vision-plugin``, ``@esp-vision/plugin``): packages one capability-oriented Skill, a fixed Device CLI and the official Knowledge HTTP endpoint configuration for Codex, Claude Code and WorkBuddy.
+- **Device CLI** (``host/device-cli``, ``@esp-vision/device-cli``): exposes device operations through shell commands, JSON results, streamed events and binary output files. Both the plugin copy and the standalone command use public Device Core APIs.
+- **Knowledge MCP** (``host/knowledge-mcp``, ``@esp-vision/knowledge-mcp``): provides API, documentation and example queries from a versioned snapshot. The official plugin connects to the online HTTP service; the npm package supports stdio and HTTP for self-hosting. Main builds the snapshot, npm archive and immutable image; website deploys that image. HTTP records anonymous daily aggregates.
 - **Device Core** (``host/device-core``): the independently versioned ``@esp-vision/device-core`` npm package owns protocol parsing, request correlation, sessions, keepalive and operation lifecycles. The diagram selects representative API names instead of listing every method; complete contracts are in :doc:`../device-core/api`.
 - **EV-MUX v4**: the runtime wire protocol between Core and firmware, covering framing, logical channels, ownership and VM epochs across USB CDC, USJ, UART and TCP. Host adapters and network bridges carry bytes without creating another session owner.
 - **Device application**: MicroPython scripts run on the board and call its Python bindings. They can continue running after a host disconnects.
@@ -65,6 +68,14 @@ Source Tree
 
    * - Path
      - Responsibility
+   * - ``host/device-core/``
+     - Public host SDK and transport adapters (``@esp-vision/device-core``).
+   * - ``host/device-cli/``
+     - Standalone device command toolkit (``@esp-vision/device-cli``).
+   * - ``host/knowledge-mcp/``
+     - Knowledge MCP runtime, packaged snapshot and server image (``@esp-vision/knowledge-mcp``).
+   * - ``host/esp-vision-plugin/``
+     - Skill, bundled CLI, Knowledge endpoint configuration and installer (``@esp-vision/plugin``).
    * - ``idf_ext.py``
      - Board-aware ``idf.py`` extension for the repository root.
    * - ``micropython.cmake``

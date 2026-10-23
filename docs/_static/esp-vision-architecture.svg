@@ -1,54 +1,74 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1066" viewBox="0 0 960 1066" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" role="img" aria-labelledby="architecture-title architecture-description">
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1232" viewBox="0 0 960 1232" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" role="img" aria-labelledby="architecture-title architecture-description">
   <title id="architecture-title">ESP-VISION system architecture</title>
-  <desc id="architecture-description">IDE, Agent, CLI and custom host applications share Device Core. EV-MUX v4 connects the host SDK to ESP-VISION firmware over USB CDC, USB Serial/JTAG, UART or TCP. Device firmware includes MicroPython scripts, Python bindings, vision and inference libraries, runtime, platform services and board backends.</desc>
+  <desc id="architecture-description">IDE and custom SDK applications use Device Core directly. AI clients and independent agents use the ESP-VISION plugin Skill, its bundled Device CLI for local device operations, and the official online Knowledge MCP over HTTPS. Device CLI calls Device Core; EV-MUX v4 connects the SDK to firmware over USB CDC, USB Serial/JTAG, UART or TCP. Knowledge MCP provides APIs, documentation and examples from a versioned snapshot. Firmware contains MicroPython scripts, bindings, vision and inference libraries, platform services and board backends.</desc>
   <defs>
     <marker id="arrowhead" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 0 L 8 4 L 0 8 Z" fill="#9aa7b4" />
     </marker>
   </defs>
-  <rect x="0" y="0" width="960" height="1066" rx="0" fill="#0d1117" />
+  <rect x="0" y="0" width="960" height="1232" rx="0" fill="#0d1117" stroke="none" />
   <text x="22" y="34" font-size="18" fill="#eef2f6" font-weight="700" text-anchor="start">ESP-VISION</text>
-  <text x="928" y="34" font-size="11" fill="#9aa7b4" font-weight="400" text-anchor="end">Host  /  Device Core  /  EV-MUX  /  Firmware</text>
-  <rect x="16" y="58" width="928" height="230" rx="8" fill="#161b22" stroke="#3d444d" />
-  <text x="116" y="149" font-size="16" fill="#dce3ea" font-weight="700" text-anchor="middle">Host</text>
-  <text x="116" y="172" font-size="16" fill="#dce3ea" font-weight="700" text-anchor="middle">applications</text>
-  <text x="116" y="198" font-size="10.5" fill="#9aa7b4" font-weight="400" text-anchor="middle">Browser · Desktop · Node.js</text>
-  <rect x="230" y="78" width="164" height="56" rx="6" fill="#1b3050" stroke="#5e9fd4" />
-  <text x="312" y="102" font-size="14" fill="#d6e7f7" font-weight="600" text-anchor="middle">IDE</text>
-  <text x="312" y="121" font-size="10.5" fill="#8ec2ee" font-weight="400" text-anchor="middle">Web IDE / VS Code</text>
-  <path d="M 312 136 V 160" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" />
-  <rect x="408" y="78" width="164" height="56" rx="6" fill="#1b3050" stroke="#5e9fd4" />
-  <text x="490" y="102" font-size="14" fill="#d6e7f7" font-weight="600" text-anchor="middle">Agent</text>
-  <text x="490" y="121" font-size="10.5" fill="#8ec2ee" font-weight="400" text-anchor="middle">Automation / integrations</text>
-  <path d="M 490 136 V 160" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" />
-  <rect x="586" y="78" width="164" height="56" rx="6" fill="#1b3050" stroke="#5e9fd4" />
-  <text x="668" y="102" font-size="14" fill="#d6e7f7" font-weight="600" text-anchor="middle">CLI</text>
-  <text x="668" y="121" font-size="10.5" fill="#8ec2ee" font-weight="400" text-anchor="middle">esp-vision-device</text>
-  <path d="M 668 136 V 160" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" />
-  <rect x="764" y="78" width="164" height="56" rx="6" fill="#1b3050" stroke="#5e9fd4" />
-  <text x="846" y="102" font-size="14" fill="#d6e7f7" font-weight="600" text-anchor="middle">Custom tools</text>
-  <text x="846" y="121" font-size="10.5" fill="#8ec2ee" font-weight="400" text-anchor="middle">Node.js / applications</text>
-  <path d="M 846 136 V 160" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" />
-  <rect x="230" y="164" width="698" height="96" rx="6" fill="#0e2a23" stroke="#2ea58a" />
-  <text x="579" y="189" font-size="18" fill="#7fd4ba" font-weight="700" text-anchor="middle">Device Core</text>
-  <text x="579" y="212" font-size="12" fill="#d4efe5" font-weight="600" text-anchor="middle">@esp-vision/device-core</text>
-  <text x="579" y="231" font-size="11.5" fill="#7fd4ba" font-weight="400" text-anchor="middle" font-family="'Cascadia Code', 'SFMono-Regular', Consolas, monospace">discover() · connect() · inspect() · configure() · control()</text>
-  <text x="579" y="250" font-size="11.5" fill="#7fd4ba" font-weight="400" text-anchor="middle" font-family="'Cascadia Code', 'SFMono-Regular', Consolas, monospace">python.execute() · files.write() · capture() · firmware.update()</text>
-  <path d="M 16 304 H 944" fill="none" stroke="#3d444d" stroke-dasharray="5 5" />
-  <rect x="24" y="294" width="172" height="20" rx="0" fill="#0d1117" />
-  <text x="30" y="308" font-size="10.5" fill="#9aa7b4" font-weight="400" text-anchor="start">Host / device boundary</text>
-  <path d="M 579 263 V 317" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" />
-  <rect x="16" y="320" width="928" height="64" rx="8" fill="#2d1712" stroke="#e0735a" />
-  <text x="116" y="356" font-size="15" fill="#f0a892" font-weight="700" text-anchor="middle">EV-MUX v4</text>
-  <text x="579" y="345" font-size="12" fill="#f8e2da" font-weight="600" text-anchor="middle">Control · Framed Python · File operations · Preview / Capture</text>
-  <text x="579" y="369" font-size="11.5" fill="#f0a892" font-weight="400" text-anchor="middle">USB CDC  ·  USB Serial/JTAG  ·  UART  ·  TCP</text>
-  <text x="22" y="408" font-size="11" fill="#9aa7b4" font-weight="600" text-anchor="start">ESP-VISION firmware</text>
-  <rect x="16" y="420" width="928" height="72" rx="8" fill="#231d0d" stroke="#d4a72c" />
-  <text x="116" y="462" font-size="15" fill="#f5e2a8" font-weight="700" text-anchor="middle">Device application</text>
-  <rect x="230" y="432" width="698" height="48" rx="6" fill="#33290f" stroke="#ffd43b" />
-  <text x="579" y="451" font-size="13" fill="#fbeec0" font-weight="600" text-anchor="middle">MicroPython application scripts</text>
-  <text x="579" y="470" font-size="11" fill="#cdb670" font-weight="400" text-anchor="middle">User scripts · examples · frozen packages</text>
-  <g transform="translate(0 336)">
+  <text x="928" y="34" font-size="11" fill="#9aa7b4" font-weight="400" text-anchor="end">Clients  /  Plugin + CLI  /  Knowledge MCP  /  Device firmware</text>
+  <rect x="16" y="58" width="928" height="396" rx="8" fill="#161b22" stroke="#3d444d" />
+  <text x="116" y="184" font-size="16" fill="#dce3ea" font-weight="700" text-anchor="middle">Host tools</text>
+  <text x="116" y="207" font-size="16" fill="#dce3ea" font-weight="700" text-anchor="middle">&amp; AI clients</text>
+  <text x="116" y="234" font-size="10.5" fill="#9aa7b4" font-weight="400" text-anchor="middle">Browser · Desktop · Node.js</text>
+  <text x="116" y="378" font-size="11" fill="#9aa7b4" font-weight="400" text-anchor="middle">Local device control</text>
+  <text x="116" y="399" font-size="11" fill="#9aa7b4" font-weight="400" text-anchor="middle">via Device Core</text>
+  <rect x="230" y="78" width="180" height="56" rx="6" fill="#1b3050" stroke="#5e9fd4" />
+  <text x="320.0" y="102" font-size="13.5" fill="#d6e7f7" font-weight="600" text-anchor="middle">IDE</text>
+  <text x="320.0" y="121" font-size="10.5" fill="#8ec2ee" font-weight="400" text-anchor="middle">Web IDE / VS Code</text>
+  <rect x="424" y="78" width="210" height="56" rx="6" fill="#1b3050" stroke="#5e9fd4" />
+  <text x="529.0" y="102" font-size="13.5" fill="#d6e7f7" font-weight="600" text-anchor="middle">Custom SDK applications</text>
+  <text x="529.0" y="121" font-size="10.5" fill="#8ec2ee" font-weight="400" text-anchor="middle">Node.js / browser SDK</text>
+  <rect x="648" y="78" width="280" height="56" rx="6" fill="#1b3050" stroke="#5e9fd4" />
+  <text x="788.0" y="102" font-size="13.5" fill="#d6e7f7" font-weight="600" text-anchor="middle">AI clients / agents</text>
+  <text x="788.0" y="121" font-size="10.5" fill="#8ec2ee" font-weight="400" text-anchor="middle">Codex · Claude · WorkBuddy</text>
+  <path d="M 320 134 V 340" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" />
+  <path d="M 529 134 V 224 H 400 V 340" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" />
+  <path d="M 788 134 V 150" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" />
+  <rect x="648" y="154" width="280" height="64" rx="6" fill="#221634" stroke="#9b6dd6" />
+  <text x="788" y="175" font-size="14" fill="#e9def8" font-weight="600" text-anchor="middle">ESP-VISION Plugin</text>
+  <text x="788" y="194" font-size="11.5" fill="#c5a8ec" font-weight="400" text-anchor="middle">@esp-vision/plugin</text>
+  <text x="788" y="211" font-size="10.5" fill="#c5a8ec" font-weight="400" text-anchor="middle">Skill + CLI + MCP configuration</text>
+  <path d="M 700 218 V 236 H 532 V 242" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" />
+  <text x="554" y="229" font-size="10" fill="#9aa7b4" font-weight="400" text-anchor="start">shell / JSON</text>
+  <path d="M 806 218 V 242" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" />
+  <text x="822" y="237" font-size="10" fill="#9aa7b4" font-weight="400" text-anchor="start">HTTPS</text>
+  <rect x="418" y="246" width="228" height="68" rx="6" fill="#1b3050" stroke="#5e9fd4" />
+  <text x="532" y="268" font-size="14" fill="#d6e7f7" font-weight="600" text-anchor="middle">Device CLI</text>
+  <text x="532" y="287" font-size="11" fill="#8ec2ee" font-weight="400" text-anchor="middle">@esp-vision/device-cli</text>
+  <text x="532" y="305" font-size="10.5" fill="#8ec2ee" font-weight="400" text-anchor="middle">esp-vision-device</text>
+  <path d="M 532 314 V 340" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" />
+  <rect x="230" y="344" width="416" height="92" rx="6" fill="#0e2a23" stroke="#2ea58a" />
+  <text x="438" y="367" font-size="18" fill="#7fd4ba" font-weight="700" text-anchor="middle">Device Core</text>
+  <text x="438" y="388" font-size="12" fill="#d4efe5" font-weight="600" text-anchor="middle">@esp-vision/device-core</text>
+  <text x="438" y="408" font-size="10.5" fill="#7fd4ba" font-weight="400" text-anchor="middle">createDevice() · discover() · connect()</text>
+  <text x="438" y="427" font-size="10.5" fill="#7fd4ba" font-weight="400" text-anchor="middle">python.execute() · files.* · capture() · firmware.update()</text>
+  <rect x="672" y="246" width="256" height="190" rx="6" fill="#221634" stroke="#9b6dd6" />
+  <text x="800" y="270" font-size="14" fill="#e9def8" font-weight="600" text-anchor="middle">Knowledge MCP · cloud</text>
+  <text x="800" y="292" font-size="11" fill="#c5a8ec" font-weight="400" text-anchor="middle">@esp-vision/knowledge-mcp</text>
+  <text x="800" y="313" font-size="10.5" fill="#e9def8" font-weight="400" text-anchor="middle">mcp.vision.espressif.com/mcp</text>
+  <path d="M 688 326 H 912" stroke="#9b6dd6" fill="none" />
+  <text x="800" y="348" font-size="11" fill="#e9def8" font-weight="400" text-anchor="middle">APIs · documentation · examples</text>
+  <text x="800" y="370" font-size="11" fill="#c5a8ec" font-weight="400" text-anchor="middle">Versioned knowledge snapshot</text>
+  <text x="800" y="391" font-size="11" fill="#c5a8ec" font-weight="400" text-anchor="middle">Anonymous daily aggregates</text>
+  <text x="800" y="416" font-size="10.5" fill="#c5a8ec" font-weight="400" text-anchor="middle">Main builds · website deploys</text>
+  <path d="M 16 470 H 944" fill="none" stroke="#3d444d" stroke-dasharray="5 5" />
+  <rect x="24" y="460" width="172" height="20" rx="0" fill="#0d1117" stroke="none" />
+  <text x="30" y="474" font-size="10.5" fill="#9aa7b4" font-weight="400" text-anchor="start">Host / device boundary</text>
+  <path d="M 438 439 V 483" fill="none" stroke="#9aa7b4" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" />
+  <rect x="16" y="486" width="928" height="64" rx="8" fill="#2d1712" stroke="#e0735a" />
+  <text x="116" y="522" font-size="15" fill="#f0a892" font-weight="700" text-anchor="middle">EV-MUX v4</text>
+  <text x="579" y="511" font-size="12" fill="#f8e2da" font-weight="600" text-anchor="middle">Control · Framed Python · File operations · Preview / Capture</text>
+  <text x="579" y="535" font-size="11.5" fill="#f0a892" font-weight="400" text-anchor="middle">USB CDC  ·  USB Serial/JTAG  ·  UART  ·  TCP</text>
+  <text x="22" y="574" font-size="11" fill="#9aa7b4" font-weight="600" text-anchor="start">ESP-VISION firmware</text>
+  <rect x="16" y="586" width="928" height="72" rx="8" fill="#231d0d" stroke="#d4a72c" />
+  <text x="116" y="628" font-size="15" fill="#f5e2a8" font-weight="700" text-anchor="middle">Device application</text>
+  <rect x="230" y="598" width="698" height="48" rx="6" fill="#33290f" stroke="#ffd43b" />
+  <text x="579" y="617" font-size="13" fill="#fbeec0" font-weight="600" text-anchor="middle">MicroPython application scripts</text>
+  <text x="579" y="636" font-size="11" fill="#cdb670" font-weight="400" text-anchor="middle">User scripts · examples · frozen packages</text>
+  <g transform="translate(0 502)">
     <rect x="16" y="172" width="928" height="430" rx="8" fill="#161b22" stroke="#3d444d" stroke-width="1.5" />
     <text x="116" y="378" font-size="15" font-weight="700" fill="#dce3ea" text-anchor="middle">Service &amp;</text>
     <text x="116" y="398" font-size="15" font-weight="700" fill="#dce3ea" text-anchor="middle">Framework</text>
@@ -147,7 +167,7 @@
       </g>
     </g>
   </g>
-  <g transform="translate(0 336)">
+  <g transform="translate(0 502)">
     <rect x="16" y="614" width="928" height="96" rx="8" fill="#260f13" stroke="#b03a48" stroke-width="1.5" />
     <text x="116" y="657" font-size="15" font-weight="700" fill="#efb3bc" text-anchor="middle">Environment &amp;</text>
     <text x="116" y="677" font-size="15" font-weight="700" fill="#efb3bc" text-anchor="middle">Dependency</text>

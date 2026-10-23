@@ -8,7 +8,7 @@
 
 # ESP-VISION
 
-[![npm version](https://img.shields.io/npm/v/%40esp-vision%2Fdevice-core?logo=npm)](https://www.npmjs.com/package/@esp-vision/device-core) [![npm license](https://img.shields.io/npm/l/%40esp-vision%2Fdevice-core)](host/device-core/LICENSE)
+[![Device Core npm version](https://img.shields.io/npm/v/%40esp-vision%2Fdevice-core?logo=npm&label=Device%20Core)](https://www.npmjs.com/package/@esp-vision/device-core) [![Device CLI npm version](https://img.shields.io/npm/v/%40esp-vision%2Fdevice-cli?logo=npm&label=Device%20CLI)](https://www.npmjs.com/package/@esp-vision/device-cli) [![Knowledge MCP npm version](https://img.shields.io/npm/v/%40esp-vision%2Fknowledge-mcp?logo=npm&label=Knowledge%20MCP)](https://www.npmjs.com/package/@esp-vision/knowledge-mcp) [![Plugin npm version](https://img.shields.io/npm/v/%40esp-vision%2Fplugin?logo=npm&label=Plugin)](https://www.npmjs.com/package/@esp-vision/plugin) [![License](https://img.shields.io/github/license/espressif/esp-vision?label=License)](LICENSE)
 
 **Low-Code Edge AI & Computer Vision Framework for Espressif SoCs**
 
@@ -22,7 +22,7 @@ ESP-VISION is a Low-Code Edge AI & Computer Vision Framework for Espressif SoCs.
 - Image processing capabilities covering drawing, filtering, color tracking, feature detection, QR codes, barcodes, and AprilTags.
 - ESP-DL-powered AI inference for object detection, pose estimation, and image classification, with a streamlined path for deploying models to edge devices.
 - Efficient C/C++ foundation components work closely with on-chip multimedia peripherals and hardware acceleration modules to deliver high-performance, real-time application execution.
-- Development through a VSCode-based host tool or [Web IDE](https://ide.vision.espressif.com/), with firmware builds managed through `idf.py`.
+- Develop with a VSCode-based host tool, [Web IDE](https://ide.vision.espressif.com/), standalone [Device CLI](host/device-cli/README.md), or supported AI clients through the official [plugin](host/esp-vision-plugin/README.md); manage firmware builds through `idf.py`.
 
 **Document Center**:
 
@@ -42,14 +42,27 @@ v4 still uses `EVMUX/1` framing. Hosts must implement explicit acquisition and k
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/_static/esp-vision-architecture.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/_static/esp-vision-architecture-light.svg">
-  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION layered architecture" width="960" height="1066">
+  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION layered architecture" width="960" height="1232">
 </picture>
 
-IDE, Agent, CLI and custom tools share Device Core; EV-MUX connects that host SDK to device firmware. See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html) for the role of each layer.
+IDE and custom SDK applications use Device Core directly. AI clients and independent agents use the plugin Skill, invoke its bundled Device CLI for local device operations, and query the official online Knowledge MCP over HTTPS. Device CLI uses Device Core; EV-MUX connects the SDK to device firmware. See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html) for the role of each layer.
 
 For AI clients, the [local plugin](host/esp-vision-plugin/README.md) bundles a fixed [Device CLI](host/device-cli/README.md) and connects to the official online Knowledge MCP. The main repository owns knowledge/server artifacts; website deploys verified immutable images. See [MCP architecture and release flow](docs/mcp-release.md). Install a published version with `npx -y @esp-vision/plugin install codex` or `npx -y @esp-vision/plugin install claude`. For WorkBuddy, `npx -y @esp-vision/plugin install workbuddy` prepares a local Skill ZIP and official Knowledge MCP configuration; complete the documented imports in the WorkBuddy UI.
 
 The [license inventory](docs/en/license/index.rst) records upstream components and adaptations, including the MIT-licensed MicroPython execution and thread overlays used for EV-MUX session isolation.
+
+## Host packages
+
+Each npm package has its own version, independent of firmware release tags. The badges above follow the public npm `latest` versions.
+
+| npm package | Responsibility | Documentation |
+| --- | --- | --- |
+| [@esp-vision/device-core](https://www.npmjs.com/package/@esp-vision/device-core) | Host SDK for sessions, Python, files, capture and firmware operations | [Device Core](host/device-core/README.md) |
+| [@esp-vision/device-cli](https://www.npmjs.com/package/@esp-vision/device-cli) | Standalone `esp-vision-device` command built on Device Core | [Device CLI](host/device-cli/README.md) |
+| [@esp-vision/knowledge-mcp](https://www.npmjs.com/package/@esp-vision/knowledge-mcp) | Knowledge server and versioned snapshot, with stdio and HTTP transports | [Knowledge MCP](host/knowledge-mcp/README.md) |
+| [@esp-vision/plugin](https://www.npmjs.com/package/@esp-vision/plugin) | Skill, bundled Device CLI and official online Knowledge MCP configuration for Codex, Claude Code and WorkBuddy | [Plugin installation](host/esp-vision-plugin/README.md) |
+
+The official plugin uses `https://mcp.vision.espressif.com/mcp`; knowledge is maintained centrally. The Knowledge npm package also supports self-hosting.
 
 ## Quickstart
 

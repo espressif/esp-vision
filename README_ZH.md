@@ -8,7 +8,7 @@
 
 # ESP-VISION
 
-[![npm version](https://img.shields.io/npm/v/%40esp-vision%2Fdevice-core?logo=npm)](https://www.npmjs.com/package/@esp-vision/device-core) [![npm license](https://img.shields.io/npm/l/%40esp-vision%2Fdevice-core)](host/device-core/LICENSE)
+[![Device Core npm version](https://img.shields.io/npm/v/%40esp-vision%2Fdevice-core?logo=npm&label=Device%20Core)](https://www.npmjs.com/package/@esp-vision/device-core) [![Device CLI npm version](https://img.shields.io/npm/v/%40esp-vision%2Fdevice-cli?logo=npm&label=Device%20CLI)](https://www.npmjs.com/package/@esp-vision/device-cli) [![Knowledge MCP npm version](https://img.shields.io/npm/v/%40esp-vision%2Fknowledge-mcp?logo=npm&label=Knowledge%20MCP)](https://www.npmjs.com/package/@esp-vision/knowledge-mcp) [![Plugin npm version](https://img.shields.io/npm/v/%40esp-vision%2Fplugin?logo=npm&label=Plugin)](https://www.npmjs.com/package/@esp-vision/plugin) [![License](https://img.shields.io/github/license/espressif/esp-vision?label=License)](LICENSE)
 
 **Low-Code Edge AI & Computer Vision Framework for Espressif SoCs**
 
@@ -22,7 +22,7 @@ ESP-VISION 是面向乐鑫 SoC 的低代码端侧 AI 与计算机视觉框架，
 - 提供绘图、滤波、颜色追踪、特征检测、二维码、条码和 AprilTag 等图像处理能力。
 - 基于 ESP-DL 提供目标检测、姿态估计和图像分类等 AI 推理能力，并简化端侧模型部署流程。
 - 底层高效的 C/C++ 基础组件深度协同芯片的多媒体外设与硬件加速模块，切实保障应用的高效与实时运行性能。
-- 可通过 VSCode 上位机工具或 [Web IDE](https://ide.vision.espressif.com/) 开发，并使用 `idf.py` 管理固件构建。
+- 可通过 VSCode 上位机工具、[Web IDE](https://ide.vision.espressif.com/)、独立 [Device CLI](host/device-cli/README.md)，或通过官方[插件](host/esp-vision-plugin/README.md)接入受支持的 AI 客户端，并使用 `idf.py` 管理固件构建。
 
 **文档中心**：
 
@@ -42,14 +42,27 @@ v4 继续使用 `EVMUX/1` 帧格式。主机必须显式接管并保活，不支
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/_static/esp-vision-architecture.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/_static/esp-vision-architecture-light.svg">
-  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION 分层架构" width="960" height="1066">
+  <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION 分层架构" width="960" height="1232">
 </picture>
 
-IDE、Agent、CLI 和自定义工具共用 Device Core，通过 EV-MUX 与设备固件通信。各层职责见 [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)。
+IDE 和自定义 SDK 应用直接使用 Device Core。AI 客户端与独立 Agent 使用插件的 Skill，通过内置 Device CLI 在本地操作设备，并通过 HTTPS 查询官方在线 Knowledge MCP。Device CLI 调用 Device Core，SDK 再通过 EV-MUX 与设备固件通信。各层职责见 [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)。
 
 [许可证清单](docs/zh_CN/license/index.rst)记录了上游组件与适配文件，包括用于 EV-MUX 会话隔离、保留 MIT 许可证的 MicroPython 执行与线程 overlay。
 
 面向 AI 客户端，[本地插件](host/esp-vision-plugin/README.md)内置固定版本的 [Device CLI](host/device-cli/README.md)，并连接官方在线 Knowledge MCP。主仓生成知识与服务产物，website 部署经过验证的不可变镜像。参见 [MCP 架构及发布流程](docs/mcp-release.md)。通过 `npx -y @esp-vision/plugin install codex` 或 `npx -y @esp-vision/plugin install claude` 安装已发布版本。WorkBuddy 用户运行 `npx -y @esp-vision/plugin install workbuddy` 准备本地 Skill ZIP 和官方 Knowledge MCP 配置，再按说明在 WorkBuddy 界面完成导入。
+
+## 主机工具包
+
+各 npm 包独立维护版本，与固件发布标签无关。顶部徽章动态显示 npm 上公开的 `latest` 版本。
+
+| npm 包 | 职责 | 文档 |
+| --- | --- | --- |
+| [@esp-vision/device-core](https://www.npmjs.com/package/@esp-vision/device-core) | 主机 SDK，负责会话、Python、文件、抓图及固件操作 | [Device Core](host/device-core/README.md) |
+| [@esp-vision/device-cli](https://www.npmjs.com/package/@esp-vision/device-cli) | 基于 Device Core 的独立 `esp-vision-device` 命令 | [Device CLI](host/device-cli/README.md) |
+| [@esp-vision/knowledge-mcp](https://www.npmjs.com/package/@esp-vision/knowledge-mcp) | 知识服务与版本化快照，支持 stdio 和 HTTP 传输 | [Knowledge MCP](host/knowledge-mcp/README.md) |
+| [@esp-vision/plugin](https://www.npmjs.com/package/@esp-vision/plugin) | 为 Codex、Claude Code、WorkBuddy 提供 Skill、内置 Device CLI 和官方在线 Knowledge MCP 配置 | [插件安装](host/esp-vision-plugin/README.md) |
+
+官方插件连接 `https://mcp.vision.espressif.com/mcp`，统一维护在线知识。Knowledge npm 包也支持自行部署。
 
 ## 快速开始
 
