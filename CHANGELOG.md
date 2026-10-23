@@ -2,6 +2,12 @@
 
 All notable changes to ESP-VISION are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/); each released version corresponds to a git tag. Unreleased changes accumulate at the top and are folded into the next tag at release time.
 
+## [Unreleased]
+
+### Changed
+
+- Refresh the shared dark/light/adaptive architecture diagrams and bilingual README/architecture guides for Plugin, standalone Device CLI, public Device Core and the official online Knowledge MCP; show all four public npm versions and package responsibilities in the READMEs.
+
 ## [2026.10.23]
 
 This release fixes publication and deployment reliability after 2026.10.21. Firmware runtime behavior is unchanged. Firmware tags and npm package versions are independent.

@@ -3,18 +3,21 @@
 
 :link_to_translation:`en:[English]`
 
-ESP-VISION 将主机应用与设备固件分开：IDE、Agent、CLI 和自定义工具共用 Device Core，由 SDK 通过开发板支持的 USB CDC、USB Serial/JTAG、UART 或 TCP 实现 EV-MUX v4 主机端。设备固件包含 MicroPython、视觉/推理模块、平台服务和板级后端；固件代码进一步按是否触及 MicroPython（``mp_obj_t`` / ``py/*.h``）分层。
+ESP-VISION 将主机工具、在线知识与设备固件分开：IDE 和自定义 SDK 应用直接使用 Device Core；AI 客户端与独立 Agent 使用插件的 Skill，通过内置 Device CLI 在本地操作设备，并通过 HTTPS 查询官方在线 Knowledge MCP。Device CLI 调用 Device Core，由 SDK 通过开发板支持的 USB CDC、USB Serial/JTAG、UART 或 TCP 实现 EV-MUX v4 主机端。设备固件包含 MicroPython、视觉/推理模块、平台服务和板级后端；固件代码进一步按是否触及 MicroPython（``mp_obj_t`` / ``py/*.h``）分层。
 
 .. figure:: ../../_static/esp-vision-architecture-adaptive.svg
    :align: center
    :alt: ESP-VISION 分层架构
 
-   主机应用 → Device Core → EV-MUX → 设备固件
+   Device CLI / Device Core 承接本地设备控制，在线 Knowledge MCP 独立提供知识服务
 
 分层概览
 --------
 
-- **主机应用：** IDE 提供编辑/调试界面，Agent 承载自动化流程，CLI 处理终端命令，自定义工具提供自己的应用策略；它们平级使用同一个 SDK。
+- **主机应用：** IDE 提供编辑/调试界面，自定义应用使用 SDK，AI 客户端和独立 Agent 根据任务选择工具；Agent 自己拥有 AI loop。
+- **Plugin** （``host/esp-vision-plugin``，``@esp-vision/plugin``）：为 Codex、Claude Code、WorkBuddy 打包一个能力导向的 Skill、固定版本 Device CLI 和官方 Knowledge HTTP 端点配置。
+- **Device CLI** （``host/device-cli``，``@esp-vision/device-cli``）：通过 shell 命令、JSON 结果、流式事件及二进制输出文件提供设备能力；插件内置副本和独立命令都使用 Device Core 公共 API。
+- **Knowledge MCP** （``host/knowledge-mcp``，``@esp-vision/knowledge-mcp``）：基于版本化快照提供 API、文档和示例查询。官方插件使用在线 HTTP 服务；npm 包支持 stdio、HTTP 自行部署。主仓构建快照、npm 包和不可变镜像，website 负责部署该镜像；HTTP 记录匿名每日汇总统计。
 - **Device Core** （``host/device-core``）：独立版本的 ``@esp-vision/device-core`` npm 包负责协议解析、请求关联、会话、保活与操作生命周期。图中只选有代表性的 API 名称，完整契约见 :doc:`../device-core/api`。
 - **EV-MUX v4：** Core 与固件之间的运行时线协议，在 USB CDC、USJ、UART、TCP 上统一帧格式、逻辑通道、所有权与 VM epoch。主机适配器和网络桥只传字节，不另建会话 owner。
 - **设备应用：** MicroPython 脚本运行于开发板并调用 Python 绑定；主机断开后，设备应用仍可独立运行。
@@ -65,6 +68,14 @@ ESP-VISION 将主机应用与设备固件分开：IDE、Agent、CLI 和自定义
 
    * - 路径
      - 职责
+   * - ``host/device-core/``
+     - 公共主机 SDK 和传输适配器（``@esp-vision/device-core``）。
+   * - ``host/device-cli/``
+     - 独立设备命令工具包（``@esp-vision/device-cli``）。
+   * - ``host/knowledge-mcp/``
+     - Knowledge MCP 运行时、知识快照和服务镜像（``@esp-vision/knowledge-mcp``）。
+   * - ``host/esp-vision-plugin/``
+     - Skill、内置 CLI、Knowledge 端点配置及安装器（``@esp-vision/plugin``）。
    * - ``idf_ext.py``
      - 仓库根目录下板级感知的 ``idf.py`` 扩展。
    * - ``micropython.cmake``

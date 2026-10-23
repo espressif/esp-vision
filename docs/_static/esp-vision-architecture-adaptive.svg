@@ -1,270 +1,225 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1066" viewBox="0 0 960 1066" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" role="img" aria-labelledby="architecture-title architecture-description">
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1232" viewBox="0 0 960 1232" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" role="img" aria-labelledby="architecture-title architecture-description">
   <title id="architecture-title">ESP-VISION system architecture</title>
-  <desc id="architecture-description">IDE, Agent, CLI and custom host applications share Device Core. EV-MUX v4 connects the host SDK to ESP-VISION firmware over USB CDC, USB Serial/JTAG, UART or TCP. Device firmware includes MicroPython scripts, Python bindings, vision and inference libraries, runtime, platform services and board backends.</desc>
+  <desc id="architecture-description">IDE and custom SDK applications use Device Core directly. AI clients and independent agents use the ESP-VISION plugin Skill, its bundled Device CLI for local device operations, and the official online Knowledge MCP over HTTPS. Device CLI calls Device Core; EV-MUX v4 connects the SDK to firmware over USB CDC, USB Serial/JTAG, UART or TCP. Knowledge MCP provides APIs, documentation and examples from a versioned snapshot. Firmware contains MicroPython scripts, bindings, vision and inference libraries, platform services and board backends.</desc>
   <style>
-  @media (prefers-color-scheme: dark) {
-    .paint-5 { fill: #9aa7b4; }
-    .paint-6 { fill: #0d1117; }
-    .paint-7 { fill: #eef2f6; }
-    .paint-8 { fill: #9aa7b4; }
-    .paint-9 { fill: #161b22; stroke: #3d444d; }
-    .paint-10 { fill: #dce3ea; }
-    .paint-11 { fill: #dce3ea; }
-    .paint-12 { fill: #9aa7b4; }
-    .paint-13 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-14 { fill: #d6e7f7; }
-    .paint-15 { fill: #8ec2ee; }
-    .paint-16 { stroke: #9aa7b4; }
-    .paint-17 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-18 { fill: #d6e7f7; }
-    .paint-19 { fill: #8ec2ee; }
-    .paint-20 { stroke: #9aa7b4; }
-    .paint-21 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-22 { fill: #d6e7f7; }
-    .paint-23 { fill: #8ec2ee; }
-    .paint-24 { stroke: #9aa7b4; }
-    .paint-25 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-26 { fill: #d6e7f7; }
-    .paint-27 { fill: #8ec2ee; }
-    .paint-28 { stroke: #9aa7b4; }
-    .paint-29 { fill: #0e2a23; stroke: #2ea58a; }
-    .paint-30 { fill: #7fd4ba; }
-    .paint-31 { fill: #d4efe5; }
-    .paint-32 { fill: #7fd4ba; }
-    .paint-33 { stroke: #3d444d; }
-    .paint-34 { fill: #0d1117; }
-    .paint-35 { fill: #9aa7b4; }
-    .paint-36 { stroke: #9aa7b4; }
-    .paint-37 { fill: #2d1712; stroke: #e0735a; }
-    .paint-38 { fill: #f0a892; }
-    .paint-39 { fill: #f8e2da; }
-    .paint-40 { fill: #f0a892; }
-    .paint-41 { fill: #9aa7b4; }
-    .paint-42 { fill: #231d0d; stroke: #d4a72c; }
-    .paint-43 { fill: #f5e2a8; }
-    .paint-44 { fill: #33290f; stroke: #ffd43b; }
-    .paint-45 { fill: #fbeec0; }
-    .paint-46 { fill: #cdb670; }
-    .paint-48 { fill: #161b22; stroke: #3d444d; }
-    .paint-49 { fill: #dce3ea; }
-    .paint-50 { fill: #dce3ea; }
-    .paint-52 { fill: #13233a; stroke: #4b8bbe; }
-    .paint-53 { fill: #8ec2ee; }
-    .paint-54 { fill: #d6e7f7; }
-    .paint-55 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-57 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-59 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-61 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-63 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-65 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-67 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-70 { fill: #0e2a23; stroke: #2ea58a; }
-    .paint-71 { fill: #7fd4ba; }
-    .paint-72 { fill: #d4efe5; }
-    .paint-73 { fill: #143c31; stroke: #3cbf9f; }
-    .paint-75 { fill: #143c31; stroke: #3cbf9f; }
-    .paint-77 { fill: #143c31; stroke: #3cbf9f; }
-    .paint-79 { fill: #143c31; stroke: #3cbf9f; }
-    .paint-81 { fill: #143c31; stroke: #3cbf9f; }
-    .paint-83 { fill: #143c31; stroke: #3cbf9f; }
-    .paint-86 { fill: #221634; stroke: #9b6dd6; }
-    .paint-87 { fill: #c5a8ec; }
-    .paint-88 { fill: #e9def8; }
-    .paint-89 { fill: #2f1e4a; stroke: #ab82e0; }
-    .paint-91 { fill: #2f1e4a; stroke: #ab82e0; }
-    .paint-93 { fill: #2f1e4a; stroke: #ab82e0; }
-    .paint-95 { fill: #2f1e4a; stroke: #ab82e0; }
-    .paint-98 { fill: #13233a; stroke: #4b8bbe; }
-    .paint-99 { fill: #8ec2ee; }
-    .paint-100 { fill: #d6e7f7; }
-    .paint-101 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-103 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-105 { fill: #1b3050; stroke: #5e9fd4; }
-    .paint-108 { fill: #2d1712; stroke: #e0735a; }
-    .paint-109 { fill: #f0a892; }
-    .paint-110 { fill: #f8e2da; }
-    .paint-111 { fill: #40211a; stroke: #ec8a6e; }
-    .paint-113 { fill: #40211a; stroke: #ec8a6e; }
-    .paint-115 { fill: #40211a; stroke: #ec8a6e; }
-    .paint-117 { fill: #40211a; stroke: #ec8a6e; }
-    .paint-119 { fill: #40211a; stroke: #ec8a6e; }
-    .paint-121 { fill: #40211a; stroke: #ec8a6e; }
-    .paint-124 { fill: #2d1216; stroke: #d4485a; }
-    .paint-125 { fill: #ef9aa6; }
-    .paint-126 { fill: #f8dde1; }
-    .paint-127 { fill: #3f1a20; stroke: #e0606f; }
-    .paint-129 { fill: #3f1a20; stroke: #e0606f; }
-    .paint-131 { fill: #3f1a20; stroke: #e0606f; }
-    .paint-134 { fill: #260f13; stroke: #b03a48; }
-    .paint-135 { fill: #efb3bc; }
-    .paint-136 { fill: #efb3bc; }
-    .paint-137 { fill: #38151b; stroke: #d4596a; }
-    .paint-138 { fill: #fae3e7; }
-    .paint-139 { fill: #38151b; stroke: #d4596a; }
-    .paint-140 { fill: #fae3e7; }
-    .paint-141 { fill: #dba0a9; }
-    .paint-142 { fill: #38151b; stroke: #d4596a; }
-    .paint-143 { fill: #fae3e7; }
-    .paint-144 { fill: #dba0a9; }
-  }
-</style>
+    @media (prefers-color-scheme: dark) {
+      .theme-1 { fill: #9aa7b4; }
+      .theme-2 { fill: #0d1117; }
+      .theme-3 { fill: #eef2f6; }
+      .theme-4 { fill: #161b22; stroke: #3d444d; }
+      .theme-5 { fill: #dce3ea; }
+      .theme-6 { fill: #1b3050; stroke: #5e9fd4; }
+      .theme-7 { fill: #d6e7f7; }
+      .theme-8 { fill: #8ec2ee; }
+      .theme-9 { stroke: #9aa7b4; }
+      .theme-10 { fill: #221634; stroke: #9b6dd6; }
+      .theme-11 { fill: #e9def8; }
+      .theme-12 { fill: #c5a8ec; }
+      .theme-13 { fill: #0e2a23; stroke: #2ea58a; }
+      .theme-14 { fill: #7fd4ba; }
+      .theme-15 { fill: #d4efe5; }
+      .theme-16 { stroke: #9b6dd6; }
+      .theme-17 { stroke: #3d444d; }
+      .theme-18 { fill: #2d1712; stroke: #e0735a; }
+      .theme-19 { fill: #f0a892; }
+      .theme-20 { fill: #f8e2da; }
+      .theme-21 { fill: #231d0d; stroke: #d4a72c; }
+      .theme-22 { fill: #f5e2a8; }
+      .theme-23 { fill: #33290f; stroke: #ffd43b; }
+      .theme-24 { fill: #fbeec0; }
+      .theme-25 { fill: #cdb670; }
+      .theme-26 { fill: #13233a; stroke: #4b8bbe; }
+      .theme-27 { fill: #143c31; stroke: #3cbf9f; }
+      .theme-28 { fill: #2f1e4a; stroke: #ab82e0; }
+      .theme-29 { fill: #40211a; stroke: #ec8a6e; }
+      .theme-30 { fill: #2d1216; stroke: #d4485a; }
+      .theme-31 { fill: #ef9aa6; }
+      .theme-32 { fill: #f8dde1; }
+      .theme-33 { fill: #3f1a20; stroke: #e0606f; }
+      .theme-34 { fill: #260f13; stroke: #b03a48; }
+      .theme-35 { fill: #efb3bc; }
+      .theme-36 { fill: #38151b; stroke: #d4596a; }
+      .theme-37 { fill: #fae3e7; }
+      .theme-38 { fill: #dba0a9; }
+    }
+  </style>
   <defs>
     <marker id="arrowhead" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#59636e" class="paint-5" />
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#59636e" class="theme-1" />
     </marker>
   </defs>
-  <rect x="0" y="0" width="960" height="1066" rx="0" fill="#ffffff" class="paint-6" />
-  <text x="22" y="34" font-size="18" fill="#1f2328" font-weight="700" text-anchor="start" class="paint-7">ESP-VISION</text>
-  <text x="928" y="34" font-size="11" fill="#59636e" font-weight="400" text-anchor="end" class="paint-8">Host  /  Device Core  /  EV-MUX  /  Firmware</text>
-  <rect x="16" y="58" width="928" height="230" rx="8" fill="#f6f8fa" stroke="#b7c0ca" class="paint-9" />
-  <text x="116" y="149" font-size="16" fill="#303842" font-weight="700" text-anchor="middle" class="paint-10">Host</text>
-  <text x="116" y="172" font-size="16" fill="#303842" font-weight="700" text-anchor="middle" class="paint-11">applications</text>
-  <text x="116" y="198" font-size="10.5" fill="#59636e" font-weight="400" text-anchor="middle" class="paint-12">Browser · Desktop · Node.js</text>
-  <rect x="230" y="78" width="164" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" class="paint-13" />
-  <text x="312" y="102" font-size="14" fill="#234f73" font-weight="600" text-anchor="middle" class="paint-14">IDE</text>
-  <text x="312" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle" class="paint-15">Web IDE / VS Code</text>
-  <path d="M 312 136 V 160" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" class="paint-16" />
-  <rect x="408" y="78" width="164" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" class="paint-17" />
-  <text x="490" y="102" font-size="14" fill="#234f73" font-weight="600" text-anchor="middle" class="paint-18">Agent</text>
-  <text x="490" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle" class="paint-19">Automation / integrations</text>
-  <path d="M 490 136 V 160" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" class="paint-20" />
-  <rect x="586" y="78" width="164" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" class="paint-21" />
-  <text x="668" y="102" font-size="14" fill="#234f73" font-weight="600" text-anchor="middle" class="paint-22">CLI</text>
-  <text x="668" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle" class="paint-23">esp-vision-device</text>
-  <path d="M 668 136 V 160" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" class="paint-24" />
-  <rect x="764" y="78" width="164" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" class="paint-25" />
-  <text x="846" y="102" font-size="14" fill="#234f73" font-weight="600" text-anchor="middle" class="paint-26">Custom tools</text>
-  <text x="846" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle" class="paint-27">Node.js / applications</text>
-  <path d="M 846 136 V 160" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" class="paint-28" />
-  <rect x="230" y="164" width="698" height="96" rx="6" fill="#edf9f3" stroke="#28866d" class="paint-29" />
-  <text x="579" y="189" font-size="18" fill="#18624b" font-weight="700" text-anchor="middle" class="paint-30">Device Core</text>
-  <text x="579" y="212" font-size="12" fill="#18533f" font-weight="600" text-anchor="middle" class="paint-31">@esp-vision/device-core</text>
-  <text x="579" y="231" font-size="11.5" fill="#18624b" font-weight="400" text-anchor="middle" class="paint-32" font-family="'Cascadia Code', 'SFMono-Regular', Consolas, monospace">discover() · connect() · inspect() · configure() · control()</text>
-  <text x="579" y="250" font-size="11.5" fill="#18624b" font-weight="400" text-anchor="middle" class="paint-32" font-family="'Cascadia Code', 'SFMono-Regular', Consolas, monospace">python.execute() · files.write() · capture() · firmware.update()</text>
-  <path d="M 16 304 H 944" fill="none" stroke="#b7c0ca" stroke-dasharray="5 5" class="paint-33" />
-  <rect x="24" y="294" width="172" height="20" rx="0" fill="#ffffff" class="paint-34" />
-  <text x="30" y="308" font-size="10.5" fill="#59636e" font-weight="400" text-anchor="start" class="paint-35">Host / device boundary</text>
-  <path d="M 579 263 V 317" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" class="paint-36" />
-  <rect x="16" y="320" width="928" height="64" rx="8" fill="#fff3ed" stroke="#be6047" class="paint-37" />
-  <text x="116" y="356" font-size="15" fill="#923b24" font-weight="700" text-anchor="middle" class="paint-38">EV-MUX v4</text>
-  <text x="579" y="345" font-size="12" fill="#80371f" font-weight="600" text-anchor="middle" class="paint-39">Control · Framed Python · File operations · Preview / Capture</text>
-  <text x="579" y="369" font-size="11.5" fill="#923b24" font-weight="400" text-anchor="middle" class="paint-40">USB CDC  ·  USB Serial/JTAG  ·  UART  ·  TCP</text>
-  <text x="22" y="408" font-size="11" fill="#59636e" font-weight="600" text-anchor="start" class="paint-41">ESP-VISION firmware</text>
-  <rect x="16" y="420" width="928" height="72" rx="8" fill="#fffbea" stroke="#9a7209" class="paint-42" />
-  <text x="116" y="462" font-size="15" fill="#604600" font-weight="700" text-anchor="middle" class="paint-43">Device application</text>
-  <rect x="230" y="432" width="698" height="48" rx="6" fill="#fff3c4" stroke="#9a7209" class="paint-44" />
-  <text x="579" y="451" font-size="13" fill="#604600" font-weight="600" text-anchor="middle" class="paint-45">MicroPython application scripts</text>
-  <text x="579" y="470" font-size="11" fill="#705500" font-weight="400" text-anchor="middle" class="paint-46">User scripts · examples · frozen packages</text>
-  <g transform="translate(0 336)">
-    <rect x="16" y="172" width="928" height="430" rx="8" fill="#f6f8fa" stroke="#b7c0ca" stroke-width="1.5" class="paint-48" />
-    <text x="116" y="378" font-size="15" font-weight="700" fill="#303842" text-anchor="middle" class="paint-49">Service &amp;</text>
-    <text x="116" y="398" font-size="15" font-weight="700" fill="#303842" text-anchor="middle" class="paint-50">Framework</text>
+  <rect x="0" y="0" width="960" height="1232" rx="0" fill="#ffffff" stroke="none" class="theme-2" />
+  <text x="22" y="34" font-size="18" fill="#1f2328" font-weight="700" text-anchor="start" class="theme-3">ESP-VISION</text>
+  <text x="928" y="34" font-size="11" fill="#59636e" font-weight="400" text-anchor="end" class="theme-1">Clients  /  Plugin + CLI  /  Knowledge MCP  /  Device firmware</text>
+  <rect x="16" y="58" width="928" height="396" rx="8" fill="#f6f8fa" stroke="#b7c0ca" class="theme-4" />
+  <text x="116" y="184" font-size="16" fill="#303842" font-weight="700" text-anchor="middle" class="theme-5">Host tools</text>
+  <text x="116" y="207" font-size="16" fill="#303842" font-weight="700" text-anchor="middle" class="theme-5">&amp; AI clients</text>
+  <text x="116" y="234" font-size="10.5" fill="#59636e" font-weight="400" text-anchor="middle" class="theme-1">Browser · Desktop · Node.js</text>
+  <text x="116" y="378" font-size="11" fill="#59636e" font-weight="400" text-anchor="middle" class="theme-1">Local device control</text>
+  <text x="116" y="399" font-size="11" fill="#59636e" font-weight="400" text-anchor="middle" class="theme-1">via Device Core</text>
+  <rect x="230" y="78" width="180" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
+  <text x="320.0" y="102" font-size="13.5" fill="#234f73" font-weight="600" text-anchor="middle" class="theme-7">IDE</text>
+  <text x="320.0" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle" class="theme-8">Web IDE / VS Code</text>
+  <rect x="424" y="78" width="210" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
+  <text x="529.0" y="102" font-size="13.5" fill="#234f73" font-weight="600" text-anchor="middle" class="theme-7">Custom SDK applications</text>
+  <text x="529.0" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle" class="theme-8">Node.js / browser SDK</text>
+  <rect x="648" y="78" width="280" height="56" rx="6" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
+  <text x="788.0" y="102" font-size="13.5" fill="#234f73" font-weight="600" text-anchor="middle" class="theme-7">AI clients / agents</text>
+  <text x="788.0" y="121" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle" class="theme-8">Codex · Claude · WorkBuddy</text>
+  <path d="M 320 134 V 340" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" class="theme-9" />
+  <path d="M 529 134 V 224 H 400 V 340" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" class="theme-9" />
+  <path d="M 788 134 V 150" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" class="theme-9" />
+  <rect x="648" y="154" width="280" height="64" rx="6" fill="#f6f0fc" stroke="#8655b5" class="theme-10" />
+  <text x="788" y="175" font-size="14" fill="#56317d" font-weight="600" text-anchor="middle" class="theme-11">ESP-VISION Plugin</text>
+  <text x="788" y="194" font-size="11.5" fill="#653b90" font-weight="400" text-anchor="middle" class="theme-12">@esp-vision/plugin</text>
+  <text x="788" y="211" font-size="10.5" fill="#653b90" font-weight="400" text-anchor="middle" class="theme-12">Skill + CLI + MCP configuration</text>
+  <path d="M 700 218 V 236 H 532 V 242" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" class="theme-9" />
+  <text x="554" y="229" font-size="10" fill="#59636e" font-weight="400" text-anchor="start" class="theme-1">shell / JSON</text>
+  <path d="M 806 218 V 242" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" class="theme-9" />
+  <text x="822" y="237" font-size="10" fill="#59636e" font-weight="400" text-anchor="start" class="theme-1">HTTPS</text>
+  <rect x="418" y="246" width="228" height="68" rx="6" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
+  <text x="532" y="268" font-size="14" fill="#234f73" font-weight="600" text-anchor="middle" class="theme-7">Device CLI</text>
+  <text x="532" y="287" font-size="11" fill="#24577f" font-weight="400" text-anchor="middle" class="theme-8">@esp-vision/device-cli</text>
+  <text x="532" y="305" font-size="10.5" fill="#24577f" font-weight="400" text-anchor="middle" class="theme-8">esp-vision-device</text>
+  <path d="M 532 314 V 340" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" class="theme-9" />
+  <rect x="230" y="344" width="416" height="92" rx="6" fill="#edf9f3" stroke="#28866d" class="theme-13" />
+  <text x="438" y="367" font-size="18" fill="#18624b" font-weight="700" text-anchor="middle" class="theme-14">Device Core</text>
+  <text x="438" y="388" font-size="12" fill="#18533f" font-weight="600" text-anchor="middle" class="theme-15">@esp-vision/device-core</text>
+  <text x="438" y="408" font-size="10.5" fill="#18624b" font-weight="400" text-anchor="middle" class="theme-14">createDevice() · discover() · connect()</text>
+  <text x="438" y="427" font-size="10.5" fill="#18624b" font-weight="400" text-anchor="middle" class="theme-14">python.execute() · files.* · capture() · firmware.update()</text>
+  <rect x="672" y="246" width="256" height="190" rx="6" fill="#f6f0fc" stroke="#8655b5" class="theme-10" />
+  <text x="800" y="270" font-size="14" fill="#56317d" font-weight="600" text-anchor="middle" class="theme-11">Knowledge MCP · cloud</text>
+  <text x="800" y="292" font-size="11" fill="#653b90" font-weight="400" text-anchor="middle" class="theme-12">@esp-vision/knowledge-mcp</text>
+  <text x="800" y="313" font-size="10.5" fill="#56317d" font-weight="400" text-anchor="middle" class="theme-11">mcp.vision.espressif.com/mcp</text>
+  <path d="M 688 326 H 912" stroke="#8655b5" fill="none" class="theme-16" />
+  <text x="800" y="348" font-size="11" fill="#56317d" font-weight="400" text-anchor="middle" class="theme-11">APIs · documentation · examples</text>
+  <text x="800" y="370" font-size="11" fill="#653b90" font-weight="400" text-anchor="middle" class="theme-12">Versioned knowledge snapshot</text>
+  <text x="800" y="391" font-size="11" fill="#653b90" font-weight="400" text-anchor="middle" class="theme-12">Anonymous daily aggregates</text>
+  <text x="800" y="416" font-size="10.5" fill="#653b90" font-weight="400" text-anchor="middle" class="theme-12">Main builds · website deploys</text>
+  <path d="M 16 470 H 944" fill="none" stroke="#b7c0ca" stroke-dasharray="5 5" class="theme-17" />
+  <rect x="24" y="460" width="172" height="20" rx="0" fill="#ffffff" stroke="none" class="theme-2" />
+  <text x="30" y="474" font-size="10.5" fill="#59636e" font-weight="400" text-anchor="start" class="theme-1">Host / device boundary</text>
+  <path d="M 438 439 V 483" fill="none" stroke="#59636e" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead)" class="theme-9" />
+  <rect x="16" y="486" width="928" height="64" rx="8" fill="#fff3ed" stroke="#be6047" class="theme-18" />
+  <text x="116" y="522" font-size="15" fill="#923b24" font-weight="700" text-anchor="middle" class="theme-19">EV-MUX v4</text>
+  <text x="579" y="511" font-size="12" fill="#80371f" font-weight="600" text-anchor="middle" class="theme-20">Control · Framed Python · File operations · Preview / Capture</text>
+  <text x="579" y="535" font-size="11.5" fill="#923b24" font-weight="400" text-anchor="middle" class="theme-19">USB CDC  ·  USB Serial/JTAG  ·  UART  ·  TCP</text>
+  <text x="22" y="574" font-size="11" fill="#59636e" font-weight="600" text-anchor="start" class="theme-1">ESP-VISION firmware</text>
+  <rect x="16" y="586" width="928" height="72" rx="8" fill="#fffbea" stroke="#9a7209" class="theme-21" />
+  <text x="116" y="628" font-size="15" fill="#604600" font-weight="700" text-anchor="middle" class="theme-22">Device application</text>
+  <rect x="230" y="598" width="698" height="48" rx="6" fill="#fff3c4" stroke="#9a7209" class="theme-23" />
+  <text x="579" y="617" font-size="13" fill="#604600" font-weight="600" text-anchor="middle" class="theme-24">MicroPython application scripts</text>
+  <text x="579" y="636" font-size="11" fill="#705500" font-weight="400" text-anchor="middle" class="theme-25">User scripts · examples · frozen packages</text>
+  <g transform="translate(0 502)">
+    <rect x="16" y="172" width="928" height="430" rx="8" fill="#f6f8fa" stroke="#b7c0ca" stroke-width="1.5" class="theme-4" />
+    <text x="116" y="378" font-size="15" font-weight="700" fill="#303842" text-anchor="middle" class="theme-5">Service &amp;</text>
+    <text x="116" y="398" font-size="15" font-weight="700" fill="#303842" text-anchor="middle" class="theme-5">Framework</text>
     <g>
-      <rect x="230" y="190" width="698" height="84" rx="6" fill="#edf5ff" stroke="#3975a8" stroke-dasharray="5 4" class="paint-52" />
-      <text x="579" y="210" font-size="12.5" font-weight="600" fill="#24577f" text-anchor="middle" class="paint-53">Python API Bindings (modules/)</text>
-      <g font-size="12" fill="#234f73" text-anchor="middle" class="paint-54">
-        <rect x="265" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="paint-55" />
+      <rect x="230" y="190" width="698" height="84" rx="6" fill="#edf5ff" stroke="#3975a8" stroke-dasharray="5 4" class="theme-26" />
+      <text x="579" y="210" font-size="12.5" font-weight="600" fill="#24577f" text-anchor="middle" class="theme-8">Python API Bindings (modules/)</text>
+      <g font-size="12" fill="#234f73" text-anchor="middle" class="theme-7">
+        <rect x="265" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
         <text x="305" y="245">sensor</text>
-        <rect x="355" y="224" width="120" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="paint-57" />
+        <rect x="355" y="224" width="120" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
         <text x="415" y="245">image / ImageIO</text>
-        <rect x="485" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="paint-59" />
+        <rect x="485" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
         <text x="525" y="245">display</text>
-        <rect x="575" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="paint-61" />
+        <rect x="575" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
         <text x="610" y="245">espdl</text>
-        <rect x="655" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="paint-63" />
+        <rect x="655" y="224" width="80" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
         <text x="695" y="245">tflite</text>
-        <rect x="745" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="paint-65" />
+        <rect x="745" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
         <text x="780" y="245">h264</text>
-        <rect x="825" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="paint-67" />
+        <rect x="825" y="224" width="70" height="34" rx="5" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
         <text x="860" y="245">rtsp</text>
       </g>
     </g>
     <g>
-      <rect x="230" y="290" width="300" height="150" rx="6" fill="#edf9f3" stroke="#28866d" stroke-dasharray="5 4" class="paint-70" />
-      <text x="380" y="310" font-size="12.5" font-weight="600" fill="#18624b" text-anchor="middle" class="paint-71">Vision Library (imlib)</text>
-      <g font-size="11.5" fill="#18533f" text-anchor="middle" class="paint-72">
-        <rect x="237" y="322" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="paint-73" />
+      <rect x="230" y="290" width="300" height="150" rx="6" fill="#edf9f3" stroke="#28866d" stroke-dasharray="5 4" class="theme-13" />
+      <text x="380" y="310" font-size="12.5" font-weight="600" fill="#18624b" text-anchor="middle" class="theme-14">Vision Library (imlib)</text>
+      <g font-size="11.5" fill="#18533f" text-anchor="middle" class="theme-15">
+        <rect x="237" y="322" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="theme-27" />
         <text x="306" y="341">Drawing / Filters</text>
-        <rect x="385" y="322" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="paint-75" />
+        <rect x="385" y="322" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="theme-27" />
         <text x="454" y="341">Color Tracking</text>
-        <rect x="237" y="360" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="paint-77" />
+        <rect x="237" y="360" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="theme-27" />
         <text x="306" y="379">Feature Detection</text>
-        <rect x="385" y="360" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="paint-79" />
+        <rect x="385" y="360" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="theme-27" />
         <text x="454" y="379">QR Code</text>
-        <rect x="237" y="398" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="paint-81" />
+        <rect x="237" y="398" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="theme-27" />
         <text x="306" y="417">Barcode (ZXing)</text>
-        <rect x="385" y="398" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="paint-83" />
+        <rect x="385" y="398" width="138" height="30" rx="5" fill="#d9f0e4" stroke="#28866d" class="theme-27" />
         <text x="454" y="417">AprilTag</text>
       </g>
     </g>
     <g>
-      <rect x="542" y="290" width="190" height="150" rx="6" fill="#f6f0fc" stroke="#8655b5" stroke-dasharray="5 4" class="paint-86" />
-      <text x="637" y="310" font-size="12.5" font-weight="600" fill="#653b90" text-anchor="middle" class="paint-87">AI Inference</text>
-      <g font-size="10.8" fill="#56317d" text-anchor="middle" class="paint-88">
-        <rect x="552" y="322" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" class="paint-89" />
+      <rect x="542" y="290" width="190" height="150" rx="6" fill="#f6f0fc" stroke="#8655b5" stroke-dasharray="5 4" class="theme-10" />
+      <text x="637" y="310" font-size="12.5" font-weight="600" fill="#653b90" text-anchor="middle" class="theme-12">AI Inference</text>
+      <g font-size="10.8" fill="#56317d" text-anchor="middle" class="theme-11">
+        <rect x="552" y="322" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" class="theme-28" />
         <text x="637" y="338">ESP-DL Runtime</text>
-        <rect x="552" y="352" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" class="paint-91" />
+        <rect x="552" y="352" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" class="theme-28" />
         <text x="637" y="368">TFLite Micro</text>
-        <rect x="552" y="382" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" class="paint-93" />
+        <rect x="552" y="382" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" class="theme-28" />
         <text x="637" y="398">.espdl / .tflite Models</text>
-        <rect x="552" y="412" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" class="paint-95" />
+        <rect x="552" y="412" width="170" height="24" rx="5" fill="#ecdef8" stroke="#9167bf" class="theme-28" />
         <text x="637" y="428">Detect / Classify / Pose</text>
       </g>
     </g>
     <g>
-      <rect x="744" y="290" width="184" height="150" rx="6" fill="#edf5ff" stroke="#3975a8" stroke-dasharray="5 4" class="paint-98" />
-      <text x="836" y="310" font-size="12.5" font-weight="600" fill="#24577f" text-anchor="middle" class="paint-99">Runtime</text>
-      <g font-size="11.5" fill="#234f73" text-anchor="middle" class="paint-100">
-        <rect x="754" y="322" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3" class="paint-101" />
+      <rect x="744" y="290" width="184" height="150" rx="6" fill="#edf5ff" stroke="#3975a8" stroke-dasharray="5 4" class="theme-26" />
+      <text x="836" y="310" font-size="12.5" font-weight="600" fill="#24577f" text-anchor="middle" class="theme-8">Runtime</text>
+      <g font-size="11.5" fill="#234f73" text-anchor="middle" class="theme-7">
+        <rect x="754" y="322" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
         <text x="836" y="341">MicroPython v1.28.0</text>
-        <rect x="754" y="360" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3" class="paint-103" />
+        <rect x="754" y="360" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
         <text x="836" y="379">ESP-VISION Overlay</text>
-        <rect x="754" y="398" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3" class="paint-105" />
+        <rect x="754" y="398" width="164" height="30" rx="5" fill="#deedfc" stroke="#4a83b3" class="theme-6" />
         <text x="836" y="417">ulab</text>
       </g>
     </g>
     <g>
-      <rect x="230" y="456" width="420" height="130" rx="6" fill="#fff3ed" stroke="#be6047" stroke-dasharray="5 4" class="paint-108" />
-      <text x="440" y="476" font-size="12.5" font-weight="600" fill="#923b24" text-anchor="middle" class="paint-109">Platform Services (platform/)</text>
-      <g font-size="11.5" fill="#80371f" text-anchor="middle" class="paint-110">
-        <rect x="238" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="paint-111" />
+      <rect x="230" y="456" width="420" height="130" rx="6" fill="#fff3ed" stroke="#be6047" stroke-dasharray="5 4" class="theme-18" />
+      <text x="440" y="476" font-size="12.5" font-weight="600" fill="#923b24" text-anchor="middle" class="theme-19">Platform Services (platform/)</text>
+      <g font-size="11.5" fill="#80371f" text-anchor="middle" class="theme-20">
+        <rect x="238" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="theme-29" />
         <text x="302" y="507">Preview / Capture</text>
-        <rect x="376" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="paint-113" />
+        <rect x="376" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="theme-29" />
         <text x="440" y="507">JPEG Codec</text>
-        <rect x="514" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="paint-115" />
+        <rect x="514" y="488" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="theme-29" />
         <text x="578" y="507">Display Layer</text>
-        <rect x="238" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="paint-117" />
+        <rect x="238" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="theme-29" />
         <text x="302" y="545">SD Card</text>
-        <rect x="376" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="paint-119" />
+        <rect x="376" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="theme-29" />
         <text x="440" y="545">USB MSC</text>
-        <rect x="514" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="paint-121" />
+        <rect x="514" y="526" width="128" height="30" rx="5" fill="#fbe3d7" stroke="#be6047" class="theme-29" />
         <text x="578" y="545">Boot / Soft-reset</text>
       </g>
     </g>
     <g>
-      <rect x="666" y="456" width="262" height="130" rx="6" fill="#fff0f2" stroke="#b54255" stroke-dasharray="5 4" class="paint-124" />
-      <text x="797" y="476" font-size="12.5" font-weight="600" fill="#943044" text-anchor="middle" class="paint-125">Board Backends (boards/)</text>
-      <g font-size="11.5" fill="#82283b" text-anchor="middle" class="paint-126">
-        <rect x="676" y="488" width="242" height="30" rx="5" fill="#fbdde3" stroke="#bd5264" class="paint-127" />
+      <rect x="666" y="456" width="262" height="130" rx="6" fill="#fff0f2" stroke="#b54255" stroke-dasharray="5 4" class="theme-30" />
+      <text x="797" y="476" font-size="12.5" font-weight="600" fill="#943044" text-anchor="middle" class="theme-31">Board Backends (boards/)</text>
+      <g font-size="11.5" fill="#82283b" text-anchor="middle" class="theme-32">
+        <rect x="676" y="488" width="242" height="30" rx="5" fill="#fbdde3" stroke="#bd5264" class="theme-33" />
         <text x="797" y="507" font-size="11">Camera (V4L2 + PPA / esp32-camera)</text>
-        <rect x="676" y="526" width="116" height="30" rx="5" fill="#fbdde3" stroke="#bd5264" class="paint-129" />
+        <rect x="676" y="526" width="116" height="30" rx="5" fill="#fbdde3" stroke="#bd5264" class="theme-33" />
         <text x="734" y="545">Display</text>
-        <rect x="802" y="526" width="116" height="30" rx="5" fill="#fbdde3" stroke="#bd5264" class="paint-131" />
+        <rect x="802" y="526" width="116" height="30" rx="5" fill="#fbdde3" stroke="#bd5264" class="theme-33" />
         <text x="860" y="545">SD Card</text>
       </g>
     </g>
   </g>
-  <g transform="translate(0 336)">
-    <rect x="16" y="614" width="928" height="96" rx="8" fill="#fff0f3" stroke="#ac3c50" stroke-width="1.5" class="paint-134" />
-    <text x="116" y="657" font-size="15" font-weight="700" fill="#8d2d40" text-anchor="middle" class="paint-135">Environment &amp;</text>
-    <text x="116" y="677" font-size="15" font-weight="700" fill="#8d2d40" text-anchor="middle" class="paint-136">Dependency</text>
-    <rect x="230" y="634" width="200" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60" class="paint-137" />
-    <text x="330" y="667" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle" class="paint-138">ESP-IDF</text>
-    <rect x="440" y="634" width="300" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60" class="paint-139" />
-    <text x="590" y="657" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle" class="paint-140">ESP Component Registry</text>
-    <text x="590" y="676" font-size="10.5" fill="#943448" text-anchor="middle" class="paint-141">esp_video · esp32-camera · ESP-DL · esp-tflite-micro</text>
-    <rect x="750" y="634" width="178" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60" class="paint-142" />
-    <text x="839" y="657" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle" class="paint-143">ESP32 SoCs</text>
-    <text x="839" y="676" font-size="10.5" fill="#943448" text-anchor="middle" class="paint-144">P4 · S3 · S31</text>
+  <g transform="translate(0 502)">
+    <rect x="16" y="614" width="928" height="96" rx="8" fill="#fff0f3" stroke="#ac3c50" stroke-width="1.5" class="theme-34" />
+    <text x="116" y="657" font-size="15" font-weight="700" fill="#8d2d40" text-anchor="middle" class="theme-35">Environment &amp;</text>
+    <text x="116" y="677" font-size="15" font-weight="700" fill="#8d2d40" text-anchor="middle" class="theme-35">Dependency</text>
+    <rect x="230" y="634" width="200" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60" class="theme-36" />
+    <text x="330" y="667" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle" class="theme-37">ESP-IDF</text>
+    <rect x="440" y="634" width="300" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60" class="theme-36" />
+    <text x="590" y="657" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle" class="theme-37">ESP Component Registry</text>
+    <text x="590" y="676" font-size="10.5" fill="#943448" text-anchor="middle" class="theme-38">esp_video · esp32-camera · ESP-DL · esp-tflite-micro</text>
+    <rect x="750" y="634" width="178" height="56" rx="6" fill="#fbdfe5" stroke="#b64a60" class="theme-36" />
+    <text x="839" y="657" font-size="13" font-weight="600" fill="#82283b" text-anchor="middle" class="theme-37">ESP32 SoCs</text>
+    <text x="839" y="676" font-size="10.5" fill="#943448" text-anchor="middle" class="theme-38">P4 · S3 · S31</text>
   </g>
 </svg>
