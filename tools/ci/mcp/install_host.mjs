@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const args = process.argv.slice(2)
@@ -45,29 +45,49 @@ try {
     await mkdir(consumer)
     manifest.devDependencies['@esp-vision/device-core'] = `file:${tarball}`
     await writeFile(join(consumer, 'package.json'), JSON.stringify(manifest, null, 2) + '\n')
+    let lockedPackages
     try {
       const lock = JSON.parse(await readFile(join(source, 'package-lock.json'), 'utf8'))
       const coreLock = lock.packages['node_modules/@esp-vision/device-core']
       assert.equal(coreLock?.version, packed.version, 'Core lock version must match the staged SDK')
-      assert.equal(coreLock?.integrity, packed.integrity,
-        'Core bytes changed: regenerate the tested registry lock before building consumers')
+      assert.equal(new URL(coreLock.resolved).origin, 'https://registry.npmjs.org',
+        'The tracked Core lock must retain its published registry source')
+      assert.match(coreLock.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/,
+        'The tracked Core lock must retain its published archive integrity')
       lock.version = manifest.version
       lock.packages[''].version = manifest.version
       lock.packages[''].devDependencies = manifest.devDependencies
       // Only the explicit staged Core source is substituted. npm retains the
       // other existing locked versions when resolving this ephemeral lock.
       delete lock.packages['node_modules/@esp-vision/device-core']
+      lockedPackages = structuredClone(lock.packages)
+      delete lockedPackages['']
       await writeFile(join(consumer, 'package-lock.json'), JSON.stringify(lock, null, 2) + '\n')
     } catch (error) {
       if (error.code === 'ENOENT') throw new Error(`${name} requires a tracked registry package-lock.json`)
       throw error
     }
     npm(['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], consumer)
+    const stagedLock = JSON.parse(await readFile(join(consumer, 'package-lock.json'), 'utf8'))
+    const stagedCore = stagedLock.packages['node_modules/@esp-vision/device-core']
+    assert.equal(stagedCore?.version, packed.version, 'The temporary lock must select the staged Core version')
+    assert.equal(stagedCore?.integrity, packed.integrity, 'The temporary lock must verify the staged Core bytes')
+    assert.ok(stagedCore?.resolved?.startsWith('file:'), 'The temporary lock must use a local Core artifact')
+    assert.equal(fileURLToPath(new URL(stagedCore.resolved, pathToFileURL(`${consumer}/`))), tarball,
+      'The temporary lock must use the explicit Core artifact')
+    for (const [path, locked] of Object.entries(lockedPackages)) {
+      assert.deepEqual(stagedLock.packages[path], locked, `Unrelated locked dependency changed: ${path}`)
+    }
     npm(['ci', '--ignore-scripts', '--no-audit', '--no-fund'], consumer)
     await rm(join(source, 'node_modules'), { recursive: true, force: true })
     await cp(join(consumer, 'node_modules'), join(source, 'node_modules'), { recursive: true })
     const installed = JSON.parse(await readFile(join(source, 'node_modules/@esp-vision/device-core/package.json'), 'utf8'))
     assert.equal(installed.version, packed.version)
+    for (const { path } of packed.files) {
+      const original = await readFile(join(core, path))
+      const actual = await readFile(join(source, 'node_modules/@esp-vision/device-core', path))
+      assert.ok(original.equals(actual), `Installed Core differs from the staged source: ${path}`)
+    }
     console.log(`${name}: installed explicit ${packed.name}@${packed.version} (${receipt.sha256})`)
   }
   console.log(`Core npm artifact: ${tarball}`)

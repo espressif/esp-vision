@@ -86,6 +86,24 @@ test('facade subscribes before connection, negotiates, streams input and dispose
   await assert.rejects(d.files.read({path:'/x'}), {code:'DEVICE_NOT_READY'})
 })
 
+test('hard reset disposes an open transport without releasing its expired lease and permits reconnect', async () => {
+  const p = peer(), d = api.createDevice({ transport: p.transport })
+  try {
+    await d.connect({ role: 'tcp', probeRepl: false })
+    assert.deepEqual(await d.control({ action: 'reset', mode: 'hard' }), { ok: true })
+    assert.equal(p.disconnects, 0, 'the transport remains open after the reset ACK')
+    await d.disconnect()
+    assert.equal(p.disconnects, 1)
+    assert.equal(p.subscriptions, 0)
+    assert.equal(p.requests.filter(request => request.metadata.method === 'session.release').length, 0)
+    await d.connect({ role: 'tcp', probeRepl: false })
+    await d.disconnect()
+    assert.equal(p.disconnects, 2)
+    assert.equal(p.requests.filter(request => request.metadata.method === 'session.release').length, 1,
+      'normal disconnect still releases the new session')
+  } finally { await d.disconnect() }
+})
+
 test('connect can acquire and inspect a session without interrupting the REPL', async () => {
   const p = peer({ vmReady: false }), d = api.createDevice({ transport: p.transport })
   try {
