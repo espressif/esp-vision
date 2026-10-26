@@ -257,6 +257,14 @@ static void sensor_isp_field_set(const sensor_isp_field_t *field, esp_vision_isp
         *(bool *)data = mp_obj_is_true(value);
         return;
     case ISP_U8:
+        if (field->name == MP_QSTR_level) {
+            mp_int_t level = mp_obj_get_int(value);
+            if (level < 2 || level > 20) {
+                mp_raise_ValueError(MP_ERROR_TEXT("BF level must be 2..20; use enable=False to disable"));
+            }
+            *(uint8_t *)data = level;
+            return;
+        }
         *(uint8_t *)data = sensor_isp_uint(value, UINT8_MAX);
         return;
     case ISP_U16:

@@ -88,7 +88,8 @@ def set_vflip(enable: bool) -> None: ...
 def get_vflip() -> bool: ...
 #: Optional API: present only in firmware with IPA/ISP control enabled.
 #: Start or stop the IPA controller after camera initialization; briefly pauses capture.
-#: Existing ISP tuning is retained when disabled. Unsupported cameras raise OSError.
+#: Existing ISP tuning is retained when disabled; enabling returns configured blocks to IPA.
+#: Sensor-side automatic exposure/white balance is independent. Unsupported cameras raise OSError.
 def set_ipa(enable: bool) -> None: ...
 #: Optional API: present only in firmware with IPA/ISP control enabled.
 #: Return the IPA controller state, or None when runtime control is unsupported.
@@ -103,10 +104,14 @@ def get_ipa_stats(timeout: int = 1000) -> IPAStats | None: ...
 #: Read current ISP block parameters, or None if unsupported. Initialize the camera first.
 #: Blocks the camera driver or chip revision does not implement return None,
 #: including "exposure" on sensors whose driver makes it write-only.
+#: Readback is driver configuration, not a frame commit barrier or sensor-side AWB gains.
+#: OV2710 does not support manual exposure or pixel_gain reads or writes.
 def get_isp(block: str) -> dict[str, Any] | None: ...
 #: Optional API: present only in firmware with IPA/ISP control enabled.
 #: Update one ISP block using keyword parameters; unspecified fields retain their values.
 #: Disable IPA before writing. Invalid parameters raise ValueError; device errors raise OSError.
+#: BF level is 2..20; use enable=False to disable filtering.
+#: Consume queued frames before evaluating a change; skip_frames is not a hardware commit barrier.
 def set_isp(block: str, **params: Any) -> None: ...
 #: Drop frames while camera exposure and processing settle.
 #: time: milliseconds to wait. n: number of frames to skip.

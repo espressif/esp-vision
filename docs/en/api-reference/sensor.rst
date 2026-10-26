@@ -85,7 +85,7 @@ Changing IPA state briefly stops and restarts capture while preserving the outpu
 
 A failed switch leaves the camera shut down rather than in its previous state: the capture buffers, the scaler, and the camera device itself are all released before ``OSError`` is raised. Call ``sensor.reset()`` to bring the camera back.
 
-Disabling IPA stops its automatic parameter updates; it does not bypass the ISP or clear existing tuning. The image may initially look unchanged. To compare the effect, change the illumination or light source color while previewing, then enable IPA and allow its algorithms to settle again. The algorithms controlled by this switch depend on the active IPA configuration.
+Disabling IPA stops its automatic parameter updates; it does not bypass the ISP or clear existing tuning. The image may initially look unchanged. To compare the effect, change the illumination or light source color while previewing, then enable IPA and allow its algorithms to settle again. The algorithms controlled by this switch depend on the active IPA configuration. Enabling IPA returns its configured blocks, such as CCM, gamma, and sharpening, to automatic control; manual values are not preserved as overrides. This switch does not disable automatic exposure or white balance implemented inside the image sensor. In particular, the OV2710 on ESP32_P4X_EYE has sensor-side automatic controls that are separate from IPA.
 
 Reading IPA Statistics
 ----------------------
@@ -129,12 +129,14 @@ The returned dictionary always contains these keys. A statistics block without a
    if stats is not None:
        print(stats["seq"], stats["ae"], stats["awb"])
 
+For a valid ``awb`` block with ``counted > 0``, dividing each channel sum by ``counted`` yields that statistics source's channel mean. Hardware white-patch statistics are filtered samples, not full-frame RGB means; the OV2710 backend can instead provide the sensor's before-gain channel averages with ``counted=1``. Neither source is a mean of the rendered ``image.Image``.
+
 See ``example/01-Camera/04-IPA/ipa_stats.py`` for periodic statistics reads during preview. This API exposes the ISP inputs consumed by IPA; it does not report inferred color temperature, converged exposure, or other algorithm outputs. Use ``get_isp()`` for supported driver parameter readback.
 
 Manual ISP Control
 ------------------
 
-After initialization, ``sensor.get_isp(block)`` returns a dictionary of the current driver parameters, or ``None`` when the block is unsupported. A block is unsupported when the camera driver has no getter for it or when the firmware was built for a chip revision that lacks the hardware: ``lsc`` needs ESP32-P4 v1.0 or newer and ``blc`` needs v3.0 or newer, while ``exposure`` is write-only on sensors such as SC2336, so ``sensor.get_isp("exposure")`` normally returns ``None``. Call ``sensor.set_ipa(False)`` before writing manual settings. ``sensor.set_isp(block, **params)`` updates one block, keeping unspecified fields from its current configuration. Writes while IPA is running raise ``OSError`` to prevent the algorithms from overwriting manual settings.
+After initialization, ``sensor.get_isp(block)`` returns a dictionary of the current driver parameters, or ``None`` when the block is unsupported. A block is unsupported when the camera driver has no getter for it or when the firmware was built for a chip revision that lacks the hardware: ``lsc`` needs ESP32-P4 v1.0 or newer and ``blc`` needs v3.0 or newer, while ``exposure`` is write-only on sensors such as SC2336, so ``sensor.get_isp("exposure")`` normally returns ``None``. The OV2710 driver used by ESP32_P4X_EYE implements neither manual ``exposure`` nor ``pixel_gain``: reads return ``None`` and writes raise ``OSError`` with ``ESP_ERR_NOT_SUPPORTED``. A write-only getter on another sensor does not imply that its setter is unsupported. Call ``sensor.set_ipa(False)`` before writing manual settings. ``sensor.set_isp(block, **params)`` updates one block, keeping unspecified fields from its current configuration. Writes while IPA is running raise ``OSError`` to prevent the algorithms from overwriting manual settings.
 
 .. code-block:: python
 
@@ -149,10 +151,15 @@ After initialization, ``sensor.get_isp(block)`` returns a dictionary of the curr
    sensor.snapshot().flush()
 
    sensor.set_isp("wb", enable=True, rg=1.8, bg=1.4)
-   sensor.set_isp("exposure", value=10000)  # Microseconds, rounded to 100 us.
-   sensor.set_isp("pixel_gain", value=2.0)  # Gain multiplier.
+   # On sensors with manual exposure and gain support (not OV2710):
+   # sensor.set_isp("exposure", value=10000)  # Microseconds, rounded to 100 us.
+   # sensor.set_isp("pixel_gain", value=2.0)  # Gain multiplier.
 
    sensor.set_ipa(True)
+
+``get_isp()`` reads driver configuration, not a hardware commit acknowledgement or a measurement of the returned image. In particular, ``get_isp("wb")`` reports the ISP white balance stage; it does not report the OV2710 sensor's internal AWB gains. ``enable=False, rg=1.0, bg=1.0`` can therefore coexist with sensor-side AWB. On P4 revisions without a separate white balance stage, the driver combines manual white balance gains with CCM.
+
+Capture buffers may already contain frames produced before a write. Sleeping does not consume those frames. Continue capturing, or call ``sensor.skip_frames(n=3)`` to consume queued frames before evaluating a change. This discards older frames; it is not a hardware commit barrier or a guarantee that automatic sensor controls have settled. A repeated write or a fixed sleep is not a reliable way to establish which configuration produced a frame.
 
 The supported block names and fields follow the tuning parameter vocabulary:
 
@@ -183,7 +190,7 @@ The supported block names and fields follow the tuning parameter vocabulary:
    * - ``gamma``
      - ``enable``, ``x``, ``y``: two lists of 16 integers from 0 through 255. X must increase from an implicit zero by powers of two; the last point must be 255 and is treated as 256 for the final interval.
 
-Set ``enable=True`` when applying new parameters to a disabled block. Passing only ``enable=False`` disables processing without replacing its stored tables. White balance gains are kept across that disable and come back when the block is enabled again. Gamma readback reports the red channel; setting ``x`` or ``y`` applies the resulting curve to all three channels, while an enable-only update preserves the separate channel curves. LSC tables are copied into camera-owned storage and remain valid across garbage collection and IPA switches; the camera keeps the previously installed table intact until the driver accepts the new one, so a rejected write leaves the image unchanged. Fixed-point values and sensor settings may be quantized by the driver.
+Set ``enable=True`` when applying new parameters to a disabled block. Passing only ``enable=False`` disables processing without replacing its stored tables. White balance gains are kept across that disable and come back when the block is enabled again. Gamma readback reports the red channel; setting ``x`` or ``y`` applies the resulting curve to all three channels, while an enable-only update preserves the separate channel curves. LSC tables are copied into camera-owned storage and remain valid across garbage collection and IPA switches; the camera keeps the previously installed table intact until the driver accepts the new one, but the underlying driver can update its cached pointers before reporting a hardware error. A failed device write can therefore leave configuration or hardware state uncertain; reset the camera before continuing after such an error. Fixed-point values and sensor settings may be quantized by the driver.
 
 Unknown blocks, invalid values, and array length mismatches are rejected before applying the update. An unsupported write raises ``OSError``. A device error may leave a partially applied configuration; use ``sensor.reset()`` to reinitialize after such a failure.
 
