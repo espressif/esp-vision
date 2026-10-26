@@ -333,6 +333,7 @@ export class DeviceSession {
     this.negotiatePromise = null
     this.negotiateController = null
     this.releasePromise = null
+    this.resetPromise = null
     this.vmReadinessProbeActive = false
     this.pendingRpc = new Map()
     this.draining = false
@@ -702,6 +703,9 @@ export class DeviceSession {
     const needsAuthorization = authorize ?? !(method === 'hello' || method === 'capabilities')
     const usesVm = vmRequest ?? (channel === 'repl.stdin' || channel === 'repl.signal'
       || (Boolean(method) && isVmRpc(method, requestPayload)))
+    if (this.state === 'resetting' && !(method === 'device.control' && requestPayload?.action === 'reset')) {
+      throw Object.assign(new Error('Device reset is in progress'), { code: 'DEVICE_RESETTING' })
+    }
     if (needsAuthorization && !this.sessionId) {
       throw new Error(`EV-MUX ${method || channel} requires an acquired v4 session`)
     }
@@ -869,6 +873,9 @@ export class DeviceSession {
   negotiate(options = {}) {
     if (this.negotiatePromise) return this.negotiatePromise
     if (this.releasePromise) return Promise.reject(new Error('EV-MUX session is being released'))
+    if (this.resetPromise) {
+      return Promise.reject(Object.assign(new Error('Device reset is in progress'), { code: 'DEVICE_RESETTING' }))
+    }
 
     const controller = new AbortController()
     const callerSignal = options.signal || null
@@ -1199,7 +1206,13 @@ export class DeviceSession {
   release({ timeout = 1200 } = {}) {
     if (this.releasePromise) return this.releasePromise
     const negotiation = this.negotiatePromise
+    const resetting = this.resetPromise
     const operation = (async () => {
+      if (resetting) {
+        // The reset caller owns its result. After an ACK or uncertain reset
+        // there is no old lease to release; a rejected reset retains it.
+        try { await resetting } catch (_resetError) { /* Keep reset failure with its caller. */ }
+      }
       if (negotiation) {
         try {
           await negotiation
@@ -1288,7 +1301,7 @@ export class DeviceSession {
     if (operation === 'stop') return this.interrupt()
     if (signal?.aborted) throw abortError(signal)
     if (operation === 'hard-reset' && this.hasFeature('device.control')) {
-      return this.rpc('device.control', { action: 'reset' }, { timeout, signal })
+      return this._hardReset({ timeout, signal })
     }
     const command = {
       'soft-reset': 'import machine; machine.soft_reset()\r\n',
@@ -1301,6 +1314,52 @@ export class DeviceSession {
     await this.writeFrame('repl.stdin', 'data', null, command, { signal })
     await awaitWithSignal(this.sleep(100), signal)
     return { ok: true, operation, acknowledged: false }
+  }
+
+  _hardReset({ timeout, signal }) {
+    if (!Number.isFinite(timeout) || timeout <= 0) throw new RangeError('Reset timeout must be positive')
+    if (this.releasePromise) {
+      throw Object.assign(new Error('Device session is being released'), { code: 'DEVICE_RELEASING' })
+    }
+    if (this.resetPromise || this.state !== 'ready') {
+      throw Object.assign(new Error('Device is not ready for reset'), { code: 'DEVICE_RESETTING' })
+    }
+    const owner = this.sessionId
+    const generation = this.sessionGeneration
+    this.state = 'resetting'
+    clearTimeout(this.keepaliveTimer)
+    this.keepaliveTimer = null
+    this.keepaliveGeneration += 1
+    const operation = (async () => {
+      try {
+        const response = await this.rpc('device.control', { action: 'reset' }, { timeout, signal })
+        // The ACK confirms acceptance, not a completed reboot. USB Serial/JTAG
+        // can stay open across restart; never send release using its old lease.
+        this.close(Object.assign(new Error('Device reset accepted'), { code: 'DEVICE_RESET' }))
+        return response
+      } catch (error) {
+        const rejected = error.response?.ok === false
+        const leaseLost = ['SESSION_REQUIRED', 'SESSION_EXPIRED', 'NOT_OWNER'].includes(error.code)
+        if (rejected && !leaseLost && this.sessionId === owner && this.sessionGeneration === generation) {
+          // An authenticated rejection proves no reset was accepted. Keep the
+          // live lease so normal cleanup still detects a genuine release error.
+          this.state = 'ready'
+          this._startKeepalive()
+        } else {
+          // Timeout, cancellation or link loss after submission is uncertain.
+          // An ownership rejection also requires dropping the obsolete lease.
+          // Preserve the original failure and never replay a destructive reset.
+          if (!rejected) error.reset = { acknowledged: false, outcome: 'unknown' }
+          this.close(error)
+        }
+        throw error
+      }
+    })()
+    const tracked = operation.finally(() => {
+      if (this.resetPromise === tracked) this.resetPromise = null
+    })
+    this.resetPromise = tracked
+    return tracked
   }
 
   async _softReset(command, { timeout, signal }) {

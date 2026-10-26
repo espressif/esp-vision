@@ -4,10 +4,6 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
-### Fixed
-
-- Include ESP32_S31_MOSAICO in the generated website board catalog with its official V1.2 board image and valid target-support documentation, preserving the firmware mapping from the shared board registry.
-
 ### Added
 
 - Added a repository security policy defining ESP-VISION's development and DIY scope, exclusion from the Espressif Bug Bounty Program, private security reporting, and the trusted-network requirements of unauthenticated EV-MUX TCP debugging, with English and Chinese README notices and communication-guide warnings.
@@ -16,6 +12,11 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Simplify host architecture nodes to component names and npm package names, remove operational annotations, and compact the shared diagram so the firmware layers remain prominent.
 - Refresh the shared dark/light/adaptive architecture diagrams and bilingual README/architecture guides for Plugin, standalone Device CLI, public Device Core and the official online Knowledge MCP; show all four public npm versions and package responsibilities in the READMEs.
+
+### Fixed
+
+- Include ESP32_S31_MOSAICO in the generated website board catalog with its official V1.2 board image and valid target-support documentation, preserving the firmware mapping from the shared board registry.
+- Invalidate the previous EV-MUX session after an acknowledged or uncertain hard-reset RPC so USB Serial/JTAG cleanup cannot replace the reset result with a stale `session.release` timeout; serialize reset against session release and renegotiation while preserving confirmed reset rejections and ordinary release failures.
 
 ## [2026.10.23]
 

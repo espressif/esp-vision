@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Invalidate the old lease after acknowledged or uncertain hard reset, block concurrent renegotiation, and serialize cleanup with reset so stale release failures cannot mask its result. Retain live leases after confirmed reset denials and discard explicit ownership rejections.
+
 ## 0.5.1
 
 ### Fixed
