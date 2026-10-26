@@ -17,7 +17,7 @@ device_cli_checks:
     - node tools/ci/mcp/install_host.mjs --output .cache/host-artifacts
     - npm --prefix host/device-cli run build
     - npm --prefix host/device-cli test
-    - node --test tools/ci/mcp/test_release_npm.mjs
+    - node --test tools/ci/mcp/test_install_host.mjs tools/ci/mcp/test_release_npm.mjs
     - export ESP_VISION_NPM_TARBALL_DIR="$CI_PROJECT_DIR/.cache/host-npm-tarballs"
     - node tools/ci/mcp/release_npm.mjs --dry-run --package host/device-cli
   artifacts:

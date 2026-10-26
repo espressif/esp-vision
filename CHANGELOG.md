@@ -15,6 +15,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Validate MR-built Device Core artifacts against their temporary consumer lock and installed source bytes, preserving the published registry lock and all unrelated dependency pins instead of requiring changed Core source to match an immutable published tarball.
 - Include ESP32_S31_MOSAICO in the generated website board catalog with its official V1.2 board image and valid target-support documentation, preserving the firmware mapping from the shared board registry.
 - Invalidate the previous EV-MUX session after an acknowledged or uncertain hard-reset RPC so USB Serial/JTAG cleanup cannot replace the reset result with a stale `session.release` timeout; serialize reset against session release and renegotiation while preserving confirmed reset rejections and ordinary release failures.
 
