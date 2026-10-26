@@ -41,4 +41,3 @@ boards:
     target: esp32s31
   ESP32_S31_MOSAICO:
     target: esp32s31
-    website: false
