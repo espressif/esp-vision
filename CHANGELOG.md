@@ -10,7 +10,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
-- Clarified sensor-native AE/AWB, IPA and manual ISP ownership, OV2710 control support, driver readback versus captured frames, and LSC device-error recovery in the sensor documentation and stubs.
+- Clarified the active IPA JSON control scope, OV2710 sensor-side automatic exposure/gain, sensor-native AE/AWB versus manual ISP ownership, driver readback versus captured frames, and LSC device-error recovery in the sensor documentation and stubs.
 - Simplify host architecture nodes to component names and npm package names, remove operational annotations, and compact the shared diagram so the firmware layers remain prominent.
 - Refresh the shared dark/light/adaptive architecture diagrams and bilingual README/architecture guides for Plugin, standalone Device CLI, public Device Core and the official online Knowledge MCP; show all four public npm versions and package responsibilities in the READMEs.
 

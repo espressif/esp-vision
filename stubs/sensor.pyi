@@ -89,7 +89,9 @@ def get_vflip() -> bool: ...
 #: Optional API: present only in firmware with IPA/ISP control enabled.
 #: Start or stop the IPA controller after camera initialization; briefly pauses capture.
 #: Existing ISP tuning is retained when disabled; enabling returns configured blocks to IPA.
+#: IPA controls only algorithms declared in its active JSON configuration and supported by the backend.
 #: Sensor-side automatic exposure/white balance is independent. Unsupported cameras raise OSError.
+#: OV2710 exposure/gain remain sensor-controlled when IPA is stopped; manual controls stay unsupported.
 def set_ipa(enable: bool) -> None: ...
 #: Optional API: present only in firmware with IPA/ISP control enabled.
 #: Return the IPA controller state, or None when runtime control is unsupported.
