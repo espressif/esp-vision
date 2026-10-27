@@ -72,6 +72,8 @@ Python 输入必须且只能选择一种：内联 ``--source CODE``、本地 ``-
 设备文件与图像采集
 ----------------------------------------
 
+``/models`` 等路径属于设备，Windows 上也应保持原样。无效路径会在连接前被拒绝。Git Bash/MSYS 可能将斜杠开头的参数改写为 Windows 宿主路径；请使用 PowerShell，或仅为该条命令添加 ``MSYS2_ARG_CONV_EXCL="*"`` 前缀，并为本地路径提供经确认的 Windows 格式。仅给 ``/models`` 加引号不能阻止转换。不要从转换后的路径中直接删除盘符，也不要盲目重试设备操作。
+
 .. code-block:: console
 
    esp-vision-device files list --path / --recursive --port COM3

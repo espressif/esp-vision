@@ -260,7 +260,7 @@ function zipCrc32(buffer) {
   return (crc ^ 0xffffffff) >>> 0
 }
 
-function createZip(entries) {
+export function createZip(entries) {
   const localRecords = []
   const centralRecords = []
   let offset = 0
@@ -343,7 +343,7 @@ async function makeWorkbuddyArtifacts(packageInfo, installDirectory) {
   let skill = commonSkill
     .replace(oldCliParagraph, workbuddyCliParagraph)
     .replace('Use `node <plugin-root>/cli/device-cli.mjs --help` for command syntax.', `Use \`node "${portableCliPath}" --help\` for command syntax.`)
-    .replace('[application workflow](references/application-workflow.md)', '@references/application-workflow.md')
+    .replaceAll('[application workflow](references/application-workflow.md)', '@references/application-workflow.md')
   skill = skill.replace(/^description: (.+)$/m, 'description: $1\ndescription_en: $1\ndescription_zh: 使用 ESP-VISION 设备能力与官方固件/API 知识完成具体任务。\nversion: ' + packageInfo.version + '\nauthor: Espressif Systems')
   if (skill.includes('PLUGIN_ROOT') || skill.includes('CLAUDE_PLUGIN_ROOT') || skill.includes('<plugin-root>') || skill.includes('[application workflow]')) {
     fail('The WorkBuddy Skill still contains host-specific plugin paths.', 'INVALID_BUNDLE')

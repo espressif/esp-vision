@@ -87,6 +87,17 @@ const optionError = message => error('ARGUMENT', message)
 const knownDeviceCommands = ['configure', 'control', 'firmware', 'python', 'files', 'capture', 'batch', 'watch']
 const commonOptions = ['port', 'tcp', 'python', 'timeout', 'json', 'role']
 
+function devicePath(value, { root = false, fail = optionError } = {}) {
+  if (typeof value !== 'string' || !value.startsWith('/') || (!root && value === '/')
+      || new TextEncoder().encode(value).length > 123 || /[\x00-\x1f\x7f\\"]/.test(value)
+      || value.includes('..') || value.includes('//') || (value.length > 1 && value.endsWith('/'))) {
+    const shellHint = typeof value === 'string' && /^[A-Za-z]:[\\/]/.test(value)
+      ? ' Received a Windows host path; Git Bash/MSYS may have converted the device path. Use PowerShell or prefix this command with MSYS2_ARG_CONV_EXCL=\"*\" and keep local paths in Windows form.' : ''
+    throw fail('Expected an absolute device path (for example /models), at most 123 UTF-8 bytes, without traversal, trailing slash or forbidden characters.' + shellHint)
+  }
+  return value
+}
+
 function parseTcpAddress(value) {
   const match = /^(?:\[([0-9a-fA-F:]+)\]|([^\s:/@?#]+))(?::([0-9]+))?$/.exec(value)
   if (!match || Number(match[3] ?? 3232) < 1 || Number(match[3] ?? 3232) > 65535) {
@@ -229,6 +240,7 @@ export function parseCli(args) {
     if (!endpoint) throw optionError('Specify --port or --tcp')
     const forms = ['source', 'file', 'path'].filter(key => v[key] !== undefined)
     if (forms.length !== 1) throw optionError('Specify exactly one of --source, --file or --path')
+    if (v.path !== undefined) devicePath(v.path)
     options.completion = v.completion ?? 'wait'
     if (!['wait', 'start'].includes(options.completion)) throw optionError('--completion must be wait or start')
     if (options.completion === 'start' && v.path === undefined) throw optionError('--completion start requires device --path')
@@ -255,6 +267,7 @@ export function parseCli(args) {
       if (v.path !== undefined) throw optionError(`files ${subcommand} uses a positional device path`)
       options.path = pathPositional
     }
+    devicePath(options.path, { root: subcommand === 'list' })
     if (subcommand === 'read') {
       if (!v.output) throw optionError('files read requires --output LOCAL_FILE')
       options.maxBytes = parsePositiveInteger(v['max-bytes'] ?? String(MAX_FILE_OUTPUT), '--max-bytes', { max: MAX_FILE_OUTPUT })
@@ -327,14 +340,7 @@ function validatePlan(plan, planFile) {
     if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) throw planError('Batch local paths must be nonempty strings')
     return resolve(base, value)
   }
-  const devicePath = (value, { root = false } = {}) => {
-    if (typeof value !== 'string' || (!root && value === '/') || !value.startsWith('/')
-        || value.length > 123 || /[\x00-\x1f\x7f\\"]/.test(value)
-        || value.includes('..') || value.includes('//') || (value.length > 1 && value.endsWith('/'))) {
-      throw planError('Batch device paths must be absolute valid device paths')
-    }
-    return value
-  }
+  const planDevicePath = (value, options = {}) => devicePath(value, { ...options, fail: planError })
   return plan.operations.map((operation, index) => {
     const fail = message => { throw planError(`Batch operation ${index + 1}: ${message}`) }
     if (!operation || typeof operation !== 'object' || Array.isArray(operation)
@@ -354,27 +360,27 @@ function validatePlan(plan, planFile) {
       const forms = ['source', 'file', 'path'].filter(key => Object.hasOwn(operation, key))
       if (forms.length !== 1) fail('python requires exactly one of source, file or path')
       if (operation.source !== undefined && typeof operation.source !== 'string') fail('source must be a string')
-      if (operation.path !== undefined) copy.path = devicePath(operation.path)
+      if (operation.path !== undefined) copy.path = planDevicePath(operation.path)
       if (operation.file !== undefined) copy.file = local(operation.file)
     } else if (operation.op === 'files.list') {
-      copy.path = devicePath(operation.path ?? '/', { root: true })
+      copy.path = planDevicePath(operation.path ?? '/', { root: true })
       if (operation.recursive !== undefined && typeof operation.recursive !== 'boolean') fail('recursive must be boolean')
     } else if (operation.op === 'files.read') {
-      copy.path = devicePath(operation.path)
+      copy.path = planDevicePath(operation.path)
       if (operation.output === undefined) fail('files.read requires output')
       copy.output = local(operation.output)
       copy.maxBytes = operation.maxBytes ?? MAX_FILE_OUTPUT
       if (!Number.isSafeInteger(copy.maxBytes) || copy.maxBytes < 1 || copy.maxBytes > MAX_FILE_OUTPUT) fail('maxBytes must be 1..16 MiB')
     } else if (operation.op === 'files.write') {
-      copy.path = devicePath(operation.path)
+      copy.path = planDevicePath(operation.path)
       if (operation.file === undefined) fail('files.write requires file')
       copy.file = local(operation.file)
       if (operation.overwrite !== undefined && typeof operation.overwrite !== 'boolean') fail('overwrite must be boolean')
     } else if (operation.op === 'files.remove') {
-      copy.path = devicePath(operation.path)
+      copy.path = planDevicePath(operation.path)
       if (operation.type !== undefined && !['file', 'directory'].includes(operation.type)) fail('type must be file or directory')
     } else if (operation.op === 'files.mkdir') {
-      copy.path = devicePath(operation.path)
+      copy.path = planDevicePath(operation.path)
       if (operation.recursive !== undefined && typeof operation.recursive !== 'boolean') fail('recursive must be boolean')
     } else if (operation.op === 'capture') {
       if (!['camera', 'screen'].includes(operation.source)) fail('capture source must be camera or screen')

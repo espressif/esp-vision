@@ -6,16 +6,34 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Export source-bound WorkBuddy Expert test candidates as MR/branch CI artifacts; publish fixed tag-version Expert ZIPs and checksums to the Generic Package Registry with GitLab Release attachment links only after protected firmware release qualification, independently of npm publication.
+- Add a reproducible Node.js WorkBuddy Expert ZIP builder with bilingual Agent/Skill metadata, the original CLI and license closure, Knowledge MCP dependency, portable resource paths, and a 512-pixel official-brand avatar; keep the legacy WorkBuddy installer and published npm version unchanged.
 - Added a repository security policy defining ESP-VISION's development and DIY scope, exclusion from the Espressif Bug Bounty Program, private security reporting, and the trusted-network requirements of unauthenticated EV-MUX TCP debugging, with English and Chinese README notices and communication-guide warnings.
 
 ### Changed
 
+- Add shared plugin troubleshooting Q&A for Windows Python/pyserial selection (GitHub #17), host authorization blocks, failed discovery and port ownership, with explicit Skill references and consistent Expert and legacy WorkBuddy reference adaptation.
+- Route functional plugin feedback through duplicate-checked, template-based English GitHub Issues drafts with user-approved submission and attachments; keep Knowledge MCP read-only and security reports private.
+
+- Keep root AGENTS.md focused on repository-wide agreements and navigation; move WorkBuddy platform constraints to the linked plugin maintainer guide.
+
+- Recheck the current WorkBuddy Expert/Skill specifications against the actual archive, document contradictory sample ZIP fields and remaining host/avatar acceptance, and extend archive checks for Agent/Skill metadata and MCP icon resolution.
+
+- Name the WorkBuddy Expert ESP-Vision AI视觉 (ESP-Vision AI), describe its ESP32-based vision development scope in the listing, Agent and Skill, and include ESP32 among the visible discovery tags.
+- Clarify plugin payload identity and safe recovery of old development copies, WorkBuddy's manual activation contract, the intentional Knowledge MCP/local CLI split, and board/firmware-specific ISP and live-capture verification in the packaged Skill and support reference.
 - Clarified the active IPA JSON control scope, OV2710 sensor-side automatic exposure/gain, sensor-native AE/AWB versus manual ISP ownership, driver readback versus captured frames, and LSC device-error recovery in the sensor documentation and stubs.
 - Simplify host architecture nodes to component names and npm package names, remove operational annotations, and compact the shared diagram so the firmware layers remain prominent.
 - Refresh the shared dark/light/adaptive architecture diagrams and bilingual README/architecture guides for Plugin, standalone Device CLI, public Device Core and the official online Knowledge MCP; show all four public npm versions and package responsibilities in the READMEs.
 
 ### Fixed
 
+- Reject invalid CLI device paths before connecting, diagnose Windows host paths caused by shell conversion, and document preservation of device paths in Git Bash/MSYS and PowerShell.
+
+- Normalize WorkBuddy Expert payload permissions to 644/755 while retaining executable files, so source umask differences cannot change checked ZIP bytes or tag retry identity.
+
+- Enforce the ESP32-based Chinese listing scope, 40–50-character description, keywords and visible bilingual tags in both Expert packaging and checked release ZIP consumption, with regressions for missing scope and out-of-range descriptions.
+- Enforce WorkBuddy's 15-character localized Expert name limit before packaging and release publication, use compact ESP-Vision AI names consistently, and record the name/version limits in persistent maintainer guidance.
+- Keep WorkBuddy Expert candidate versions within the platform's 20-character limit by using the pipeline ID without a SHA suffix, retain full source provenance in the archive and receipt, and reject oversized local/release versions before artifact output or publication.
 - Reported the supported manual ISP BF level range (`2..20`) and the `enable=False` disable option when an invalid level is supplied.
 - Validate MR-built Device Core artifacts against their temporary consumer lock and installed source bytes, preserving the published registry lock and all unrelated dependency pins instead of requiring changed Core source to match an immutable published tarball.
 - Include ESP32_S31_MOSAICO in the generated website board catalog with its official V1.2 board image and valid target-support documentation, preserving the firmware mapping from the shared board registry.
