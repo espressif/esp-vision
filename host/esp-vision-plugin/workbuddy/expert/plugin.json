@@ -1,10 +1,5 @@
 {
-  "name": "esp-vision",
   "description": "ESP-Vision expert for ESP32-based vision application development with official firmware knowledge and a bundled local device CLI.",
-  "author": {
-    "name": "Espressif Systems (Shanghai) CO LTD",
-    "email": "libo@espressif.com"
-  },
   "agents": [
     "./agents/esp-vision-development.md"
   ],
@@ -62,13 +57,5 @@
   ],
   "dependencies": {
     "mcpServers": "./.mcp.json"
-  },
-  "homepage": "https://vision.espressif.com/",
-  "license": "Apache-2.0",
-  "keywords": [
-    "esp-vision",
-    "MicroPython",
-    "ESP32",
-    "MCP"
-  ]
+  }
 }

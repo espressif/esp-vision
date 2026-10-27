@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict'
+import { sharedMetadata } from '../scripts/export-common.mjs'
 import { execFile as execFileCallback } from 'node:child_process'
 import { chmod, cp, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -200,7 +201,7 @@ test('Expert export rejects credential-bearing MCP or a symlinked CLI instead of
 })
 
 test('Expert names accept 15 characters per locale and reject 16 and the reported 18-character name', async () => {
-  const manifest = { ...JSON.parse(await readFile(resolve(packageRoot, 'workbuddy/expert/plugin.json'), 'utf8')), version: '0.1.0' }
+  const manifest = sharedMetadata(JSON.parse(await readFile(resolve(packageRoot, 'plugin.json'), 'utf8')), { ...JSON.parse(await readFile(resolve(packageRoot, 'workbuddy/expert/plugin.json'), 'utf8')), version: '0.1.0' })
   for (const locale of ['zh', 'en']) {
     const accepted = { ...manifest, displayName: { ...manifest.displayName, [locale]: 'x'.repeat(15) } }
     assert.doesNotThrow(() => validateManifest(accepted))
@@ -219,7 +220,9 @@ test('CI identities distinguish unpublished candidates, fixed release tags and u
   assert.equal(ciBuildIdentity('0.1.0', { ...env, CI_COMMIT_TAG: 'device-core-v0.5.1' }).releaseTag, null)
   assert.equal(ciBuildIdentity('0.1.0', { ...env, CI_COMMIT_TAG: 'v1.2' }).expertVersion, '1.2.0')
   assert.equal(ciBuildIdentity('0.1.0', { ...env, CI_COMMIT_TAG: '2026.09.01-rc.1' }).expertVersion, '2026.9.1-rc.1')
-  assert.throws(() => ciBuildIdentity('0.1.0', { ...env, CI_COMMIT_SHA: 'short' }), /full source SHA/)
+  for (const value of ['short', env.CI_COMMIT_SHA + '\n']) {
+    assert.throws(() => ciBuildIdentity('0.1.0', { ...env, CI_COMMIT_SHA: value }), /full source SHA/)
+  }
   const root = await temporary(t)
   const candidate = await buildExpertArchive({ outputDirectory: resolve(root, 'candidate'), ciEnvironment: env })
   assert.equal(candidate.sourceVersion, '0.1.0')
@@ -278,7 +281,7 @@ test('local Expert versions enforce the same 20-character limit without truncati
 })
 
 test('Expert manifest rejects missing ESP32 scope, keywords and bilingual discovery tags', async () => {
-  const manifest = { ...JSON.parse(await readFile(resolve(packageRoot, 'workbuddy/expert/plugin.json'), 'utf8')), version: '0.1.0' }
+  const manifest = sharedMetadata(JSON.parse(await readFile(resolve(packageRoot, 'plugin.json'), 'utf8')), { ...JSON.parse(await readFile(resolve(packageRoot, 'workbuddy/expert/plugin.json'), 'utf8')), version: '0.1.0' })
   for (const length of [40, 50]) {
     assert.doesNotThrow(() => validateManifest({ ...manifest, displayDescription: { ...manifest.displayDescription, zh: '基于 ESP32' + 'x'.repeat(length - 8) } }))
   }

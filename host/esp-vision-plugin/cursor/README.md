@@ -1,6 +1,6 @@
 # ESP-Vision 嵌入式 AI 视觉开发 · Cursor
 
-基于 ESP32 的 ESP-VISION 视觉应用开发助手。通过官方 Knowledge MCP 查询固件/API/示例，通过本插件随包本地 CLI 检查用户指定的设备、部署 MicroPython 程序并验证结果。版本 {{VERSION}}，作者 Espressif Systems (Shanghai) CO LTD，联系 libo@espressif.com。
+基于 ESP32 的 ESP-VISION 视觉应用开发助手。通过官方 Knowledge MCP 查询固件/API/示例，通过本插件随包本地 CLI 检查用户指定的设备、部署 MicroPython 程序并验证结果。版本 {{VERSION}}，作者 {{AUTHOR_NAME}}，联系 {{AUTHOR_EMAIL}}。
 
 ## 本地安装
 

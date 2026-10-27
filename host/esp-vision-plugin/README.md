@@ -133,3 +133,18 @@ The candidate uses `.qoder-plugin/plugin.json`, a QoderWork Skill and `qoder.md`
 Build the existing CLI closure, then run `npm run build:cursor -- --output-dir <absolute-artifact-directory>` from this package directory. The resulting ZIP contains a complete `esp-vision/` directory with `.cursor-plugin/plugin.json`, the adapted shared Skill, official Knowledge MCP, local CLI and licenses. Copy that directory to `~/.cursor/plugins/local/`, reload Cursor, and verify it in Customize. See the [Cursor user guide](cursor/README.md) and [maintainer requirements](cursor/MAINTAINER.md). CI retains the ZIP and checksum under `.cache/cursor-plugin/` for one month.
 
 Cursor's official marketplace accepts a public Git repository containing the complete distribution payload. The offline ZIP is suitable for local import/testing and staging that repository; it does not submit a listing. Local-import policy, same-name marketplace precedence, Skill activation, Knowledge connection and real device behavior need host verification. This adapter does not add an `install cursor` command to the existing npm installer or change the published npm 0.1.0 payload.
+
+## Shared sources and platform adapters
+
+Five hosts (Codex, Claude Code, WorkBuddy, QoderWork and Cursor) use one device implementation and one device workflow. Change the shared source first; platform adapters must not introduce host-specific device logic or fork the common Skill body.
+
+| Concern | Authoritative source | Derived views / allowed differences |
+| --- | --- | --- |
+| Device operations | `host/device-core` and `host/device-cli` | All plugin payloads copy the same built CLI, Python adapters and license closure |
+| Version and publisher metadata | `package.json` version; root `plugin.json` identity/publisher/homepage/license/keywords | `scripts/host-manifests.mjs` generates/checks Codex version and Claude metadata; export overlays cannot redefine shared identity |
+| Official knowledge endpoint | Root `mcp.json` | Claude/legacy WorkBuddy configs are generated; export adapters only change the host transport/setup representation |
+| Capability and device policy | `skills/esp-vision-development/SKILL.md` and its shared application-workflow reference | Only installation bindings, frontmatter/localization and reference syntax vary; Agent/role wrappers delegate to this Skill |
+| Export mechanics | `scripts/export-common.mjs` | One validated payload collector, normalized modes, provenance/inventory/checksum and non-overwriting ZIP writer |
+| Platform constraints | Small `cursor/`, `qoderwork/`, `workbuddy/expert/` overlays | Display names, host schema/paths, WorkBuddy limits/avatar and independent Qoder/Expert versions remain platform-specific |
+
+The platform `plugin.json` templates are partial overlays, not standalone distribution manifests. Never hand-edit the generated Claude/legacy MCP compatibility views; rebuild and run `check:package` to detect drift. Shared-source tests alter the canonical policy and metadata in a fixture and verify propagation to all five hosts, including both WorkBuddy formats. Root AGENTS.md remains a navigation guide.

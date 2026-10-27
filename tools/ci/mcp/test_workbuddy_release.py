@@ -20,7 +20,8 @@ def write_expert_artifact(directory, version, tag, commit, display_name=None, me
                 else {'en': 'ESP-Vision AI', 'zh': 'ESP-Vision AI视觉'}}
     template = json.loads((Path(__file__).resolve().parents[3]
                            / 'host/esp-vision-plugin/workbuddy/expert/plugin.json').read_text())
-    manifest.update({key: template[key] for key in ('displayDescription', 'keywords', 'tags')})
+    common = json.loads((Path(__file__).resolve().parents[3] / 'host/esp-vision-plugin/plugin.json').read_text())
+    manifest.update({key: {**common, **template}[key] for key in ('displayDescription', 'keywords', 'tags')})
     manifest.update(metadata or {})
     entries = {'BUILD-PROVENANCE.json': json.dumps(build).encode(),
                '.codebuddy-plugin/plugin.json': json.dumps(manifest).encode()}
