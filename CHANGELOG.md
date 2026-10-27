@@ -6,12 +6,21 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Prepare a separate QoderWork plugin candidate ZIP with host-specific metadata, role instructions, official Knowledge MCP setup, the unchanged local CLI/license closure, and explicit marketplace-validation gaps and linked maintainer build instructions.
+
 - Export source-bound WorkBuddy Expert test candidates as MR/branch CI artifacts; publish fixed tag-version Expert ZIPs and checksums to the Generic Package Registry with GitLab Release attachment links only after protected firmware release qualification, independently of npm publication.
 - Add a reproducible Node.js WorkBuddy Expert ZIP builder with bilingual Agent/Skill metadata, the original CLI and license closure, Knowledge MCP dependency, portable resource paths, and a 512-pixel official-brand avatar; keep the legacy WorkBuddy installer and published npm version unchanged.
 - Added a repository security policy defining ESP-VISION's development and DIY scope, exclusion from the Espressif Bug Bounty Program, private security reporting, and the trusted-network requirements of unauthenticated EV-MUX TCP debugging, with English and Chinese README notices and communication-guide warnings.
 
 ### Changed
 
+- Document durable QoderWork release attachments from verified tag artifacts and label CI downloads for both plugin platforms.
+
+- Use the requested Qoder display name “ESP-Vision 嵌入式 AI 视觉开发” consistently in the manifest, role and package documentation.
+
+- Verify that actual QoderWork exports retain the shared troubleshooting Q&A, explicit Skill reference, consent-based GitHub feedback and private security-reporting link.
+
+- Document the source-bound host dependency preparation for QoderWork candidates so a same-version historical npm SDK cannot be mistaken for the CI-tested source payload.
 - Add shared plugin troubleshooting Q&A for Windows Python/pyserial selection (GitHub #17), host authorization blocks, failed discovery and port ownership, with explicit Skill references and consistent Expert and legacy WorkBuddy reference adaptation.
 - Route functional plugin feedback through duplicate-checked, template-based English GitHub Issues drafts with user-approved submission and attachments; keep Knowledge MCP read-only and security reports private.
 
@@ -27,6 +36,11 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Verify the Qoder upload ZIP retains Windows device-path shell guidance so native Node receives `/models` unchanged.
+
+- Normalize QoderWork payload permissions to executable 755 or non-executable 644, preserving file bytes while making candidate ZIPs reproducible across local and CI umasks.
+
+- Build QoderWork CI candidates with strictly validated GitLab source SHA metadata without requiring Git in the slim Node image; retain local Git provenance and cover successful/no-output failure paths with an empty executable search path.
 - Reject invalid CLI device paths before connecting, diagnose Windows host paths caused by shell conversion, and document preservation of device paths in Git Bash/MSYS and PowerShell.
 
 - Normalize WorkBuddy Expert payload permissions to 644/755 while retaining executable files, so source umask differences cannot change checked ZIP bytes or tag retry identity.

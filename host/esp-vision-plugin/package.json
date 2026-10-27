@@ -43,6 +43,7 @@
     "check:package": "node scripts/check-package.mjs && node scripts/smoke-plugin.mjs",
     "archive": "npm run build && node scripts/archive.mjs",
     "test": "node --test test/*.test.mjs",
-    "build:workbuddy-expert": "node scripts/workbuddy-expert.mjs"
+    "build:workbuddy-expert": "node scripts/workbuddy-expert.mjs",
+    "build:qoderwork": "node scripts/qoderwork.mjs"
   }
 }

@@ -18,12 +18,13 @@ plugin_checks:
     - npm --prefix host/esp-vision-plugin run build
     - npm --prefix host/esp-vision-plugin test
     - npm --prefix host/esp-vision-plugin run build:workbuddy-expert -- --ci --output-dir "$CI_PROJECT_DIR/.cache/workbuddy-expert"
+    - npm --prefix host/esp-vision-plugin run build:qoderwork -- --output-dir "$CI_PROJECT_DIR/.cache/qoderwork-plugin"
     - export ESP_VISION_NPM_TARBALL_DIR="$CI_PROJECT_DIR/.cache/plugin-npm-tarballs"
     - node tools/ci/mcp/release_npm.mjs --dry-run --package host/esp-vision-plugin
   artifacts:
-    name: "workbuddy-expert-$CI_COMMIT_SHORT_SHA-$CI_PIPELINE_ID"
-    expose_as: 'WorkBuddy Expert candidate'
-    paths: [.cache/plugin-npm-tarballs/, .cache/workbuddy-expert/]
+    name: "esp-vision-plugins-$CI_COMMIT_SHORT_SHA-$CI_PIPELINE_ID"
+    expose_as: 'Plugin candidates'
+    paths: [.cache/plugin-npm-tarballs/, .cache/workbuddy-expert/, .cache/qoderwork-plugin/]
     expire_in: 1 month
 
 publish_plugin_npm:
