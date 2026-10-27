@@ -462,3 +462,12 @@ test('watch requires an explicit positive bounded duration and a device', () => 
     ['watch', '--duration', '25'],
   ]) assert.throws(() => parseCli(args))
 })
+
+
+test('Windows serial file listing preserves the device path and Python launcher', async () => {
+  const options = parseCli(['files', 'list', '--port', 'COM9', '--path', '/models', '--json', '--python', 'py'])
+  const h = harness()
+  await runCli(options, h.dependencies)
+  assert.equal(h.calls.find(([name]) => name === 'files.list')[1].path, '/models')
+  assert.equal(options.python, 'py')
+})

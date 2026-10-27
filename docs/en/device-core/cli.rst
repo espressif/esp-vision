@@ -72,6 +72,8 @@ Foreground Python execution and Python steps in a batch stream ``python.output``
 Device files and capture
 ----------------------------------------
 
+Device paths such as ``/models`` belong to the device, including on Windows. Invalid paths are rejected before connecting. Git Bash/MSYS can rewrite slash-prefixed arguments to Windows host paths; use PowerShell or prefix the individual command with ``MSYS2_ARG_CONV_EXCL="*"`` and supply verified Windows-form local paths. Quoting ``/models`` alone does not prevent shell conversion. Do not strip a drive prefix from a converted path or retry device operations blindly.
+
 .. code-block:: console
 
    esp-vision-device files list --path / --recursive --port COM3

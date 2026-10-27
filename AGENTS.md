@@ -2,6 +2,8 @@
 
 ESP-VISION contains the MicroPython vision firmware for ESP32-P4/S3/S31 and the independently versioned `@esp-vision/device-core` host SDK. IDE, Agent, CLI and custom hosts share Device Core above EV-MUX v4; IDE/Agent applications live in separate repositories and consume the npm package.
 
+Keep this file focused on repository-wide agreements and navigation. Put component-specific requirements, platform limits and investigation details in the linked component guides.
+
 ## Start here
 
 | Task | Implementation / entry point | Reference |
@@ -14,6 +16,7 @@ ESP-VISION contains the MicroPython vision firmware for ESP32-P4/S3/S31 and the 
 | Camera and LCD capture | `platform/{camera,display,preview}.c`, `boards/<BOARD>/camera.c` | [Preview/capture](docs/en/communication/preview-debug.rst) |
 | Firmware builds and boards | `idf_ext.py`, `micropython.cmake`, `boards/<BOARD>/` | Board configuration and `.gitlab/ci/` |
 | Hardware acceptance | `host/device-core/tests/hardware-check.mjs`, `tools/ci/flash_and_test.py` | [Validation](docs/en/communication/validation.rst) |
+| Host plugin packaging and marketplace acceptance | `host/esp-vision-plugin/`, `tools/ci/mcp/` | [Plugin maintainer guide](host/esp-vision-plugin/README.md) |
 | Licensing | `LICENSE`, source headers, `host/device-core/NOTICE` | [License inventory](docs/en/license/index.rst) |
 
 Documentation lives in `docs/en/` and `docs/zh_CN/`; update both translations for changed behavior. Device Core's complete documentation belongs in this documentation center; its package README links there.

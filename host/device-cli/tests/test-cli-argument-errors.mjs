@@ -9,6 +9,10 @@ const entry = fileURLToPath(new URL('../src/cli.js', import.meta.url))
 
 test('argument failures retain the requested command and exit before opening a device', () => {
   const cases = [
+    [['files', 'list', '--path', 'C:/Program Files/Git/models'], 'files list', /MSYS2_ARG_CONV_EXCL/],
+    [['python', '--path', 'C:\\msys64\\app.py'], 'python', /PowerShell/],
+    [['files', 'mkdir', '/data/../other'], 'files mkdir', /absolute device path/],
+    [['files', 'list', '--path', '/' + '模'.repeat(41)], 'files list', /123 UTF-8 bytes/],
     [['python', '--path', '/app.py', '--completion', 'start', '--timeout', '100'], 'python', /--completion wait/],
     [['control', '--action', 'stop', '--mode', 'soft'], 'control', /--mode applies only/],
     [['control', '--action', 'reset'], 'control', /reset requires --mode/],

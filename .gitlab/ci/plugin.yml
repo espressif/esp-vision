@@ -17,10 +17,13 @@ plugin_checks:
     - node tools/ci/mcp/install_host.mjs --output .cache/plugin-core-artifacts
     - npm --prefix host/esp-vision-plugin run build
     - npm --prefix host/esp-vision-plugin test
+    - npm --prefix host/esp-vision-plugin run build:workbuddy-expert -- --ci --output-dir "$CI_PROJECT_DIR/.cache/workbuddy-expert"
     - export ESP_VISION_NPM_TARBALL_DIR="$CI_PROJECT_DIR/.cache/plugin-npm-tarballs"
     - node tools/ci/mcp/release_npm.mjs --dry-run --package host/esp-vision-plugin
   artifacts:
-    paths: [.cache/plugin-npm-tarballs/]
+    name: "workbuddy-expert-$CI_COMMIT_SHORT_SHA-$CI_PIPELINE_ID"
+    expose_as: 'WorkBuddy Expert candidate'
+    paths: [.cache/plugin-npm-tarballs/, .cache/workbuddy-expert/]
     expire_in: 1 month
 
 publish_plugin_npm:
@@ -51,3 +54,31 @@ publish_plugin_npm:
     - export TMPDIR="$CI_PROJECT_DIR/.cache/plugin-tmp" TMP="$CI_PROJECT_DIR/.cache/plugin-tmp" TEMP="$CI_PROJECT_DIR/.cache/plugin-tmp"
     - mkdir -p "$TMPDIR"
     - node tools/ci/mcp/release_npm.mjs --package host/esp-vision-plugin --tarball-dir .cache/plugin-npm-tarballs
+
+# Attach exactly the checked tag build; never rebuild or republish npm here.
+publish_workbuddy_expert:
+  stage: post_deploy
+  image: python:3.12-alpine
+  tags: [build]
+  resource_group: workbuddy-expert-release
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_TAG =~ /^(v\d+\.\d+(\.\d+)?|\d{4}\.\d{1,2}\.\d{1,2})($|[-.])/'
+  needs:
+    - job: plugin_checks
+      artifacts: true
+    - job: qualify_firmware_release
+      artifacts: false
+    - job: upload-dl-trigger
+      artifacts: false
+    - job: release_source_order_checks
+      artifacts: false
+    - job: mcp_release_contract_checks
+      artifacts: false
+  script:
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/plugin-tmp" TMP="$CI_PROJECT_DIR/.cache/plugin-tmp" TEMP="$CI_PROJECT_DIR/.cache/plugin-tmp"
+    - mkdir -p "$TMPDIR"
+    - >-
+      python tools/ci/mcp/workbuddy_release.py --directory .cache/workbuddy-expert
+      --tag "$CI_COMMIT_TAG" --source-commit "$CI_COMMIT_SHA" --publish

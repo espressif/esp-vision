@@ -1,0 +1,74 @@
+{
+  "name": "esp-vision",
+  "description": "ESP-Vision expert for ESP32-based vision application development with official firmware knowledge and a bundled local device CLI.",
+  "author": {
+    "name": "Espressif Systems (Shanghai) CO LTD",
+    "email": "libo@espressif.com"
+  },
+  "agents": [
+    "./agents/esp-vision-development.md"
+  ],
+  "skills": [
+    "./skills/esp-vision-development"
+  ],
+  "expertType": "agent",
+  "agentName": "esp-vision-development",
+  "displayName": {
+    "en": "ESP-Vision AI",
+    "zh": "ESP-Vision AI视觉"
+  },
+  "profession": {
+    "en": "Embedded Vision Development Expert",
+    "zh": "嵌入式视觉开发专家"
+  },
+  "displayDescription": {
+    "en": "Develop ESP32-based vision applications with official ESP-Vision API and firmware knowledge, inspect selected devices, deploy programs, and verify camera and display behavior.",
+    "zh": "基于 ESP32 的视觉应用开发专家，查询官方接口与固件知识，协助设备检查、程序部署和视觉验证。"
+  },
+  "avatar": "avatars/esp-vision.png",
+  "categoryId": "02-Engineering",
+  "defaultInitPrompt": {
+    "zh": "查询我的开发板支持哪些 ESP-VISION 视觉 API",
+    "en": "Find the ESP-VISION vision APIs supported by my board"
+  },
+  "plugin": "esp-vision",
+  "tags": [
+    {
+      "en": "Embedded Vision",
+      "zh": "嵌入式视觉"
+    },
+    {
+      "en": "MicroPython",
+      "zh": "MicroPython"
+    },
+    {
+      "en": "ESP32",
+      "zh": "ESP32"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "查询我的开发板支持哪些 ESP-VISION 视觉 API",
+      "en": "Find the ESP-VISION vision APIs supported by my board"
+    },
+    {
+      "zh": "检查我指定设备的固件和连接状态",
+      "en": "Inspect firmware and connection status for the device I select"
+    },
+    {
+      "zh": "帮我部署并验证持续运行的视觉应用",
+      "en": "Help deploy and verify a continuously running vision application"
+    }
+  ],
+  "dependencies": {
+    "mcpServers": "./.mcp.json"
+  },
+  "homepage": "https://vision.espressif.com/",
+  "license": "Apache-2.0",
+  "keywords": [
+    "esp-vision",
+    "MicroPython",
+    "ESP32",
+    "MCP"
+  ]
+}

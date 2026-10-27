@@ -1,4 +1,6 @@
-# ESP-VISION for WorkBuddy
+# ESP-VISION for WorkBuddy (legacy Skill export)
+
+This guide describes the legacy npm install workflow. The maintainer's separate Expert ZIP includes an Agent, Skill and MCP dependency and uses the Expert publication flow; it does not replace this installer output.
 
 The npm installer prepares a local WorkBuddy Skill package and the official ESP-VISION Knowledge MCP configuration. WorkBuddy completes the installation through its documented user interface; this installer does not edit WorkBuddy configuration files or claim that the Skill or connector is active.
 

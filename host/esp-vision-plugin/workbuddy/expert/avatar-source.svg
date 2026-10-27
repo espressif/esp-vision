@@ -1,0 +1,31 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="65 65 280 280" width="512" height="512"><defs>
+    <style>
+      .cls-1 {
+        fill: #e8362d;
+      }
+
+      .cls-2 {
+        fill: #fff;
+      }
+
+      .cls-3 {
+        fill: #f4f4f4;
+        font-family: SourceHanSansCN-Light-GBpc-EUC-H, 'Source Han Sans CN';
+        font-size: 100px;
+        font-weight: 300;
+        letter-spacing: .01em;
+      }
+
+      .cls-4 {
+        fill: #1b1b1b;
+      }
+    </style>
+  </defs>
+  <rect x="65" y="65" width="280" height="280" fill="white" /><g>
+    <circle class="cls-4" cx="205.23" cy="206.09" r="41.81" />
+    <circle class="cls-2" cx="213.84" cy="199.58" r="9.87" />
+    <path class="cls-4" d="M273.38,171.14h-6.08c0-14.85-12.04-26.89-26.89-26.89v-6.08c14.85,0,26.89-12.04,26.89-26.89h6.08c0,14.85,12.04,26.89,26.89,26.89v6.08c-14.85,0-26.89,12.04-26.89,26.89Z" />
+    <path class="cls-1" d="M299.9,171.03v70.59c0,32.66-26.47,59.14-59.14,59.14h-71.06c-32.66,0-59.14-26.48-59.14-59.14v-71.06c0-32.66,26.47-59.13,59.14-59.13h70.69v32.76h-71.43c-14.17,0-25.65,11.48-25.65,25.64v72.53c0,14.16,11.48,25.64,25.65,25.64h72.52c14.16,0,25.65-11.48,25.65-25.64v-71.32h32.76Z" />
+  </g>
+  </svg>

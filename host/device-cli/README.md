@@ -58,3 +58,5 @@ For a continuous app, finish directory operations and uploads before starting it
 Status, Python output, firmware phases, cancellation, errors, and duration are NDJSON events on stderr. SIGINT exits with code 130, SIGTERM with 143, argument/plan errors with 2, other failures with 1, and success with 0. Busy or uncertain operations are never retried automatically.
 
 Inspect JSON output uses the same versioned envelope as other commands. Human-readable inspect output remains a terminal table.
+
+Device paths such as `/models` stay absolute device paths on Windows. Git Bash/MSYS may rewrite them; use PowerShell or prefix the individual command with `MSYS2_ARG_CONV_EXCL="*"`, supplying local paths in Windows form. Quoting the device path alone does not prevent conversion. Invalid device paths now fail before connecting, with a shell hint for Windows host paths.
