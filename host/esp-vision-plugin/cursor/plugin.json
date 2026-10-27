@@ -1,0 +1,24 @@
+{
+  "name": "esp-vision",
+  "displayName": "ESP-Vision 嵌入式 AI 视觉开发",
+  "version": "0.1.0",
+  "description": "Develop ESP32-based ESP-VISION applications with official firmware knowledge and the bundled local device CLI.",
+  "author": {
+    "name": "Espressif Systems (Shanghai) CO LTD",
+    "email": "libo@espressif.com"
+  },
+  "homepage": "https://vision.espressif.com/",
+  "repository": "https://github.com/espressif/esp-vision",
+  "license": "Apache-2.0",
+  "keywords": [
+    "esp-vision",
+    "ESP32",
+    "MicroPython",
+    "embedded-vision"
+  ],
+  "logo": "assets/esp-vision-logo.png",
+  "skills": [
+    "./skills/esp-vision-development"
+  ],
+  "mcpServers": "./mcp.json"
+}

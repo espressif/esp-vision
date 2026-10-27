@@ -53,6 +53,8 @@ After a CLI operation, inspect the result before retrying if it timed out, was c
 | Codex | Portable `plugin.json`; `.agents/plugins/marketplace.json` | `mcp.json`, remote `streamable-http` |
 | Claude Code | `.claude-plugin/plugin.json`; `.claude-plugin/marketplace.json` | `.mcp.json`, remote `http` |
 | WorkBuddy | Local Skill ZIP uploaded through WorkBuddy UI | Separate `mcp.json`, remote `streamableHttp`; WorkBuddy UI activation required |
+| Cursor export | `.cursor-plugin/plugin.json`, adapted shared Skill | `mcp.json`, fixed official HTTPS URL |
+| QoderWork export | `.qoder-plugin/plugin.json`, Skill and `qoder.md` | Declarative Knowledge MCP setup |
 | WorkBuddy Expert export | `.codebuddy-plugin/plugin.json`, Agent and Skill in one ZIP | Declared `.mcp.json` dependency, remote `http`; platform parsing and activation require target-host acceptance |
 
 Codex and Claude discover the same `skills/esp-vision-development/SKILL.md`. The legacy WorkBuddy adapter receives a format-adapted copy in the ZIP, with its documented `@references/` syntax and a persistent absolute path to the installed `cli/device-cli.mjs`. Its ZIP also carries the full dependency-closed CLI, official logo and provenance, and license notices. All hosts use the same installed CLI artifact. Packaging checks manifest/version integrity, absence of an embedded device MCP, and isolated CLI `--help` and `inspect` runs using a fake Python serial runner, including the copy extracted from the WorkBuddy ZIP. This does not substitute for app activation and acceptance; WorkBuddy's Skill import and Knowledge MCP connection require the documented UI steps.
@@ -125,3 +127,9 @@ Expert publication follows the existing firmware release gate but does not add f
 Maintainers can prepare the separate QoderWork Plugin candidate after building the bundled CLI: `npm run build:qoderwork -- --output-dir <absolute-artifact-directory>` from this package directory. Keep outputs outside the source tree. See the [QoderWork maintainer guide](qoderwork/MAINTAINER.md), [candidate overview](qoderwork/README.md) and [Knowledge MCP setup/dependency notes](qoderwork/CONNECTORS.md). `plugin_checks` retains the ZIP and SHA-256 sidecar as CI artifacts.
 
 The candidate uses `.qoder-plugin/plugin.json`, a QoderWork Skill and `qoder.md` role instructions with the unchanged local CLI and licenses. It preserves npm `0.1.0` and the existing installers. QoderWork client structure precheck, installed resource retention, activation, Knowledge dependency handling and public marketplace review remain unverified; the builder neither installs nor submits a release.
+
+## Cursor Plugin export
+
+Build the existing CLI closure, then run `npm run build:cursor -- --output-dir <absolute-artifact-directory>` from this package directory. The resulting ZIP contains a complete `esp-vision/` directory with `.cursor-plugin/plugin.json`, the adapted shared Skill, official Knowledge MCP, local CLI and licenses. Copy that directory to `~/.cursor/plugins/local/`, reload Cursor, and verify it in Customize. See the [Cursor user guide](cursor/README.md) and [maintainer requirements](cursor/MAINTAINER.md). CI retains the ZIP and checksum under `.cache/cursor-plugin/` for one month.
+
+Cursor's official marketplace accepts a public Git repository containing the complete distribution payload. The offline ZIP is suitable for local import/testing and staging that repository; it does not submit a listing. Local-import policy, same-name marketplace precedence, Skill activation, Knowledge connection and real device behavior need host verification. This adapter does not add an `install cursor` command to the existing npm installer or change the published npm 0.1.0 payload.

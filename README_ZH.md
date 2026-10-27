@@ -62,6 +62,8 @@ IDE 和自定义 SDK 应用直接使用 Device Core。AI 客户端与独立 Agen
 | [@esp-vision/knowledge-mcp](https://www.npmjs.com/package/@esp-vision/knowledge-mcp) | 知识服务与版本化快照，支持 stdio 和 HTTP 传输 | [Knowledge MCP](host/knowledge-mcp/README.md) |
 | [@esp-vision/plugin](https://www.npmjs.com/package/@esp-vision/plugin) | 为 Codex、Claude Code、WorkBuddy 提供 Skill、内置 Device CLI 和官方在线 Knowledge MCP 配置 | [插件安装](host/esp-vision-plugin/README.md) |
 
+源码构建还提供独立的 WorkBuddy Expert、QoderWork 和 [Cursor Plugin 导出包](host/esp-vision-plugin/cursor/MAINTAINER.md)，复用随包 CLI 与 Skill。Cursor 本地测试使用 `~/.cursor/plugins/local/`；各宿主仍需分别验证安装和激活。
+
 官方插件连接 `https://mcp.vision.espressif.com/mcp`，统一维护在线知识。Knowledge npm 包也支持自行部署。
 
 ## 快速开始

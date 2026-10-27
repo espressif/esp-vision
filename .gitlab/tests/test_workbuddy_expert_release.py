@@ -14,6 +14,8 @@ class ExpertReleaseContractTests(unittest.TestCase):
         job = yaml.safe_load((ROOT / '.gitlab/ci/plugin.yml').read_text())['plugin_checks']
         self.assertNotIn('rules', job)
         self.assertIn('.cache/workbuddy-expert/', job['artifacts']['paths'])
+        self.assertIn('.cache/cursor-plugin/', job['artifacts']['paths'])
+        self.assertTrue(any('build:cursor -- --output-dir' in line for line in job['script']))
         self.assertIn('expose_as', job['artifacts'])
         self.assertIn('$CI_COMMIT_SHORT_SHA', job['artifacts']['name'])
         self.assertIn('$CI_PIPELINE_ID', job['artifacts']['name'])

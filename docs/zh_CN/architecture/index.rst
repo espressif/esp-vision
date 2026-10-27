@@ -15,7 +15,7 @@ ESP-VISION 将主机工具、在线知识与设备固件分开：IDE 和自定�
 --------
 
 - **主机应用：** IDE 提供编辑/调试界面，自定义应用使用 SDK，AI 客户端和独立 Agent 根据任务选择工具；Agent 自己拥有 AI loop。
-- **Plugin** （``host/esp-vision-plugin``，``@esp-vision/plugin``）：为 Codex、Claude Code、WorkBuddy 打包一个能力导向的 Skill、固定版本 Device CLI 和官方 Knowledge HTTP 端点配置。
+- **Plugin** （``host/esp-vision-plugin``，``@esp-vision/plugin``）：为 Codex、Claude Code、WorkBuddy 打包一个能力导向的 Skill、固定版本 Device CLI 和官方 Knowledge HTTP 端点配置，并提供独立的 WorkBuddy Expert、QoderWork 与 Cursor 导出适配。宿主加载和市场上架须分别完成平台验收。
 - **Device CLI** （``host/device-cli``，``@esp-vision/device-cli``）：通过 shell 命令、JSON 结果、流式事件及二进制输出文件提供设备能力；插件内置副本和独立命令都使用 Device Core 公共 API。
 - **Knowledge MCP** （``host/knowledge-mcp``，``@esp-vision/knowledge-mcp``）：基于版本化快照提供 API、文档和示例查询。官方插件使用在线 HTTP 服务；npm 包支持 stdio、HTTP 自行部署。主仓构建快照、npm 包和不可变镜像，website 负责部署该镜像；HTTP 记录匿名每日汇总统计。
 - **Device Core** （``host/device-core``）：独立版本的 ``@esp-vision/device-core`` npm 包负责协议解析、请求关联、会话、保活与操作生命周期。图中只选有代表性的 API 名称，完整契约见 :doc:`../device-core/api`。

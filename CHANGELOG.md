@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Add a Cursor Plugin export with the shared ESP-VISION Skill, official Knowledge MCP and complete local CLI/license closure, source provenance, deterministic ZIP/checksum output, documented local import and Git-based marketplace submission, and CI candidate artifacts.
+
 - Prepare a separate QoderWork plugin candidate ZIP with host-specific metadata, role instructions, official Knowledge MCP setup, the unchanged local CLI/license closure, and explicit marketplace-validation gaps and linked maintainer build instructions.
 
 - Export source-bound WorkBuddy Expert test candidates as MR/branch CI artifacts; publish fixed tag-version Expert ZIPs and checksums to the Generic Package Registry with GitLab Release attachment links only after protected firmware release qualification, independently of npm publication.
