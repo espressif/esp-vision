@@ -18,7 +18,7 @@
   },
   "displayDescription": {
     "en": "Develop ESP32-based vision applications with official ESP-Vision API and firmware knowledge, inspect selected devices, deploy programs, and verify camera and display behavior.",
-    "zh": "基于 ESP32 的视觉应用开发专家，查询官方接口与固件知识，协助设备检查、程序部署和视觉验证。"
+    "zh": "基于 ESP32 的视觉应用开发专家，查询官方接口与固件知识，协助完成设备检查、程序部署和视觉验证。"
   },
   "avatar": "avatars/esp-vision.png",
   "categoryId": "02-Engineering",
