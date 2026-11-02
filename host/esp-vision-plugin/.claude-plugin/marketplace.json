@@ -8,8 +8,8 @@
     {
       "name": "esp-vision",
       "source": "./",
-      "description": "ESP-VISION firmware knowledge and local device development tools."
+      "description": "ESP-VISION device operations through a bundled local CLI and official online firmware knowledge."
     }
   ],
-  "description": "ESP-VISION local device tools and online firmware knowledge"
+  "description": "ESP-VISION device operations through a bundled local CLI and official online firmware knowledge."
 }

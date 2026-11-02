@@ -3,8 +3,10 @@
 import { chmod, copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { syncHostManifests } from './host-manifests.mjs'
 
 const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+await syncHostManifests(pluginRoot)
 const cliPackage = resolve(pluginRoot, '../device-cli')
 const built = resolve(cliPackage, 'dist')
 const cli = resolve(pluginRoot, 'cli')

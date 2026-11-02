@@ -1,6 +1,6 @@
 # ESP-Vision AI视觉
 
-Author: Espressif Systems (Shanghai) CO LTD. Contact: libo@espressif.com. Expert version: {{VERSION}}. Source plugin/npm version: {{SOURCE_VERSION}}.
+Author: {{AUTHOR_NAME}}. Contact: {{AUTHOR_EMAIL}}. Expert version: {{VERSION}}. Source plugin/npm version: {{SOURCE_VERSION}}.
 
 ESP-Vision helps develop ESP32-based vision applications. This Expert ZIP bundles an Agent, the ESP-Vision development Skill, the original dependency-closed device CLI, required third-party license notices, and the official Knowledge MCP dependency. It is a new host-format export, not an npm release or proof of WorkBuddy activation.
 

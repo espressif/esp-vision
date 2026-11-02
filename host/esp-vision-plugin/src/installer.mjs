@@ -334,17 +334,23 @@ function hashWorkbuddyArtifacts(artifacts) {
   return hash.digest('hex')
 }
 
+export function replaceSkillParagraph(text, prefix, replacement) {
+  const paragraphs = text.split('\n\n')
+  if (paragraphs.filter(value => value.startsWith(prefix)).length !== 1) {
+    fail(`The packaged Skill no longer matches the adapter paragraph: ${prefix}`, 'INVALID_BUNDLE')
+  }
+  return paragraphs.map(value => value.startsWith(prefix) ? replacement : value).join('\n\n')
+}
+
 async function makeWorkbuddyArtifacts(packageInfo, installDirectory) {
   const commonSkill = await readFile(resolve(packageInfo.packageRoot, 'skills/esp-vision-development/SKILL.md'), 'utf8')
-  const oldCliParagraph = 'Invoke the installed plugin copy with Node and the absolute path to `cli/device-cli.mjs`. Resolve the plugin root from the current host\'s installed plugin path, not the user\'s project working directory. Codex hook commands can use `PLUGIN_ROOT`; Claude Code hook commands can use `CLAUDE_PLUGIN_ROOT`. If a shell session does not expose either path, read the local marketplace/plugin path with the host\'s native list command and use the installed copy. Do not invoke a global `esp-vision-device` command, `npx`, or a separate MCP device server. The standalone `@esp-vision/device-cli` package is also available to users who want the CLI outside this plugin; the plugin carries its own versioned copy.'
+  const publisher = (await readJson(resolve(packageInfo.packageRoot, 'plugin.json'), 'plugin manifest')).author.name
   const portableCliPath = join(installDirectory, 'cli/device-cli.mjs').replaceAll('\\', '/')
   const workbuddyCliParagraph = `Invoke Node with this persistent local CLI path: \`${portableCliPath}\`. Quote the path because it may contain spaces. This path is independent of WorkBuddy's internal Skill storage. The ZIP also includes a dependency-closed portable CLI copy at \`scripts/cli/device-cli.mjs\`. Do not invoke a global \`esp-vision-device\` command, \`npx\`, or a separate MCP device server.`
-  if (!commonSkill.includes(oldCliParagraph)) fail('The packaged ESP-VISION Skill no longer matches the WorkBuddy adapter template.', 'INVALID_BUNDLE')
-  let skill = commonSkill
-    .replace(oldCliParagraph, workbuddyCliParagraph)
-    .replace('Use `node <plugin-root>/cli/device-cli.mjs --help` for command syntax.', `Use \`node "${portableCliPath}" --help\` for command syntax.`)
+  let skill = replaceSkillParagraph(commonSkill, 'Invoke the installed plugin copy with Node', workbuddyCliParagraph)
+    .replace('Use `node "${CLI:?Set CLI to the verified installed bundle path}" --help` for command syntax.', `Use \`node "${portableCliPath}" --help\` for command syntax.`)
     .replaceAll('[application workflow](references/application-workflow.md)', '@references/application-workflow.md')
-  skill = skill.replace(/^description: (.+)$/m, 'description: $1\ndescription_en: $1\ndescription_zh: 使用 ESP-VISION 设备能力与官方固件/API 知识完成具体任务。\nversion: ' + packageInfo.version + '\nauthor: Espressif Systems')
+  skill = skill.replace(/^description: (.+)$/m, 'description: $1\ndescription_en: $1\ndescription_zh: 使用 ESP-VISION 设备能力与官方固件/API 知识完成具体任务。\nversion: ' + packageInfo.version + '\nauthor: ' + JSON.stringify(publisher))
   if (skill.includes('PLUGIN_ROOT') || skill.includes('CLAUDE_PLUGIN_ROOT') || skill.includes('<plugin-root>') || skill.includes('[application workflow]')) {
     fail('The WorkBuddy Skill still contains host-specific plugin paths.', 'INVALID_BUNDLE')
   }

@@ -6,8 +6,10 @@ import { access, readFile, readdir, stat } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { syncHostManifests } from './host-manifests.mjs'
 
 const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+await syncHostManifests(pluginRoot, { check: true })
 const plugin = JSON.parse(await readFile(resolve(pluginRoot, 'plugin.json'), 'utf8'))
 const npmPackage = JSON.parse(await readFile(resolve(pluginRoot, 'package.json'), 'utf8'))
 assert.equal(npmPackage.name, '@esp-vision/plugin')

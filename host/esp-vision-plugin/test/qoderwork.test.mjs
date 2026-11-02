@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict'
+import { sharedMetadata } from '../scripts/export-common.mjs'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -89,7 +90,7 @@ test('QoderWork candidate roundtrips deterministically with original runtime/lic
     assert.doesNotMatch(text(path), /<实际安装路径>|<plugin-root>|\/absolute\/installed|\/dev\/selected-device/)
     assert.match(text(path), /CLI:\?Set CLI to the verified installed bundle path/)
   }
-  assert.match(text('qoder.md'), /设备会话、授权、脚本中断和验收/)
+  assert.match(text('qoder.md'), /会话所有权、授权、脚本中断、诊断与反馈/)
   assert.match(text('CONNECTORS.md'), /尚无平台证据/)
   const provenance = JSON.parse(text('BUILD-PROVENANCE.json'))
   assert.match(provenance.sourceCommit, /^[a-f0-9]{40}$/)
@@ -106,7 +107,7 @@ test('QoderWork candidate roundtrips deterministically with original runtime/lic
 })
 
 test('QoderWork fails closed on invalid names, versions and undeclared dependencies', async () => {
-  const manifest = JSON.parse(await readFile(resolve(root, 'qoderwork/plugin.json'), 'utf8'))
+  const manifest = { ...sharedMetadata(JSON.parse(await readFile(resolve(root, 'plugin.json'), 'utf8')), JSON.parse(await readFile(resolve(root, 'qoderwork/plugin.json'), 'utf8'))), skills: ['./skills/esp-vision-development'], mcpServers: './.mcp.json' }
   for (const version of ['0.1.0-dev.1', '01.1.0', '1.0', '../unsafe']) {
     assert.throws(() => validateQoderManifest({ ...manifest, version }))
   }

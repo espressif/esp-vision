@@ -62,6 +62,8 @@ Each npm package has its own version, independent of firmware release tags. The 
 | [@esp-vision/knowledge-mcp](https://www.npmjs.com/package/@esp-vision/knowledge-mcp) | Knowledge server and versioned snapshot, with stdio and HTTP transports | [Knowledge MCP](host/knowledge-mcp/README.md) |
 | [@esp-vision/plugin](https://www.npmjs.com/package/@esp-vision/plugin) | Skill, bundled Device CLI and official online Knowledge MCP configuration for Codex, Claude Code and WorkBuddy | [Plugin installation](host/esp-vision-plugin/README.md) |
 
+Source builds also provide standalone WorkBuddy Expert, QoderWork and [Cursor Plugin exports](host/esp-vision-plugin/cursor/MAINTAINER.md), reusing the bundled CLI and Skill. Cursor local testing uses `~/.cursor/plugins/local/`; each host still requires installation and activation verification.
+
 The official plugin uses `https://mcp.vision.espressif.com/mcp`; knowledge is maintained centrally. The Knowledge npm package also supports self-hosting.
 
 ## Quickstart

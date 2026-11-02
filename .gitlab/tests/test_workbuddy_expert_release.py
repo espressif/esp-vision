@@ -14,27 +14,21 @@ class ExpertReleaseContractTests(unittest.TestCase):
         job = yaml.safe_load((ROOT / '.gitlab/ci/plugin.yml').read_text())['plugin_checks']
         self.assertNotIn('rules', job)
         self.assertIn('.cache/workbuddy-expert/', job['artifacts']['paths'])
+        self.assertIn('.cache/cursor-plugin/', job['artifacts']['paths'])
+        self.assertTrue(any('build:cursor -- --output-dir' in line for line in job['script']))
         self.assertIn('expose_as', job['artifacts'])
         self.assertIn('$CI_COMMIT_SHORT_SHA', job['artifacts']['name'])
         self.assertIn('$CI_PIPELINE_ID', job['artifacts']['name'])
         self.assertTrue(any('build:workbuddy-expert -- --ci' in line for line in job['script']))
         self.assertFalse(any('workbuddy_release.py' in line for line in job['script']))
 
-    def test_only_protected_firmware_tags_publish_the_checked_artifact(self):
+    def test_zip_publication_is_owned_by_github_not_gitlab(self):
         config = yaml.safe_load((ROOT / '.gitlab/ci/plugin.yml').read_text())
-        job = config['publish_workbuddy_expert']
-        release_rule = yaml.safe_load((ROOT / '.gitlab/ci/rules.yml').read_text())['.rules:release']['rules'][0]['if']
-        self.assertEqual(job['rules'], [{'if': '$CI_COMMIT_REF_PROTECTED == "true" && ' + release_rule}])
-        self.assertEqual(job['stage'], 'post_deploy')
-        needs = {item['job']: item['artifacts'] for item in job['needs']}
-        self.assertEqual(needs['plugin_checks'], True)
-        self.assertTrue({'qualify_firmware_release', 'upload-dl-trigger', 'release_source_order_checks', 'mcp_release_contract_checks'} <= needs.keys())
-        self.assertFalse(any(name.startswith('publish_') for name in needs), 'Expert release must not depend on npm publication')
-        commands = '\n'.join(job['script'])
-        self.assertIn('workbuddy_release.py', commands)
-        self.assertIn('--tag "$CI_COMMIT_TAG" --source-commit "$CI_COMMIT_SHA" --publish', commands)
-        self.assertNotIn('npm ', commands)
-        self.assertNotIn('build:workbuddy-expert', commands)
+        self.assertNotIn('publish_workbuddy_expert', config)
+        self.assertIn('publish_plugin_npm', config)
+        workflow = yaml.safe_load((ROOT / '.github/workflows/plugin-release.yml').read_text())
+        self.assertEqual(workflow['jobs']['attach']['needs'], 'package')
+        self.assertEqual(workflow['jobs']['attach']['permissions'], {'contents': 'write'})
 
     def test_shared_publisher_is_reused_without_rewriting_knowledge_or_firmware_release(self):
         helper = (ROOT / 'tools/ci/mcp/workbuddy_release.py').read_text()

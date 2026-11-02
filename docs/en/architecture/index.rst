@@ -15,7 +15,7 @@ Layered Overview
 ----------------
 
 - **Host applications**: IDE presents editing/debugging UI; custom applications use the SDK; AI clients and independent agents select tools for the task. Agents own their AI loop.
-- **Plugin** (``host/esp-vision-plugin``, ``@esp-vision/plugin``): packages one capability-oriented Skill, a fixed Device CLI and the official Knowledge HTTP endpoint configuration for Codex, Claude Code and WorkBuddy.
+- **Plugin** (``host/esp-vision-plugin``, ``@esp-vision/plugin``): packages one capability-oriented Skill, a fixed Device CLI and the official Knowledge HTTP endpoint configuration for Codex, Claude Code and WorkBuddy, with separate WorkBuddy Expert, QoderWork and Cursor export adapters. Host loading and marketplace approval require platform acceptance.
 - **Device CLI** (``host/device-cli``, ``@esp-vision/device-cli``): exposes device operations through shell commands, JSON results, streamed events and binary output files. Both the plugin copy and the standalone command use public Device Core APIs.
 - **Knowledge MCP** (``host/knowledge-mcp``, ``@esp-vision/knowledge-mcp``): provides API, documentation and example queries from a versioned snapshot. The official plugin connects to the online HTTP service; the npm package supports stdio and HTTP for self-hosting. Main builds the snapshot, npm archive and immutable image; website deploys that image. HTTP records anonymous daily aggregates.
 - **Device Core** (``host/device-core``): the independently versioned ``@esp-vision/device-core`` npm package owns protocol parsing, request correlation, sessions, keepalive and operation lifecycles. The diagram selects representative API names instead of listing every method; complete contracts are in :doc:`../device-core/api`.

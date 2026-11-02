@@ -1,6 +1,6 @@
 # ESP-Vision 嵌入式 AI 视觉开发（QoderWork）
 
-基于 ESP32 的 ESP-VISION 视觉应用开发：查询官方固件/API 知识，使用随包本地 CLI 检查设备、部署 MicroPython 脚本并验证实际结果。作者为 Espressif Systems (Shanghai) CO LTD，联系邮箱 libo@espressif.com。
+基于 ESP32 的 ESP-VISION 视觉应用开发：查询官方固件/API 知识，使用随包本地 CLI 检查设备、部署 MicroPython 脚本并验证实际结果。作者为 {{AUTHOR_NAME}}，联系邮箱 {{AUTHOR_EMAIL}}。
 
 此包使用 QoderWork 的 `.qoder-plugin/plugin.json`、`skills/`、`qoder.md` 与 `.mcp.json` 布局；不是 WorkBuddy Expert ZIP、旧 Skill ZIP，也不是已发布的 Qoder CLI 市场条目。版本 {{VERSION}}；原 npm 包身份仍为 `@esp-vision/plugin@0.1.0`，本构建不会发布 npm 或提交市场。
 

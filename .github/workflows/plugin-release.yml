@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+name: Plugin release packages
+on:
+  push:
+    tags: ['v*', '[0-9][0-9][0-9][0-9].*']
+  pull_request:
+    paths:
+      - '.github/workflows/plugin-release.yml'
+      - 'host/esp-vision-plugin/**'
+      - 'host/device-cli/**'
+      - 'host/device-core/**'
+      - 'tools/ci/plugin_release.py'
+      - 'tools/ci/test_plugin_release.py'
+      - 'tools/ci/mcp/install_host.mjs'
+permissions:
+  contents: read
+concurrency:
+  group: plugin-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    env:
+      TMPDIR: ${{ github.workspace }}/.cache/plugin-tmp
+      TMP: ${{ github.workspace }}/.cache/plugin-tmp
+      TEMP: ${{ github.workspace }}/.cache/plugin-tmp
+      CI_COMMIT_SHA: ${{ github.sha }}
+      CI_PIPELINE_ID: ${{ github.run_id }}
+      CI_COMMIT_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare build dependencies
+        run: |
+          mkdir -p "$TMPDIR"
+          python -m pip install pyserial
+          node tools/ci/mcp/install_host.mjs --output .cache/plugin-core-artifacts
+      - name: Build and test shared plugin
+        run: |
+          npm --prefix host/esp-vision-plugin run build
+          npm --prefix host/esp-vision-plugin test
+          python -m unittest discover -s tools/ci -p test_plugin_release.py
+      - name: Export platform packages
+        run: |
+          npm --prefix host/esp-vision-plugin run build:workbuddy-expert -- --ci --output-dir "$PWD/.cache/plugin-release"
+          npm --prefix host/esp-vision-plugin run build:qoderwork -- --output-dir "$PWD/.cache/plugin-release"
+          npm --prefix host/esp-vision-plugin run build:cursor -- --output-dir "$PWD/.cache/plugin-release"
+          python tools/ci/plugin_release.py --directory .cache/plugin-release --source-commit "$CI_COMMIT_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: esp-vision-plugins-${{ github.sha }}
+          path: .cache/plugin-release/*
+          if-no-files-found: error
+  attach:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      SOURCE_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: esp-vision-plugins-${{ github.sha }}
+          path: .cache/plugin-release
+      - name: Attach verified packages to the tag Release
+        run: python3 tools/ci/plugin_release.py --directory .cache/plugin-release --source-commit "$SOURCE_COMMIT" --tag "$RELEASE_TAG" --publish

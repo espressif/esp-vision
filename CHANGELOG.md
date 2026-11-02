@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Add a Cursor Plugin export with the shared ESP-VISION Skill, official Knowledge MCP and complete local CLI/license closure, source provenance, deterministic ZIP/checksum output, documented local import and Git-based marketplace submission, and CI candidate artifacts.
+
 - Prepare a separate QoderWork plugin candidate ZIP with host-specific metadata, role instructions, official Knowledge MCP setup, the unchanged local CLI/license closure, and explicit marketplace-validation gaps and linked maintainer build instructions.
 
 - Export source-bound WorkBuddy Expert test candidates as MR/branch CI artifacts; publish fixed tag-version Expert ZIPs and checksums to the Generic Package Registry with GitLab Release attachment links only after protected firmware release qualification, independently of npm publication.
@@ -13,6 +15,12 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Added a repository security policy defining ESP-VISION's development and DIY scope, exclusion from the Espressif Bug Bounty Program, private security reporting, and the trusted-network requirements of unauthenticated EV-MUX TCP debugging, with English and Chinese README notices and communication-guide warnings.
 
 ### Changed
+
+- Build WorkBuddy, QoderWork and Cursor release ZIPs in GitHub Actions and attach verified tag artifacts to GitHub Releases, creating a draft when needed and preserving existing assets; retain npm publication in GitLab and remove its automatic WorkBuddy ZIP publisher.
+
+- Refine the WorkBuddy Chinese listing to the 50-character limit and record the rechecked official template inconsistencies while retaining Engineering classification and matching initial prompts.
+
+- Keep five-host plugin metadata, Knowledge endpoint, Skill/device workflow and CLI/license closure authoritative in shared sources; derive publisher metadata and listings from the shared identity, generate compatibility manifests and reuse one export engine for WorkBuddy Expert, QoderWork and Cursor.
 
 - Document durable QoderWork release attachments from verified tag artifacts and label CI downloads for both plugin platforms.
 
