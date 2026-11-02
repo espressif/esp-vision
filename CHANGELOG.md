@@ -16,6 +16,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Build WorkBuddy, QoderWork and Cursor release ZIPs in GitHub Actions and attach verified tag artifacts to GitHub Releases, creating a draft when needed and preserving existing assets; retain npm publication in GitLab and remove its automatic WorkBuddy ZIP publisher.
+
 - Refine the WorkBuddy Chinese listing to the 50-character limit and record the rechecked official template inconsistencies while retaining Engineering classification and matching initial prompts.
 
 - Keep five-host plugin metadata, Knowledge endpoint, Skill/device workflow and CLI/license closure authoritative in shared sources; derive publisher metadata and listings from the shared identity, generate compatibility manifests and reuse one export engine for WorkBuddy Expert, QoderWork and Cursor.
