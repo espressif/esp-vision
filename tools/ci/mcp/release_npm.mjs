@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict'
+import { minorRange, inMinorRange, cliBundlesCore, highestStableVersion, validateVersionStep } from '../../../host/device-core/scripts/version-policy.mjs'
 import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
@@ -53,6 +54,7 @@ assert.equal(sourceManifest.license, 'Apache-2.0')
 assert.equal(sourceManifest.publishConfig?.registry, registry, 'Package publishConfig must target npmjs')
 assert.equal(sourceManifest.publishConfig?.access, 'public', 'Scoped packages must be published publicly')
 assert.deepEqual(sourceManifest.dependencies ?? {}, {}, 'Standalone ESP-VISION packages must not have runtime dependencies')
+assert.ok(['patch', 'minor', 'major'].includes(sourceManifest.espVisionReleaseType), 'Release type must be patch, minor or major')
 for (const dependencyGroup of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
   for (const [name, version] of Object.entries(sourceManifest[dependencyGroup] ?? {})) {
     assert.ok(!String(version).startsWith('file:'), `${dependencyGroup}.${name} must not refer to a local file`)
@@ -79,6 +81,25 @@ if (!dryRun && packagePath === 'host/device-cli') {
     console.log(`${sourceManifest.name}@${sourceManifest.version} already exists; no new version to publish.`)
     process.exit(0)
   }
+}
+
+if (packagePath === 'host/device-cli' && sourceManifest.devDependencies?.['@esp-vision/device-core']) {
+  const range = sourceManifest.devDependencies['@esp-vision/device-core']
+  const lock = JSON.parse(await readFile(join(packageRoot, 'package-lock.json'), 'utf8'))
+  const resolved = lock.packages?.['node_modules/@esp-vision/device-core']?.version
+  minorRange(range)
+  assert.ok(inMinorRange(range, resolved), 'Core lock version must satisfy the declared minor range')
+  assert.equal(sourceManifest.espVision?.deviceCore, range, 'CLI Core metadata must match its dependency range')
+  assert.equal(sourceManifest.espVision?.resolved?.deviceCore, resolved, 'CLI metadata must identify its bundled Core version')
+}
+if (packagePath === 'host/knowledge-mcp' || packagePath === 'host/esp-vision-plugin') {
+  const peerPath = packagePath === 'host/knowledge-mcp' ? 'host/esp-vision-plugin' : 'host/knowledge-mcp'
+  const peer = JSON.parse(await readFile(join(repoRoot, peerPath, 'package.json'), 'utf8'))
+  const pins = sourceManifest.espVision
+  assert.deepEqual(pins, peer.espVision, 'Plugin and Knowledge must declare the same Core and CLI versions')
+  for (const range of [pins?.deviceCore, pins?.deviceCli]) minorRange(range)
+  assert.ok(inMinorRange(pins.deviceCore, pins.resolved?.deviceCore), 'Resolved Core is outside the declared minor range')
+  assert.ok(inMinorRange(pins.deviceCli, pins.resolved?.deviceCli), 'Resolved CLI is outside the declared minor range')
 }
 
 const tempBase = resolve(process.env.ESP_VISION_NPM_TEMP_DIR ?? process.env.TMPDIR ?? join(repoRoot, '.cache/npm-release'))
@@ -139,9 +160,12 @@ try {
     if (pinnedCore) {
       const lock = JSON.parse(await readFile(join(packageRoot, 'package-lock.json'), 'utf8'))
       const expected = lock.packages?.['node_modules/@esp-vision/device-core']
-      assert.equal(expected?.version, pinnedCore, 'Core lock version must match the declared build dependency')
+      minorRange(pinnedCore)
+      assert.ok(inMinorRange(pinnedCore, expected?.version), 'Core lock version must satisfy the declared minor range')
+      assert.equal(sourceManifest.espVision?.deviceCore, pinnedCore, 'CLI Core metadata must match its dependency range')
+      assert.equal(sourceManifest.espVision?.resolved?.deviceCore, expected.version, 'CLI metadata must identify its bundled Core version')
       assert.match(expected?.integrity ?? '', /^sha512-/, 'Core lock must bind the tested tarball bytes')
-      const publishedCore = await readRegistryMetadata(new URL(`${encodeURIComponent('@esp-vision/device-core')}/${pinnedCore}`, registry))
+      const publishedCore = await readRegistryMetadata(new URL(`${encodeURIComponent('@esp-vision/device-core')}/${expected.version}`, registry))
       assert.ok(publishedCore, 'Publish the pinned Core version before publishing its consumers')
       assert.equal(publishedCore.dist?.integrity, expected.integrity, 'Published Core differs from the tested build artifact')
     }
@@ -151,13 +175,13 @@ try {
       const peer = JSON.parse(await readFile(join(repoRoot, peerPath, 'package.json'), 'utf8'))
       const pins = sourceManifest.espVision
       assert.deepEqual(pins, peer.espVision, 'Plugin and Knowledge must declare the same Core and CLI versions')
-      for (const version of [pins?.deviceCore, pins?.deviceCli]) {
-        assert.match(version ?? '', /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, 'Release versions must be exact stable versions')
-      }
-      const core = await readRegistryMetadata(new URL(`${encodeURIComponent('@esp-vision/device-core')}/${pins.deviceCore}`, registry))
-      const cli = await readRegistryMetadata(new URL(`${encodeURIComponent('@esp-vision/device-cli')}/${pins.deviceCli}`, registry))
-      assert.ok(core?.dist?.integrity && cli?.dist?.integrity, 'Pinned Core and CLI must both be published')
-      assert.equal(cli.devDependencies?.['@esp-vision/device-core'], pins.deviceCore, 'Published CLI must declare the pinned Core')
+      for (const range of [pins?.deviceCore, pins?.deviceCli]) minorRange(range)
+      assert.ok(inMinorRange(pins.deviceCore, pins.resolved?.deviceCore), 'Resolved Core is outside the declared minor range')
+      assert.ok(inMinorRange(pins.deviceCli, pins.resolved?.deviceCli), 'Resolved CLI is outside the declared minor range')
+      const core = await readRegistryMetadata(new URL(`${encodeURIComponent('@esp-vision/device-core')}/${pins.resolved.deviceCore}`, registry))
+      const cli = await readRegistryMetadata(new URL(`${encodeURIComponent('@esp-vision/device-cli')}/${pins.resolved.deviceCli}`, registry))
+      assert.ok(core?.dist?.integrity && cli?.dist?.integrity, 'Resolved Core and CLI must both be published')
+      assert.ok(cliBundlesCore(cli, pins.resolved.deviceCore), 'Published CLI must bundle the resolved Core')
     }
 
     const versionUrl = new URL(`${encodeURIComponent(sourceManifest.name)}/${encodeURIComponent(sourceManifest.version)}`, registry)
@@ -167,6 +191,10 @@ try {
         'This version already exists with different content; bump the package version')
       console.log(`${metadata.name}@${metadata.version} is already published with identical content; skipped.`)
     } else {
+      const registryPackage = await readRegistryMetadata(new URL(encodeURIComponent(sourceManifest.name), registry))
+      const previous = highestStableVersion(Object.keys(registryPackage?.versions ?? {}))
+      if (previous) validateVersionStep(previous, sourceManifest.version, sourceManifest.espVisionReleaseType)
+      else throw new Error('A prior stable release is required to validate version progression')
       const published = runNpmResult(
         ['publish', tarball, '--ignore-scripts', '--access', 'public', '--registry', registry],
         packageRoot,
@@ -244,6 +272,7 @@ async function verifyTarball(tarball, metadata, manifest, temporaryRoot) {
   const packedManifest = JSON.parse(await readFile(join(packedRoot, 'package.json'), 'utf8'))
   assert.equal(packedManifest.name, manifest.name)
   assert.equal(packedManifest.version, manifest.version)
+  assert.equal(packedManifest.espVisionReleaseType, manifest.espVisionReleaseType, 'Packed release type differs from source')
   if (manifest.espVision) assert.deepEqual(packedManifest.espVision, manifest.espVision, 'Packed release pins differ from source')
   assert.deepEqual(packedManifest.dependencies ?? {}, {})
   for (const dependencyGroup of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {

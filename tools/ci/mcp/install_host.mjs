@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // MR integration uses an explicit Core tarball; tracked manifests remain registry-only.
 import assert from 'node:assert/strict'
+import { minorRange, inMinorRange } from '../../../host/device-core/scripts/version-policy.mjs'
 import { createHash } from 'node:crypto'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
@@ -40,19 +41,24 @@ try {
     const source = join(root, 'host', name)
     const manifest = JSON.parse(await readFile(join(source, 'package.json'), 'utf8'))
     const pinnedCore = manifest.devDependencies?.['@esp-vision/device-core']
-    assert.match(pinnedCore ?? '', /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, `${name} must pin an exact Core version`)
-    if (pinnedCore !== packed.version) {
+    minorRange(pinnedCore)
+    const trackedLock = JSON.parse(await readFile(join(source, 'package-lock.json'), 'utf8'))
+    const lockedCore = trackedLock.packages?.['node_modules/@esp-vision/device-core']?.version
+    assert.ok(inMinorRange(pinnedCore, lockedCore), 'Core lock must satisfy the declared minor range')
+    assert.equal(manifest.espVision?.deviceCore, pinnedCore, 'CLI Core metadata must match its dependency range')
+    assert.equal(manifest.espVision?.resolved?.deviceCore, lockedCore, 'CLI metadata must identify the locked Core')
+    if (lockedCore !== packed.version) {
       // Core and CLI release independently. Keep testing the CLI against its
       // published, locked Core until the CLI explicitly updates its pin.
       const lock = JSON.parse(await readFile(join(source, 'package-lock.json'), 'utf8'))
       const entry = lock.packages?.['node_modules/@esp-vision/device-core']
-      assert.equal(entry?.version, pinnedCore, 'Core lock must match the CLI pin')
+      assert.equal(entry?.version, lockedCore, 'Core lock must match the selected version')
       assert.equal(new URL(entry.resolved).origin, 'https://registry.npmjs.org', 'Core lock must use the npm registry')
       assert.match(entry.integrity ?? '', /^sha512-[A-Za-z0-9+/]+={0,2}$/, 'Core lock must include integrity')
       npm(['ci', '--ignore-scripts', '--no-audit', '--no-fund'], source)
       const installed = JSON.parse(await readFile(join(source, 'node_modules/@esp-vision/device-core/package.json'), 'utf8'))
-      assert.equal(installed.version, pinnedCore)
-      console.log(`${name}: installed locked published Core ${pinnedCore}; source Core ${packed.version} is independent`)
+      assert.equal(installed.version, lockedCore)
+      console.log(`${name}: installed locked published Core ${lockedCore}; source Core ${packed.version} is independent`)
       continue
     }
     const consumer = join(temporary, name)

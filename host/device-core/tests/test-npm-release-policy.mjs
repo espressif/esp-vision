@@ -9,16 +9,17 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { test } from 'node:test'
 
 const source = fileURLToPath(new URL('../scripts/', import.meta.url))
-async function fixture(t, published) {
+async function fixture(t, published, version = '1.2.3', type = 'patch') {
   const root = await mkdtemp(join(tmpdir(), 'core-release-policy-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const scripts = join(root, 'scripts'), bin = join(root, 'bin'), log = join(root, 'calls')
   await mkdir(scripts); await mkdir(bin)
   await copyFile(join(source, 'release-npm.mjs'), join(scripts, 'release-npm.mjs'))
   await copyFile(join(source, 'verify-registry.mjs'), join(scripts, 'verify-registry.mjs'))
-  await writeFile(join(root, 'package.json'), JSON.stringify({ name: '@esp-vision/device-core', version: '1.2.3', license: 'Apache-2.0', publishConfig: { access: 'public', registry: 'https://registry.npmjs.org/' } }))
+  await copyFile(join(source, 'version-policy.mjs'), join(scripts, 'version-policy.mjs'))
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: '@esp-vision/device-core', version, espVisionReleaseType: type, license: 'Apache-2.0', publishConfig: { access: 'public', registry: 'https://registry.npmjs.org/' } }))
   const loader = join(root, 'registry.mjs')
-  await writeFile(loader, `let reads = 0; globalThis.fetch = async () => { reads++; const found = ${published} || reads >= 3; return {ok:found,status:found?200:404,json:async()=>({dist:{integrity:'sha512-fixture'}})} }`)
+  await writeFile(loader, `let reads = 0; globalThis.fetch = async () => { reads++; const found = ${published} || reads === 2 || reads >= 4; return {ok:found,status:found?200:404,json:async()=>reads===2?({versions:{'1.2.2':{}}}):({dist:{integrity:'sha512-fixture'}})} }`)
   const npm = join(bin, 'npm')
   await writeFile(npm, `#!/usr/bin/env node
 const fs = require('node:fs'); const args = process.argv.slice(2); fs.appendFileSync(process.env.CALL_LOG, args[0] + '\\n');
@@ -46,4 +47,11 @@ test('a new Core version is published once and its registry integrity verified',
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /Published and verified/)
   assert.deepEqual(calls.trim().split('\n'), ['pack', 'whoami', 'publish'])
+})
+
+test('a misclassified Core version is rejected before packaging or publication', async t => {
+  const { result, calls } = await fixture(t, false, '1.3.0', 'patch')
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /A patch release after 1.2.2 must be 1.2.3/)
+  assert.equal(calls, '')
 })

@@ -12,12 +12,12 @@ Source, versions and installation
 
 Device Core is maintained in ``host/device-core/`` in the ESP-VISION firmware repository. ``host/`` contains code running on the host, not firmware modules. IDEs and custom applications consume the SDK directly; agent workflows use the separately packaged Device CLI for device control. Protocol changes should align firmware, Core, documentation and tests in one MR.
 
-The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.5.1`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Verify that exact version in the public npm registry before installing; a dry run or an open MR alone does not publish it.
+The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.5.1`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Declare a minor-locked range, record the resolved patch in the lockfile, and verify it in the public npm registry before installing; a dry run or an open MR alone does not publish it.
 
 .. code-block:: console
 
    npm view @esp-vision/device-core@0.5.1 version dist.integrity
-   npm install --save-exact @esp-vision/device-core@0.5.1
+   npm install '@esp-vision/device-core@~0.5.0'
 
 Node.js 22 is the Node host baseline. Browsers need a bundler/import map for package specifiers and Web Serial or a binary WebSocket bridge. Device Core contains no serial driver, network bridge, model or IDE UI. Node serial enumeration requires Python with pyserial; Node mDNS discovery uses ``multicast-dns``. The separate Device CLI installs as ``@esp-vision/device-cli@0.1.0`` and provides the supported agent-facing device command. Pin npm versions and update lockfiles.
 

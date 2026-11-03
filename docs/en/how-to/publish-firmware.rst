@@ -54,7 +54,7 @@ Release procedure
 -----------------
 
 #. Merge the new uploader and Core contracts before enabling the new publication flow. Keep the companion root-directory fix as a prerequisite. Do not enable single-bin mode for legacy consumers.
-#. Before tagging, separately bump the Plugin and Knowledge MCP npm versions and set matching exact Core/CLI pins in both package manifests. The pinned CLI must already be published with the pinned Core; the Plugin bundles that exact published CLI. Core and CLI versions publish independently from protected default-branch pipelines.
+#. Before tagging, separately bump the Plugin and Knowledge MCP npm versions and set matching Core/CLI minor ranges and resolved versions in both package manifests. The resolved CLI must already be published with the resolved Core bundled; the Plugin bundles that published CLI. Patch releases only fix bugs compatibly, only minor releases may add compatible features, and only major releases may break compatibility. Patch and major releases do not add unrelated new features. Core and CLI versions publish independently from protected default-branch pipelines.
 #. Wait for the exact source commit's GitHub mirror before creating a new firmware tag through the normal protected release process; commit-pinned model links must already resolve. The uploader rejects an unavailable source commit before advancing the config. Wait for build, HIL, SDK and package qualification; an npm publication does not publish firmware.
 #. Verify the root config's publication hash against the versioned manifest, its exact board membership and website/MCP snapshots, and all selected image hashes. A dry-run config or a passed branch pipeline does not prove a production upload.
 

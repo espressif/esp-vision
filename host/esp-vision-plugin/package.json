@@ -48,7 +48,12 @@
     "build:cursor": "node scripts/cursor.mjs"
   },
   "espVision": {
-    "deviceCore": "0.5.1",
-    "deviceCli": "0.1.0"
-  }
+    "deviceCore": "~0.5.0",
+    "deviceCli": "~0.1.0",
+    "resolved": {
+      "deviceCore": "0.5.1",
+      "deviceCli": "0.1.0"
+    }
+  },
+  "espVisionReleaseType": "patch"
 }

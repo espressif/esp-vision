@@ -25,6 +25,8 @@ async function fixture(t) {
   const helper = join(root, 'helper'), artifacts = join(root, 'artifacts')
   for (const directory of [core, cli, helper, artifacts, join(root, 'tools/ci/mcp')]) await mkdir(directory, { recursive: true })
   await copyFile(installer, join(root, 'tools/ci/mcp/install_host.mjs'))
+  await mkdir(join(core, 'scripts'), { recursive: true })
+  await copyFile(join(dirname(installer), '../../../host/device-core/scripts/version-policy.mjs'), join(core, 'scripts/version-policy.mjs'))
   await writeFile(join(core, 'package.json'), JSON.stringify({ name: '@esp-vision/device-core', version: '0.5.1', files: ['index.js'] }))
   await writeFile(join(core, 'index.js'), 'export const resetLifecycle = "published"\n')
   const [oldCore] = JSON.parse(npm(['pack', '--json', '--ignore-scripts', '--pack-destination', artifacts], core))
@@ -34,8 +36,8 @@ async function fixture(t) {
   await writeFile(join(helper, 'index.js'), 'export const unchanged = true\n')
   const [other] = JSON.parse(npm(['pack', '--json', '--ignore-scripts', '--pack-destination', artifacts], helper))
   npm(['cache', 'add', join(artifacts, other.filename)], root)
-  const manifest = { name: '@esp-vision/device-cli', version: '0.1.0', devDependencies: {
-    '@esp-vision/device-core': '0.5.1', 'host-lock-fixture': '1.0.0',
+  const manifest = { name: '@esp-vision/device-cli', version: '0.1.0', espVision: { deviceCore: '~0.5.0', resolved: { deviceCore: '0.5.1' } }, devDependencies: {
+    '@esp-vision/device-core': '~0.5.0', 'host-lock-fixture': '1.0.0',
   } }
   const lock = { name: manifest.name, version: manifest.version, lockfileVersion: 3, requires: true, packages: {
     '': { name: manifest.name, version: manifest.version, devDependencies: manifest.devDependencies },

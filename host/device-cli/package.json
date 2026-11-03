@@ -36,7 +36,7 @@
     "cli"
   ],
   "devDependencies": {
-    "@esp-vision/device-core": "0.5.1",
+    "@esp-vision/device-core": "~0.5.0",
     "esbuild": "0.25.12",
     "multicast-dns": "7.2.5",
     "string-width": "7.2.0"
@@ -45,5 +45,12 @@
     "type": "git",
     "url": "git+https://github.com/espressif/esp-vision.git",
     "directory": "host/device-cli"
+  },
+  "espVisionReleaseType": "patch",
+  "espVision": {
+    "deviceCore": "~0.5.0",
+    "resolved": {
+      "deviceCore": "0.5.1"
+    }
   }
 }

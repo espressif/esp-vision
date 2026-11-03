@@ -19,10 +19,10 @@
 | Visibility | Public; installation needs no npm login |
 | Source location | `host/device-core` in the ESP-VISION firmware repository |
 
-The **0.5.x** package line is SDK-only: the management CLI lives in `@esp-vision/device-cli`, and Python execution/file reads have no aggregate deadline unless configured. Pin the exact package version and verify it exists in the public registry before installing. For unpublished source changes, use a tarball packed from an exact reviewed source commit. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
+The **0.5.x** package line is SDK-only: the management CLI lives in `@esp-vision/device-cli`, and Python execution/file reads have no aggregate deadline unless configured. Declare a minor-locked dependency and use a lockfile to record the resolved patch and integrity; verify the chosen version exists in the public registry before installing. For unpublished source changes, use a tarball packed from an exact reviewed source commit. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
 
 ```sh
-npm install --save-exact @esp-vision/device-core@0.5.1 --registry=https://registry.npmjs.org/
+npm install '@esp-vision/device-core@~0.5.0' --registry=https://registry.npmjs.org/
 ```
 
 EV-MUX v4 firmware is required. A v3 hello is rejected with `VERSION_MISMATCH`; applications should ask the user to update firmware. Core has no runtime dependency on the IDE, Agent, DOM or Node serial libraries. The host supplies the physical byte transport and discovery adapter; Core owns protocol parsing, session negotiation, REPL coordination and device operations.

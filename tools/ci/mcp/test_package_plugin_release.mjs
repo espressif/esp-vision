@@ -17,6 +17,8 @@ async function check(t, pins, registryCliCore, knowledgePins = pins) {
   await mkdir(join(root, 'host/esp-vision-plugin'), { recursive: true })
   await mkdir(join(root, 'host/knowledge-mcp'), { recursive: true })
   await copyFile(script, helper)
+  await mkdir(join(root, 'host/device-core/scripts'), { recursive: true })
+  await copyFile(fileURLToPath(new URL('../../../host/device-core/scripts/version-policy.mjs', import.meta.url)), join(root, 'host/device-core/scripts/version-policy.mjs'))
   await writeFile(join(root, 'host/esp-vision-plugin/package.json'), JSON.stringify({ espVision: pins }))
   await writeFile(join(root, 'host/knowledge-mcp/package.json'), JSON.stringify({ espVision: knowledgePins }))
   const loader = join(root, 'registry.mjs')
@@ -26,20 +28,20 @@ async function check(t, pins, registryCliCore, knowledgePins = pins) {
   })
 }
 
-test('release rejects ranges instead of exact CLI and Core versions', async t => {
-  const result = await check(t, { deviceCore: '^0.5.1', deviceCli: '0.1.0' }, '0.5.1')
+test('release rejects ranges that escape the selected minor version', async t => {
+  const result = await check(t, { deviceCore: '^0.5.1', deviceCli: '~0.1.0', resolved: { deviceCore: '~0.5.0', deviceCli: '~0.1.0', resolved: { deviceCore: '0.5.1', deviceCli: '0.1.0' } } }, '0.5.1')
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /Pinned versions must be exact/)
+  assert.match(result.stderr, /minor-locked range/)
 })
 
 test('release rejects a published CLI declaring a different Core', async t => {
-  const result = await check(t, { deviceCore: '0.5.1', deviceCli: '0.1.0' }, '0.4.2')
+  const result = await check(t, { deviceCore: '~0.5.0', deviceCli: '~0.1.0', resolved: { deviceCore: '0.5.1', deviceCli: '0.1.0' } }, '0.4.2')
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /Published CLI must declare the pinned Core version/)
+  assert.match(result.stderr, /Published CLI must bundle the resolved Core version/)
 })
 
 test('release rejects different Plugin and Knowledge compatibility pins', async t => {
-  const result = await check(t, { deviceCore: '0.5.1', deviceCli: '0.1.0' }, '0.5.1', { deviceCore: '0.4.2', deviceCli: '0.1.0' })
+  const result = await check(t, { deviceCore: '~0.5.0', deviceCli: '~0.1.0', resolved: { deviceCore: '0.5.1', deviceCli: '0.1.0' } }, '0.5.1', { deviceCore: '~0.4.0', deviceCli: '~0.1.0', resolved: { deviceCore: '0.4.2', deviceCli: '0.1.0' } })
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /matching release pins/)
 })

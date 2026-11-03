@@ -17,6 +17,8 @@ async function createReleaseFixture(prefix = 'release-policy-') {
   const fixtureHelper = join(root, 'tools/ci/mcp/release_npm.mjs')
   await mkdir(dirname(fixtureHelper), { recursive: true })
   await copyFile(helper, fixtureHelper)
+  await mkdir(join(root, 'host/device-core/scripts'), { recursive: true })
+  await copyFile(join(repoRoot, 'host/device-core/scripts/version-policy.mjs'), join(root, 'host/device-core/scripts/version-policy.mjs'))
 
   const packages = [
     ['host/device-cli', '@esp-vision/device-cli'],
@@ -32,6 +34,8 @@ async function createReleaseFixture(prefix = 'release-policy-') {
       license: 'Apache-2.0',
       publishConfig: { access: 'public', registry: 'https://registry.npmjs.org/' },
       dependencies: {},
+      espVisionReleaseType: 'minor',
+      ...(['@esp-vision/knowledge-mcp', '@esp-vision/plugin'].includes(name) ? { espVision: { deviceCore: '~0.5.0', deviceCli: '~0.1.0', resolved: { deviceCore: '0.5.1', deviceCli: '0.1.0' } } } : {}),
     }))
   }
 
@@ -278,7 +282,7 @@ test('a new CLI version is published once and its integrity verified', () => wit
   const { createHash } = await import('node:crypto')
   const integrity = 'sha512-' + createHash('sha512').update(await readFile(archive)).digest('base64')
   const loader = join(fixture.root, 'registry-new.mjs')
-  await writeFile(loader, `let reads=0; globalThis.fetch=async()=>{reads++;const found=reads>=3;return {ok:found,status:found?200:404,json:async()=>({dist:{integrity:process.env.REGISTRY_INTEGRITY}})}}`)
+  await writeFile(loader, `let reads=0; globalThis.fetch=async()=>{reads++;const found=reads>=3;return {ok:found,status:found?200:404,json:async()=>reads===3?({versions:{'0.0.9':{}}}):({dist:{integrity:process.env.REGISTRY_INTEGRITY}})}}`)
   const publishEnv = { ...env, NODE_OPTIONS: `--import ${pathToFileURL(loader).href}`, NPM_PUBLISH_TOKEN: 'protected-fixture-token',
     CI_PIPELINE_SOURCE: 'push', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true',
     PUBLISH_OK: '1', REGISTRY_INTEGRITY: integrity }
@@ -287,4 +291,25 @@ test('a new CLI version is published once and its integrity verified', () => wit
   assert.match(result.output, /Published and verified/)
   const calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
   assert.deepEqual(calls.map(call => call[0]), ['whoami', 'publish'])
+}))
+
+test('incorrect CLI version step is rejected before any npm publication', () => withReleaseFixture(async fixture => {
+  const { archive, log, env } = await archivedCliFixture(fixture)
+  const manifestPath = join(fixture.root, 'host/device-cli/package.json')
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  manifest.espVisionReleaseType = 'patch'
+  await writeFile(manifestPath, JSON.stringify(manifest))
+  // The source and checked archive must carry the same release metadata.
+  const stagedManifest = join(fixture.root, 'staged/package/package.json')
+  await writeFile(stagedManifest, JSON.stringify(manifest))
+  assert.equal(spawnSync('tar', ['-czf', archive, '-C', join(fixture.root, 'staged'), 'package']).status, 0)
+  const loader = join(fixture.root, 'registry-invalid-step.mjs')
+  await writeFile(loader, `let reads=0; globalThis.fetch=async()=>{reads++;const found=reads===3;return {ok:found,status:found?200:404,json:async()=>({versions:{'0.0.9':{}}})}}`)
+  const publishEnv = { ...env, NODE_OPTIONS: `--import ${pathToFileURL(loader).href}`, NPM_PUBLISH_TOKEN: 'protected-fixture-token',
+    CI_PIPELINE_SOURCE: 'push', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true' }
+  const result = runHelper(fixture, ['--package', 'host/device-cli', '--tarball', archive], publishEnv)
+  assert.notEqual(result.status, 0)
+  assert.match(result.output, /A patch release after 0.0.9 must be 0.0.10/)
+  const calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+  assert.deepEqual(calls.map(call => call[0]), ['whoami'])
 }))

@@ -54,7 +54,7 @@ MCP 与发布资格
 --------
 
 #. 先合入新的上传器与 Core 契约，并保留根目录布局修复依赖。旧消费者不能启用单 BIN 模式。
-#. 打标签前分别更新 Plugin 和 Knowledge MCP 的 npm 版本，并在两个包的清单中固定相同的 Core 和 CLI 版本。指定的 CLI 必须已经发布且声明使用指定 Core；Plugin 打包该已发布 CLI。Core 和 CLI 的版本由受保护默认分支流水线独立发布。
+#. 打标签前分别更新 Plugin 和 Knowledge MCP 的 npm 版本，并在两个包的清单中声明相同的 Core 和 CLI minor 范围及本次解析版本。指定的 CLI 必须已经发布且实际打包指定 Core；Plugin 打包该已发布 CLI。patch 版本只能兼容地修复问题，只有 minor 版本可以增加兼容功能，只有 major 版本可以引入不兼容变更；patch 和 major 版本不得额外添加新功能。Core 和 CLI 的版本由受保护默认分支流水线独立发布。
 #. 先确认该完整源提交已成功镜像到 GitHub，固定到提交的模型链接已经可用，再通过正常受保护流程创建新固件标签；上传器在推进 config 前会拒绝尚不可用的源提交。等待构建、HIL、SDK 及包资格通过；npm 发布不等于固件发布。
 #. 用根 config 的 publication 哈希验证版本清单、精确板型集合、website/MCP 快照和镜像哈希。配置 dry-run 或分支 CI 成功不代表生产上传成功。
 

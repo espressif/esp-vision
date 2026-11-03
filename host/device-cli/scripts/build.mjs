@@ -135,6 +135,11 @@ await copyOriginalLicenses(bundle.metafile)
 
 // Keep the metadata synchronized with the exact Core package used to build.
 const core = await packageRoot('@esp-vision/device-core', root)
+const cliManifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
+if (cliManifest.espVision?.deviceCore !== cliManifest.devDependencies?.['@esp-vision/device-core'] ||
+    cliManifest.espVision?.resolved?.deviceCore !== core.manifest.version) {
+  throw new Error('CLI metadata must identify the resolved bundled Core and its minor range')
+}
 await copyFile(join(core.directory, 'LICENSE'), join(root, 'LICENSE'))
 await copyFile(join(core.directory, 'NOTICE'), join(root, 'DEVICE_CORE_NOTICE.md'))
 console.log('Built dist/device-cli.mjs with bundled Node dependencies and Python adapters.')

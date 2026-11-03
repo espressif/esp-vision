@@ -12,12 +12,12 @@ Device Core npm 包对接
 
 Device Core 源码在 ESP-VISION 固件仓库的 ``host/device-core/`` 维护。``host/`` 表示运行在主机的代码，不是固件模块；IDE 和自定义应用直接使用 SDK，Agent 设备控制工作流使用单独打包的 Device CLI。协议变更应在同一个 MR 对齐固件、Core、文档与测试。
 
-包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.5.1``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。安装前请在公开 npm registry 确认此精确版本；dry run 或创建 MR 不等于发布。
+包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.5.1``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。依赖锁定到 minor，并在 lockfile 记录解析后的 patch；安装前请在公开 npm registry 确认所选版本；dry run 或创建 MR 不等于发布。
 
 .. code-block:: console
 
    npm view @esp-vision/device-core@0.5.1 version dist.integrity
-   npm install --save-exact @esp-vision/device-core@0.5.1
+   npm install '@esp-vision/device-core@~0.5.0'
 
 Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析包名，以及 Web Serial 或二进制 WebSocket 桥。Device Core 不附带串口驱动、网络桥、模型或 IDE UI。Node 串口枚举需要安装 pyserial 的 Python；Node mDNS 发现使用 ``multicast-dns``。单独的 Device CLI 以 ``@esp-vision/device-cli@0.1.0`` 安装，是 Agent 设备操作的受支持命令。固定 npm 版本并更新 lockfile。
 
