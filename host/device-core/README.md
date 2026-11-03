@@ -19,10 +19,10 @@
 | Visibility | Public; installation needs no npm login |
 | Source location | `host/device-core` in the ESP-VISION firmware repository |
 
-The **0.5.x** package line is SDK-only: the management CLI lives in `@esp-vision/device-cli`, and Python execution/file reads have no aggregate deadline unless configured. Pin the exact package version and verify it exists in the public registry before installing. For unpublished source changes, use a tarball packed from an exact reviewed source commit. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
+The **0.5.x** package line is SDK-only: the management CLI lives in `@esp-vision/device-cli`, and Python execution/file reads have no aggregate deadline unless configured. Declare a minor-locked dependency and use a lockfile to record the resolved patch and integrity; verify the chosen version exists in the public registry before installing. For unpublished source changes, use a tarball packed from an exact reviewed source commit. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
 
 ```sh
-npm install --save-exact @esp-vision/device-core@0.5.1 --registry=https://registry.npmjs.org/
+npm install '@esp-vision/device-core@~0.5.0' --registry=https://registry.npmjs.org/
 ```
 
 EV-MUX v4 firmware is required. A v3 hello is rejected with `VERSION_MISMATCH`; applications should ask the user to update firmware. Core has no runtime dependency on the IDE, Agent, DOM or Node serial libraries. The host supplies the physical byte transport and discovery adapter; Core owns protocol parsing, session negotiation, REPL coordination and device operations.
@@ -352,7 +352,7 @@ Device Core is maintained alongside the firmware at `host/device-core` in [espre
 
 Run `npm run release:check` from this directory for unit tests, schema validation, an isolated package install and a publication dry run. SDK-only changes run these Node.js checks without compiling firmware. `ESP_VISION_DEVICE_CORE_ONLY=1` selects SDK checks in an API/web pipeline; `ESP_VISION_BUILD_FIRMWARE=1` requests the final firmware matrix when needed. SDK versions are tracked in `package.json` and npm; do not create SDK Git tags in this firmware repository, because firmware/documentation version discovery uses Git tags. CI defensively excludes accidental `device-core-v*` tags from firmware jobs, but creating these tags is not part of the SDK release workflow.
 
-Only a protected default-branch push (`master` in this firmware repository) with matching SDK changes can publish, using the masked/protected `NPM_PUBLISH_TOKEN`. The account must be `esp-vision` with scope write access. This variable must be configured in the firmware project before its first publication; moving source does not transfer CI credentials. MR, feature-branch, local and SDK-tag runs never publish. The release job verifies registry metadata and integrity: identical content is skipped; different content under an existing version requires a version bump.
+A protected default-branch push (`master` in this firmware repository) with SDK changes automatically publishes a version not yet present in npm, using the masked/protected `NPM_PUBLISH_TOKEN`. The account must be `esp-vision` with scope write access. MR, feature-branch, local and SDK-tag runs never publish. An existing version is skipped even if source has changed; bump `package.json` before releasing those changes. Publication verifies newly published registry integrity.
 
 Before enabling this publisher, disable the old IDE-project package release job so there is only one authoritative publisher. Migration is staged: qualify this in-repository SDK and its publication pipeline, publish and verify its registry integrity, then update the IDE/Agent adapters to the fixed package version and remove the old IDE source copy. Until that consumer migration is complete the old worktree is preserved as a backup, not an additional source of future SDK changes. No npm publication is performed by local migration tests.
 

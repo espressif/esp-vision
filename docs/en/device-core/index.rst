@@ -18,11 +18,11 @@ Installation and compatibility
 
 .. code-block:: console
 
-   npm install --save-exact @esp-vision/device-core@0.5.1
+   npm install '@esp-vision/device-core@~0.5.0'
    # Optional Node LAN discovery adapter:
    npm install multicast-dns
 
-These examples target SDK ``0.5.1``; use the exact version shown and verify registry availability before installation. Node.js 22 is the host baseline. Browsers require a bundler/import map and a host-provided Web Serial or binary WebSocket transport. Only EV-MUX v4 is supported; a v3 device must update firmware. Package, firmware and IDE versions are independent.
+These examples target SDK ``0.5.1``; declare a minor-locked range, record the resolved patch in a lockfile, and verify registry availability before installation. Node.js 22 is the host baseline. Browsers require a bundler/import map and a host-provided Web Serial or binary WebSocket transport. Only EV-MUX v4 is supported; a v3 device must update firmware. Package, firmware and IDE versions are independent.
 
 Architecture and starting point
 --------------------------------------------------------------

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 ESP-VISION-IDE
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict'
+import { highestStableVersion, validateVersionStep } from './version-policy.mjs'
 import { verifyPublishedIntegrity } from './verify-registry.mjs'
 import { spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
@@ -18,12 +19,27 @@ assert.match(manifest.version, /^\d+\.\d+\.\d+$/)
 assert.equal(manifest.publishConfig?.registry, registry)
 assert.equal(manifest.publishConfig?.access, 'public')
 assert.equal(manifest.license, 'Apache-2.0')
+assert.ok(['patch', 'minor', 'major'].includes(manifest.espVisionReleaseType), 'Release type must be patch, minor or major')
 if (!dryRun) {
   assert.equal(process.env.CI_PIPELINE_SOURCE, 'push', 'Publish only from the merged default-branch pipeline')
   assert.ok(process.env.CI_DEFAULT_BRANCH && process.env.CI_COMMIT_BRANCH === process.env.CI_DEFAULT_BRANCH,
     'Publish only after manual merge to the default branch')
   assert.equal(process.env.CI_COMMIT_REF_PROTECTED, 'true', 'Publishing requires a protected branch')
   assert.ok(process.env.NPM_PUBLISH_TOKEN, 'Protected NPM_PUBLISH_TOKEN is missing')
+}
+if (!dryRun) {
+  const url = new URL(`${encodeURIComponent(manifest.name)}/${encodeURIComponent(manifest.version)}`, registry)
+  const response = await fetch(url, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(15000) })
+  if (response.ok) {
+    console.log(`${manifest.name}@${manifest.version} already exists; no new version to publish.`)
+    process.exit(0)
+  }
+  assert.equal(response.status, 404, 'Registry lookup failed; do not attempt publication')
+  const allResponse = await fetch(new URL(encodeURIComponent(manifest.name), registry), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(15000) })
+  assert.equal(allResponse.status, 200, 'Cannot validate prior releases; do not attempt publication')
+  const previous = highestStableVersion(Object.keys((await allResponse.json()).versions ?? {}))
+  assert.ok(previous, 'A prior stable release is required to validate version progression')
+  validateVersionStep(previous, manifest.version, manifest.espVisionReleaseType)
 }
 const temporary = await mkdtemp(join(tmpdir(), 'esp-vision-core-release-'))
 try {
