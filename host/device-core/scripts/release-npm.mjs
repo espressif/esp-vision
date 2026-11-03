@@ -25,6 +25,15 @@ if (!dryRun) {
   assert.equal(process.env.CI_COMMIT_REF_PROTECTED, 'true', 'Publishing requires a protected branch')
   assert.ok(process.env.NPM_PUBLISH_TOKEN, 'Protected NPM_PUBLISH_TOKEN is missing')
 }
+if (!dryRun) {
+  const url = new URL(`${encodeURIComponent(manifest.name)}/${encodeURIComponent(manifest.version)}`, registry)
+  const response = await fetch(url, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(15000) })
+  if (response.ok) {
+    console.log(`${manifest.name}@${manifest.version} already exists; no new version to publish.`)
+    process.exit(0)
+  }
+  assert.equal(response.status, 404, 'Registry lookup failed; do not attempt publication')
+}
 const temporary = await mkdtemp(join(tmpdir(), 'esp-vision-core-release-'))
 try {
   // Store an environment reference, never the token value, outside the package.

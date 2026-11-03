@@ -16,6 +16,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Publish new Device Core and CLI versions automatically from protected default-branch pipelines; publish Plugin and Knowledge npm packages on qualified firmware tags with matching, explicit Core/CLI version pins and a registry-verified bundled CLI.
+
 - Build WorkBuddy, QoderWork and Cursor release ZIPs in GitHub Actions and attach verified tag artifacts to GitHub Releases, creating a draft when needed and preserving existing assets; retain npm publication in GitLab and remove its automatic WorkBuddy ZIP publisher.
 
 - Refine the WorkBuddy Chinese listing to the 50-character limit and record the rechecked official template inconsistencies while retaining Engineering classification and matching initial prompts.

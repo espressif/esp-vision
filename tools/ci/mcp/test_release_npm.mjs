@@ -153,7 +153,7 @@ test('Knowledge publication rejects a default-branch push without a release tag'
       CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true',
     }))
     assert.notEqual(result.status, 0)
-    assert.match(result.output, /requires a protected firmware release tag/)
+    assert.match(result.output, /require a protected firmware release tag/)
   })
 })
 
@@ -164,7 +164,7 @@ test('Knowledge publication requires the exact checked tarball before token use'
       CI_COMMIT_REF_PROTECTED: 'true',
     }))
     assert.notEqual(result.status, 0)
-    assert.match(result.output, /exact Knowledge tarball used by the image/)
+    assert.match(result.output, /exact checked release tarball/)
   })
 })
 
@@ -212,6 +212,7 @@ const fs = require('node:fs'), crypto = require('node:crypto');
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.NPM_CALL_LOG, JSON.stringify(args) + "\\n");
 if (args[0] === 'publish') {
+  if (process.env.PUBLISH_OK) process.exit(0);
   process.stderr.write('You cannot publish over the previously published versions: 0.1.0.');
   process.exit(42);
 }
@@ -243,21 +244,47 @@ test('CI archive validation rejects a different integrity reported by npm', () =
   assert.match(result.output, /npm interpreted a different tarball/)
 }))
 
-test('real publication still rejects changed public bytes and skips identical versions', () => withReleaseFixture(async fixture => {
-  const { archive, log, env } = await archivedCliFixture(fixture)
+test('an existing CLI version is skipped before packaging or publication', () => withReleaseFixture(async fixture => {
+  const { archive, env } = await archivedCliFixture(fixture)
   const loader = join(fixture.root, 'registry-fixture.mjs')
-  await writeFile(loader, `globalThis.fetch = async () => ({ok:true,status:200,json:async()=>({dist:{integrity:process.env.REGISTRY_INTEGRITY}})});`)
+  await writeFile(loader, `globalThis.fetch = async () => ({ok:true,status:200,json:async()=>({dist:{integrity:'sha512-existing'}})});`)
   const publishEnv = { ...env, NODE_OPTIONS: `--import ${pathToFileURL(loader).href}`, NPM_PUBLISH_TOKEN: 'protected-fixture-token',
-    CI_PIPELINE_SOURCE: 'push', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true', REGISTRY_INTEGRITY: 'sha512-different' }
-  const args = ['--package', 'host/device-cli', '--tarball', archive]
-  const changed = runHelper(fixture, args, publishEnv)
-  assert.notEqual(changed.status, 0)
-  assert.match(changed.output, /already exists with different content/)
+    CI_PIPELINE_SOURCE: 'push', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true' }
+  const result = runHelper(fixture, ['--package', 'host/device-cli', '--tarball', archive], publishEnv)
+  assert.equal(result.status, 0, result.output)
+  assert.match(result.output, /already exists; no new version to publish/)
+}))
+
+test('plugin publication rejects a default-branch push without a firmware tag', () => withReleaseFixture(async fixture => {
+  const result = runHelper(fixture, ['--package', 'host/esp-vision-plugin'], withoutTokenEnv(fixture.env, {
+    CI_PIPELINE_SOURCE: 'push', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true',
+  }))
+  assert.notEqual(result.status, 0)
+  assert.match(result.output, /require a protected firmware release tag/)
+}))
+
+test('plugin tag publication requires the exact checked tarball and protected tag', () => withReleaseFixture(async fixture => {
+  const env = withoutTokenEnv(fixture.env, { CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '2026.10.22', CI_COMMIT_REF_PROTECTED: 'true' })
+  const missing = runHelper(fixture, ['--package', 'host/esp-vision-plugin'], env)
+  assert.notEqual(missing.status, 0)
+  assert.match(missing.output, /exact checked release tarball/)
+  const unprotected = runHelper(fixture, ['--package', 'host/esp-vision-plugin', '--tarball', 'fixture.tgz'], { ...env, CI_COMMIT_REF_PROTECTED: 'false' })
+  assert.notEqual(unprotected.status, 0)
+  assert.match(unprotected.output, /requires a protected branch/)
+}))
+
+test('a new CLI version is published once and its integrity verified', () => withReleaseFixture(async fixture => {
+  const { archive, log, env } = await archivedCliFixture(fixture)
   const { createHash } = await import('node:crypto')
-  publishEnv.REGISTRY_INTEGRITY = 'sha512-' + createHash('sha512').update(await readFile(archive)).digest('base64')
-  const identical = runHelper(fixture, args, publishEnv)
-  assert.equal(identical.status, 0, identical.output)
-  assert.match(identical.output, /already published with identical content; skipped/)
+  const integrity = 'sha512-' + createHash('sha512').update(await readFile(archive)).digest('base64')
+  const loader = join(fixture.root, 'registry-new.mjs')
+  await writeFile(loader, `let reads=0; globalThis.fetch=async()=>{reads++;const found=reads>=3;return {ok:found,status:found?200:404,json:async()=>({dist:{integrity:process.env.REGISTRY_INTEGRITY}})}}`)
+  const publishEnv = { ...env, NODE_OPTIONS: `--import ${pathToFileURL(loader).href}`, NPM_PUBLISH_TOKEN: 'protected-fixture-token',
+    CI_PIPELINE_SOURCE: 'push', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true',
+    PUBLISH_OK: '1', REGISTRY_INTEGRITY: integrity }
+  const result = runHelper(fixture, ['--package', 'host/device-cli', '--tarball', archive], publishEnv)
+  assert.equal(result.status, 0, result.output)
+  assert.match(result.output, /Published and verified/)
   const calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
-  assert.deepEqual(calls.map(call => call[0]), ['whoami', 'whoami'])
+  assert.deepEqual(calls.map(call => call[0]), ['whoami', 'publish'])
 }))

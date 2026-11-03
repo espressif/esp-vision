@@ -35,11 +35,9 @@ class ReleaseSourceOrderTests(unittest.TestCase):
     def test_dl_waits_for_the_exact_source_commit_to_be_mirrored(self):
         self.assertTrue({'push_to_github', 'pack_launchpad', 'qualify_firmware_release'} <= jobs(self.upload['needs']))
 
-    def test_manual_npm_publication_cannot_block_source_mirroring(self):
-        for filename, publisher in [('host-tools.yml', 'publish_device_cli_npm'),
-                                    ('plugin.yml', 'publish_plugin_npm')]:
-            config = yaml.safe_load((ROOT / '.gitlab/ci' / filename).read_text())
-            self.assertEqual(self.source['stage'], config[publisher]['stage'])
+    def test_npm_publication_cannot_block_source_mirroring(self):
+        config = yaml.safe_load((ROOT / '.gitlab/ci/plugin.yml').read_text())
+        self.assertEqual(config['publish_plugin_npm']['stage'], 'post_deploy')
         for rule in self.source['rules']:
             self.assertFalse(any(name.startswith('publish_') for name in jobs(rule.get('needs', []))))
         self.assertTrue(any(item['if'] == '$CI_COMMIT_TAG' for item in self.source['rules']),

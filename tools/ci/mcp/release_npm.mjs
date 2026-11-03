@@ -61,16 +61,24 @@ for (const dependencyGroup of ['dependencies', 'devDependencies', 'optionalDepen
 
 if (!dryRun) {
   assert.equal(process.env.CI_PIPELINE_SOURCE, 'push', 'Publish only from the merged default-branch pipeline')
-  if (packagePath === 'host/knowledge-mcp') {
+  if (packagePath === 'host/knowledge-mcp' || packagePath === 'host/esp-vision-plugin') {
     assert.match(process.env.CI_COMMIT_TAG ?? '', /^(?:v\d+\.\d+(?:\.\d+)?|\d{4}\.\d{1,2}\.\d{1,2})(?:$|[-.])/,
-      'Knowledge npm publication requires a protected firmware release tag')
-    assert.ok(suppliedTarball, 'Publish the exact Knowledge tarball used by the image')
+      'Plugin and Knowledge npm publication require a protected firmware release tag')
+    assert.ok(suppliedTarball, 'Publish the exact checked release tarball')
   } else {
     assert.ok(process.env.CI_DEFAULT_BRANCH && process.env.CI_COMMIT_BRANCH === process.env.CI_DEFAULT_BRANCH,
-      'Publish only after a manual merge to the default branch')
+      'Publish only from the default branch')
   }
   assert.equal(process.env.CI_COMMIT_REF_PROTECTED, 'true', 'Publishing requires a protected branch')
   assert.ok(process.env.NPM_PUBLISH_TOKEN, 'Protected NPM_PUBLISH_TOKEN is missing')
+}
+
+if (!dryRun && packagePath === 'host/device-cli') {
+  const existing = await readRegistryMetadata(new URL(`${encodeURIComponent(sourceManifest.name)}/${encodeURIComponent(sourceManifest.version)}`, registry))
+  if (existing) {
+    console.log(`${sourceManifest.name}@${sourceManifest.version} already exists; no new version to publish.`)
+    process.exit(0)
+  }
 }
 
 const tempBase = resolve(process.env.ESP_VISION_NPM_TEMP_DIR ?? process.env.TMPDIR ?? join(repoRoot, '.cache/npm-release'))
@@ -136,6 +144,20 @@ try {
       const publishedCore = await readRegistryMetadata(new URL(`${encodeURIComponent('@esp-vision/device-core')}/${pinnedCore}`, registry))
       assert.ok(publishedCore, 'Publish the pinned Core version before publishing its consumers')
       assert.equal(publishedCore.dist?.integrity, expected.integrity, 'Published Core differs from the tested build artifact')
+    }
+
+    if (packagePath === 'host/knowledge-mcp' || packagePath === 'host/esp-vision-plugin') {
+      const peerPath = packagePath === 'host/knowledge-mcp' ? 'host/esp-vision-plugin' : 'host/knowledge-mcp'
+      const peer = JSON.parse(await readFile(join(repoRoot, peerPath, 'package.json'), 'utf8'))
+      const pins = sourceManifest.espVision
+      assert.deepEqual(pins, peer.espVision, 'Plugin and Knowledge must declare the same Core and CLI versions')
+      for (const version of [pins?.deviceCore, pins?.deviceCli]) {
+        assert.match(version ?? '', /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, 'Release versions must be exact stable versions')
+      }
+      const core = await readRegistryMetadata(new URL(`${encodeURIComponent('@esp-vision/device-core')}/${pins.deviceCore}`, registry))
+      const cli = await readRegistryMetadata(new URL(`${encodeURIComponent('@esp-vision/device-cli')}/${pins.deviceCli}`, registry))
+      assert.ok(core?.dist?.integrity && cli?.dist?.integrity, 'Pinned Core and CLI must both be published')
+      assert.equal(cli.devDependencies?.['@esp-vision/device-core'], pins.deviceCore, 'Published CLI must declare the pinned Core')
     }
 
     const versionUrl = new URL(`${encodeURIComponent(sourceManifest.name)}/${encodeURIComponent(sourceManifest.version)}`, registry)
@@ -222,6 +244,7 @@ async function verifyTarball(tarball, metadata, manifest, temporaryRoot) {
   const packedManifest = JSON.parse(await readFile(join(packedRoot, 'package.json'), 'utf8'))
   assert.equal(packedManifest.name, manifest.name)
   assert.equal(packedManifest.version, manifest.version)
+  if (manifest.espVision) assert.deepEqual(packedManifest.espVision, manifest.espVision, 'Packed release pins differ from source')
   assert.deepEqual(packedManifest.dependencies ?? {}, {})
   for (const dependencyGroup of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
     for (const [name, version] of Object.entries(packedManifest[dependencyGroup] ?? {})) {

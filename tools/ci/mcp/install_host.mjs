@@ -39,8 +39,22 @@ try {
   for (const name of ['device-cli']) {
     const source = join(root, 'host', name)
     const manifest = JSON.parse(await readFile(join(source, 'package.json'), 'utf8'))
-    assert.equal(manifest.devDependencies?.['@esp-vision/device-core'], packed.version,
-      `${name} must pin the staged Core version`)
+    const pinnedCore = manifest.devDependencies?.['@esp-vision/device-core']
+    assert.match(pinnedCore ?? '', /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, `${name} must pin an exact Core version`)
+    if (pinnedCore !== packed.version) {
+      // Core and CLI release independently. Keep testing the CLI against its
+      // published, locked Core until the CLI explicitly updates its pin.
+      const lock = JSON.parse(await readFile(join(source, 'package-lock.json'), 'utf8'))
+      const entry = lock.packages?.['node_modules/@esp-vision/device-core']
+      assert.equal(entry?.version, pinnedCore, 'Core lock must match the CLI pin')
+      assert.equal(new URL(entry.resolved).origin, 'https://registry.npmjs.org', 'Core lock must use the npm registry')
+      assert.match(entry.integrity ?? '', /^sha512-[A-Za-z0-9+/]+={0,2}$/, 'Core lock must include integrity')
+      npm(['ci', '--ignore-scripts', '--no-audit', '--no-fund'], source)
+      const installed = JSON.parse(await readFile(join(source, 'node_modules/@esp-vision/device-core/package.json'), 'utf8'))
+      assert.equal(installed.version, pinnedCore)
+      console.log(`${name}: installed locked published Core ${pinnedCore}; source Core ${packed.version} is independent`)
+      continue
+    }
     const consumer = join(temporary, name)
     await mkdir(consumer)
     manifest.devDependencies['@esp-vision/device-core'] = `file:${tarball}`

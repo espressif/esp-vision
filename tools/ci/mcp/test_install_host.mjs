@@ -28,6 +28,7 @@ async function fixture(t) {
   await writeFile(join(core, 'package.json'), JSON.stringify({ name: '@esp-vision/device-core', version: '0.5.1', files: ['index.js'] }))
   await writeFile(join(core, 'index.js'), 'export const resetLifecycle = "published"\n')
   const [oldCore] = JSON.parse(npm(['pack', '--json', '--ignore-scripts', '--pack-destination', artifacts], core))
+  npm(['cache', 'add', join(artifacts, oldCore.filename)], root)
   await writeFile(join(core, 'index.js'), 'export const resetLifecycle = "fixed"\n')
   await writeFile(join(helper, 'package.json'), JSON.stringify({ name: 'host-lock-fixture', version: '1.0.0', files: ['index.js'] }))
   await writeFile(join(helper, 'index.js'), 'export const unchanged = true\n')
@@ -101,4 +102,18 @@ test('MR staging rejects installed Core bytes that differ from the verified arti
   const result = f.run()
   assert.notEqual(result.status, 0)
   assert.match(result.stderr, /Installed Core differs from the staged source: index.js/)
+})
+
+test('a newer source Core does not force the CLI to change its published version pin', async t => {
+  const f = await fixture(t)
+  const sourceManifest = join(f.root, 'host/device-core/package.json')
+  const core = JSON.parse(await readFile(sourceManifest, 'utf8'))
+  core.version = '0.6.0'
+  await writeFile(sourceManifest, JSON.stringify(core))
+  const result = f.run()
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /installed locked published Core 0.5.1/)
+  assert.equal(await readFile(join(f.cli, 'package-lock.json'), 'utf8'), f.tracked)
+  assert.equal(await readFile(join(f.cli, 'node_modules/@esp-vision/device-core/index.js'), 'utf8'),
+    'export const resetLifecycle = "published"\n')
 })

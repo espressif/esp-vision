@@ -52,5 +52,9 @@
     "type": "git",
     "url": "git+https://github.com/espressif/esp-vision.git",
     "directory": "host/knowledge-mcp"
+  },
+  "espVision": {
+    "deviceCore": "0.5.1",
+    "deviceCli": "0.1.0"
   }
 }

@@ -46,5 +46,9 @@
     "build:workbuddy-expert": "node scripts/workbuddy-expert.mjs",
     "build:qoderwork": "node scripts/qoderwork.mjs",
     "build:cursor": "node scripts/cursor.mjs"
+  },
+  "espVision": {
+    "deviceCore": "0.5.1",
+    "deviceCli": "0.1.0"
   }
 }

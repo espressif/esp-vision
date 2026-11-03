@@ -7,7 +7,9 @@ import { syncHostManifests } from './host-manifests.mjs'
 
 const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 await syncHostManifests(pluginRoot)
-const cliPackage = resolve(pluginRoot, '../device-cli')
+const cliPackage = process.env.ESP_VISION_PLUGIN_CLI_PACKAGE
+  ? resolve(process.env.ESP_VISION_PLUGIN_CLI_PACKAGE)
+  : resolve(pluginRoot, '../device-cli')
 const built = resolve(cliPackage, 'dist')
 const cli = resolve(pluginRoot, 'cli')
 

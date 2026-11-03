@@ -100,7 +100,7 @@ This is a candidate for the [WorkBuddy Expert upload workflow](https://open.work
 
 ### Release distribution
 
-GitLab remains the only npm publisher: run the protected default-branch manual `publish_plugin_npm` job after its checks pass. GitHub does not receive the npm publication token or run npm publish.
+GitLab remains the only npm publisher: `publish_plugin_npm` runs automatically after the checked Plugin archive and firmware qualification pass on a protected firmware release tag. Before tagging, bump the Plugin and Knowledge npm versions separately and set the same exact Core and CLI versions in both manifests’ `espVision` fields. The Plugin release archive bundles the integrity-verified published CLI, which must declare the pinned Core. Knowledge records these versions as release compatibility metadata and does not install them. GitHub does not receive the npm publication token or run npm publish.
 
 The GitHub `Plugin release packages` workflow builds and tests the same shared sources on pull requests and release-tag pushes (`v<major>.<minor>[.<patch>]` or date tags). A tag build exports WorkBuddy Expert, QoderWork and Cursor ZIPs, SHA-256 sidecars and the WorkBuddy receipt, with the tag commit embedded as provenance. A separate job downloads those exact artifacts, rechecks checksums/CRC/source identity and attaches them to the matching GitHub Release. If it does not exist, create a draft for maintainer review. Existing release notes, publication state and unrelated assets are preserved; identical named assets are reused and conflicting bytes fail without overwrite. No marketplace submission occurs. GitLab still builds review candidates, but no longer publishes WorkBuddy ZIPs to its Registry/Release.
 
@@ -128,7 +128,7 @@ On a release tag, the same `plugin_checks` builder uses the normalized tag as it
 
 GitHub Actions now owns permanent ZIP publication. Its release-tag build uses that normalized Expert version and attaches the unchanged ZIP/checksum/receipt to the matching GitHub Release, alongside QoderWork and Cursor packages. GitLab's former `publish_workbuddy_expert` job is removed; the older Registry helper is retained for compatibility tests but is no longer scheduled. See Release distribution above. This plugin workflow does not wait for GitLab firmware qualification; a missing GitHub Release is created as a draft so the maintainer can coordinate final publication.
 
-Expert publication follows the existing firmware release gate but does not add files to the DL firmware bundle, invoke npm publication, replace immutable npm `0.1.0`, or publish to the WorkBuddy marketplace. The separate manual npm publication jobs retain their existing immutable-package checks.
+Expert publication follows the existing firmware release gate but does not add files to the DL firmware bundle, invoke npm publication, replace immutable npm `0.1.0`, or publish to the WorkBuddy marketplace. The separate tag-gated npm publication retains its immutable-package checks.
 
 ## QoderWork candidate export
 

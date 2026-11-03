@@ -17,22 +17,61 @@ device_cli_checks:
     - node tools/ci/mcp/install_host.mjs --output .cache/host-artifacts
     - npm --prefix host/device-cli run build
     - npm --prefix host/device-cli test
-    - node --test tools/ci/mcp/test_install_host.mjs tools/ci/mcp/test_release_npm.mjs
+    - node --test tools/ci/mcp/test_install_host.mjs tools/ci/mcp/test_release_npm.mjs tools/ci/mcp/test_package_plugin_release.mjs
     - export ESP_VISION_NPM_TARBALL_DIR="$CI_PROJECT_DIR/.cache/host-npm-tarballs"
     - node tools/ci/mcp/release_npm.mjs --dry-run --package host/device-cli
   artifacts:
     paths: [.cache/host-artifacts/, .cache/host-npm-tarballs/]
     expire_in: 1 month
 
-publish_device_cli_npm:
-  when: manual
-  allow_failure: false
+# Build the release against the immutable npm Core pin. MR checks above also
+# exercise the in-tree candidate; those bytes must not stand in for npm Core.
+package_device_cli_npm:
   stage: deploy
   image: node:24-bookworm-slim
   tags: [build, internet, amd64]
   needs:
     - job: device_cli_checks
+      artifacts: false
+    - job: evmux_host_checks
+      artifacts: false
+    - job: publish_device_core_npm
+      artifacts: false
+      optional: true
+  variables:
+    GIT_SUBMODULE_STRATEGY: none
+    npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes:
+        - "host/device-cli/**/*"
+        - "tools/ci/mcp/release_npm.mjs"
+        - ".gitlab/ci/host-tools.yml"
+    - when: never
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-serial
+  script:
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/host-release-tmp" TMP="$CI_PROJECT_DIR/.cache/host-release-tmp" TEMP="$CI_PROJECT_DIR/.cache/host-release-tmp"
+    - mkdir -p "$TMPDIR"
+    - npm --prefix host/device-cli ci --ignore-scripts --no-audit --no-fund
+    - npm --prefix host/device-cli run build
+    - npm --prefix host/device-cli test
+    - export ESP_VISION_NPM_TARBALL_DIR="$CI_PROJECT_DIR/.cache/cli-release-tarballs"
+    - node tools/ci/mcp/release_npm.mjs --dry-run --package host/device-cli
+  artifacts:
+    paths: [.cache/cli-release-tarballs/]
+    expire_in: 1 month
+
+publish_device_cli_npm:
+  stage: post_deploy
+  image: node:24-bookworm-slim
+  tags: [build, internet, amd64]
+  needs:
+    - job: package_device_cli_npm
       artifacts: true
+    - job: device_cli_checks
+      artifacts: false
     - job: evmux_host_checks
       artifacts: false
   resource_group: host-tools-npm-release
@@ -50,8 +89,6 @@ publish_device_cli_npm:
     - apt-get update
     - apt-get install -y --no-install-recommends python3 python3-serial
   script:
-    - export TMPDIR="$CI_PROJECT_DIR/.cache/host-tmp" TMP="$CI_PROJECT_DIR/.cache/host-tmp" TEMP="$CI_PROJECT_DIR/.cache/host-tmp"
+    - export TMPDIR="$CI_PROJECT_DIR/.cache/host-release-tmp" TMP="$CI_PROJECT_DIR/.cache/host-release-tmp" TEMP="$CI_PROJECT_DIR/.cache/host-release-tmp"
     - mkdir -p "$TMPDIR"
-    # These jobs consume the checked archives. No source is rebuilt for publish.
-    - node tools/ci/mcp/install_host.mjs --output .cache/publish-dependencies
-    - node tools/ci/mcp/release_npm.mjs --package host/device-cli --tarball-dir .cache/host-npm-tarballs
+    - node tools/ci/mcp/release_npm.mjs --package host/device-cli --tarball-dir .cache/cli-release-tarballs
