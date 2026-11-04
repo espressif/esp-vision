@@ -93,9 +93,11 @@ device.discover(options)
 device.connect(options)
 ----------------------------------------------
 
-``{ transport?, role = "unknown", expectedDevice = null, timeout = 30000, probeRepl = true, signal? } → Promise<Inspection>``
+``{ transport?, role = "unknown", expectedDevice = null, timeout = 60000, probeRepl = true, autoBaud = true, signal? } → Promise<Inspection>``
 
 ``role`` 接受 ``unknown``、``usj``、``usb``、``uart``、``tcp``。Core 先订阅再打开连接，协商 v4，按需检查 ``expectedDevice``，获取会话并探测 REPL。返回默认查询结果 identity/capabilities/runtime。正在连接、已连接或正在断开的对象会以 ``DEVICE_BUSY`` 拒绝重复连接。身份匹配不等于认证。默认 ``probeRepl: true`` 会发送中断并探测 REPL，因此可能停止既有 Python 程序。设置 ``probeRepl: false`` 可获取 EV-MUX 会话而不发送 REPL 输入，供程序持续运行时观测或调用原生 RPC；仍遵循会话所有权，不会强制抢占。后续 Python 执行和依赖 REPL 的文件操作仍可能中断程序。该参数只接受布尔值。
+
+``autoBaud`` 默认为 ``true``。当固件声明支持 UART 协商且实际会话 owner 为 ``uart`` 时，Core 通过传输层可选的 ``setBaudRate(baudRate, { signal })`` 依次测试 2000000、1500000、921600、460800、115200 bps，首个通过即停止。``autoBaud: false`` 让短时身份探测保留 115200，跳过速率测试。原生 USB 与旧固件会跳过协商。该选项必须为布尔值。运行态速率与 ROM/stub 烧录速率独立。
 
 device.disconnect()
 --------------------------------------
@@ -246,7 +248,9 @@ device.capture(request)
    console.log(frame.metadata.width, frame.metadata.height, frame.data.length)
    const blob = new Blob([frame.data], { type: frame.mimeType })
 
-摄像头抓图在 VM 中初始化/使用摄像头；LCD 抓图要求 LCD 已初始化，只读取最后提交的软件 RGB565 帧，不启动摄像头或重新绘制屏幕。不支持硬件返回 NOT_SUPPORTED，LCD 未初始化返回 DISPLAY_NOT_READY。软件抓图不是物理面板回读。按需缓存、DMA 完成同步与 preview 交付见 :doc:`preview-debug <../communication/preview-debug>`。
+相机观测要求同时具有 ``debug.capture_frame`` 和 ``debug.capture_frame.observed.v1``，在 VM 中编码应用最近一次成功 snapshot 发布的独立帧；不初始化摄像头、不触发新物理采帧，也不覆盖应用图像。观测内容是原始捕获像素，不包含应用随后的加工。对于旧的不安全固件，Core 在本地以 ``UNSUPPORTED_OPERATION`` 拒绝并提示升级，包括直接会话 RPC/action 抓图路径。没有帧或摄像头重配、关闭、VM 复位后观测失效时返回 ``CAMERA_FRAME_NOT_READY``；观察副本分配失败返回 ``NO_MEM``，应用 snapshot 仍成功。超时、取消都不会触发另行采帧。观察运行中的程序应使用 ``connect({ probeRepl: false })``。
+
+LCD 抓图要求 LCD 已初始化，只读取最后提交的软件 RGB565 帧，不启动摄像头或重新绘制屏幕。不支持硬件返回 NOT_SUPPORTED，LCD 未初始化返回 DISPLAY_NOT_READY。软件抓图不是物理面板回读。按需缓存、DMA 完成同步与 preview 交付见 :doc:`preview-debug <../communication/preview-debug>`。
 
 device.on(event, handler)
 --------------------------------------------------

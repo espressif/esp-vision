@@ -24,6 +24,7 @@
 
 #include "ev_control_transport.h"
 #include "ev_session.h"
+#include "ev_mux.h"
 #include "network_service.h"
 #include "network_discovery.h"
 
@@ -37,11 +38,15 @@
 #define EV_TCP_RECLAIM_IDLE_TIMEOUT_MS (30000)
 #define EV_TCP_NETWORK_POLL_MS (100)
 #define EV_TCP_MAX_WRITE_CHUNK (4096)
+#define EV_TCP_RESET_LINGER_SECONDS (2)
+#define EV_TCP_RESET_LOCK_TIMEOUT_MS (1000)
 
 _Static_assert((ESP_VISION_TCP_PORT > 0) && (ESP_VISION_TCP_PORT <= 65535),
                "ESP_VISION_TCP_PORT must be a valid TCP port");
 
 #if ESP_VISION_ENABLE_TCP_TRANSPORT
+
+_Static_assert(LWIP_SO_LINGER, "EV-MUX TCP reset requires CONFIG_LWIP_SO_LINGER");
 
 typedef struct {
     int fd;
@@ -150,15 +155,105 @@ void ev_tcp_link_close(const ev_link_ref_t *link)
     ev_tcp_mark_close_pending(link);
 }
 
+esp_err_t ev_tcp_link_close_for_reset(const ev_link_ref_t *link,
+                                      ev_tcp_reset_close_result_t *result)
+{
+    if (result == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    memset(result, 0, sizeof(*result));
+    if ((link == NULL) || (link->transport_id != EV_TRANSPORT_TCP) ||
+            (link->slot >= EV_TRANSPORT_TCP_LINKS) || (s_socket_lock == NULL)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (xSemaphoreTake(s_socket_lock, pdMS_TO_TICKS(EV_TCP_RESET_LOCK_TIMEOUT_MS)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+    if (!ev_tcp_link_matches_locked(link)) {
+        xSemaphoreGive(s_socket_lock);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // Transfer this fd's ownership before releasing the lock: neither the TX
+    // worker nor a pending manager close may touch it or a reused generation.
+    ev_tcp_link_t *state = &s_links[link->slot];
+    int fd = state->fd;
+    state->fd = -1;
+    state->active = false;
+    memset(&state->ref, 0, sizeof(state->ref));
+    result->detached = true;
+    xSemaphoreGive(s_socket_lock);
+
+    // lwIP refuses positive linger on a nonblocking netconn with pending data.
+    // Do not call shutdown first: that can discard the pending response.
+    int flags = fcntl(fd, F_GETFL, 0);
+    if ((flags < 0) || (((flags & O_NONBLOCK) != 0) &&
+                        (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) < 0))) {
+        result->setup_errno = errno;
+    } else {
+        struct linger option = { .l_onoff = 1, .l_linger = EV_TCP_RESET_LINGER_SECONDS };
+        if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &option, sizeof(option)) < 0) {
+            result->setup_errno = errno;
+        } else {
+            result->linger_configured = true;
+        }
+    }
+
+    if (!result->linger_configured) {
+        // Even a nonblocking ordinary close can retry a failed FIN allocation
+        // for 20 seconds in lwIP. Only attempt a known bounded fallback. If
+        // setting abortive close also fails, restart reclaims this detached fd.
+        struct linger abort_option = { .l_onoff = 1, .l_linger = 0 };
+        if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &abort_option, sizeof(abort_option)) < 0) {
+            result->fallback_errno = errno;
+            return ESP_FAIL;
+        }
+        result->abort_configured = true;
+    }
+
+    // This is only a bounded graceful-close attempt. The pinned lwIP returns
+    // zero even when positive linger expires and aborts unacknowledged data.
+    // Preserve setup/close failures and do not retry close on a possibly reused
+    // descriptor; the caller immediately restarts and reclaims any failed fd.
+    result->close_attempted = true;
+    if (close(fd) < 0) {
+        result->close_errno = errno;
+        return ESP_FAIL;
+    }
+    return result->linger_configured ? ESP_OK : ESP_FAIL;
+}
+
 ev_io_result_t ev_tcp_link_write(const ev_link_ref_t *link, const void *buffer, size_t length)
 {
-    if ((link == NULL) || (buffer == NULL) || (length == 0) ||
+    ev_io_vector_t vector = {.base = buffer, .length = length};
+    return ev_tcp_link_writev(link, &vector, 1);
+}
+
+ev_io_result_t ev_tcp_link_writev(const ev_link_ref_t *link,
+                                  const ev_io_vector_t *vectors, size_t count)
+{
+    if ((link == NULL) || (vectors == NULL) || (count == 0) || (count > EV_IO_VECTORS_MAX) ||
             (link->transport_id != EV_TRANSPORT_TCP) ||
             (link->slot >= EV_TRANSPORT_TCP_LINKS) || (s_socket_lock == NULL)) {
         return ev_tcp_result(EV_IO_ERROR, 0, ESP_ERR_INVALID_ARG);
     }
-    // Do not wait behind manager socket work. Returning WOULD_BLOCK lets the
-    // frame scheduler advance other physical endpoints and retry this link.
+    struct iovec iov[EV_IO_VECTORS_MAX];
+    size_t bytes = 0;
+    size_t used = 0;
+    for (size_t i = 0; (i < count) && (bytes < EV_TCP_MAX_WRITE_CHUNK); ++i) {
+        if ((vectors[i].base == NULL) || (vectors[i].length == 0)) {
+            return ev_tcp_result(EV_IO_ERROR, 0, ESP_ERR_INVALID_ARG);
+        }
+        size_t length = vectors[i].length;
+        if (length > EV_TCP_MAX_WRITE_CHUNK - bytes) {
+            length = EV_TCP_MAX_WRITE_CHUNK - bytes;
+        }
+        iov[used].iov_base = (void *)vectors[i].base;
+        iov[used++].iov_len = length;
+        bytes += length;
+    }
+    // Do not wait behind manager socket work; preserve the same TX cursor
+    // for short sendmsg progress or WOULD_BLOCK.
     if (xSemaphoreTake(s_socket_lock, 0) != pdTRUE) {
         return ev_tcp_result(EV_IO_WOULD_BLOCK, 0, ESP_OK);
     }
@@ -166,14 +261,11 @@ ev_io_result_t ev_tcp_link_write(const ev_link_ref_t *link, const void *buffer, 
         xSemaphoreGive(s_socket_lock);
         return ev_tcp_result(EV_IO_CLOSED, 0, ESP_ERR_INVALID_STATE);
     }
-
-    size_t request_len = (length > EV_TCP_MAX_WRITE_CHUNK) ? EV_TCP_MAX_WRITE_CHUNK : length;
-    int fd = s_links[link->slot].fd;
+    struct msghdr message = { .msg_iov = iov, .msg_iovlen = used };
+    // lwIP sendmsg accepts only MSG_DONTWAIT/MSG_MORE. Unlike its send(),
+    // it rejects MSG_NOSIGNAL; this target does not raise POSIX SIGPIPE.
     int flags = MSG_DONTWAIT;
-#ifdef MSG_NOSIGNAL
-    flags |= MSG_NOSIGNAL;
-#endif
-    int written = send(fd, buffer, request_len, flags);
+    int written = sendmsg(s_links[link->slot].fd, &message, flags);
     int saved_errno = errno;
     xSemaphoreGive(s_socket_lock);
 
@@ -183,7 +275,10 @@ ev_io_result_t ev_tcp_link_write(const ev_link_ref_t *link, const void *buffer, 
     if (written == 0) {
         return ev_tcp_result(EV_IO_CLOSED, 0, ESP_ERR_INVALID_STATE);
     }
-    if ((saved_errno == EAGAIN) || (saved_errno == EWOULDBLOCK) || (saved_errno == EINTR)) {
+    // lwIP may report transient pbuf/segment exhaustion as ENOMEM/ENOBUFS
+    // for nonblocking send. Preserve the frame cursor and bounded TX deadline.
+    if ((saved_errno == EAGAIN) || (saved_errno == EWOULDBLOCK) || (saved_errno == EINTR) ||
+            (saved_errno == ENOMEM) || (saved_errno == ENOBUFS)) {
         return ev_tcp_result(EV_IO_WOULD_BLOCK, 0, ESP_OK);
     }
     if ((saved_errno == ECONNRESET) || (saved_errno == ENOTCONN) ||
@@ -242,17 +337,22 @@ static void ev_tcp_close_pending_links(void)
             continue;
         }
 
+        int retired_fd = -1;
         if (xSemaphoreTake(s_socket_lock, portMAX_DELAY) == pdTRUE) {
             ev_tcp_link_t *state = &s_links[slot];
             if (state->active && (state->ref.generation == generation)) {
-                if (state->fd >= 0) {
-                    close(state->fd);
-                }
+                retired_fd = state->fd;
                 state->fd = -1;
                 state->active = false;
                 memset(&state->ref, 0, sizeof(state->ref));
             }
             xSemaphoreGive(s_socket_lock);
+        }
+        // lwIP close may wait for FIN allocation when a peer stops reading.
+        // Retire the exact fd under the lock, then close outside it so the
+        // independent TX worker can continue sending to every other socket.
+        if (retired_fd >= 0) {
+            close(retired_fd);
         }
 
         portENTER_CRITICAL(&s_close_mux);
@@ -410,6 +510,14 @@ static void ev_tcp_accept_one(void)
         return;
     }
 
+    // SO_SNDTIMEO also bounds lwIP's retry while allocating a FIN in close(),
+    // even for O_NONBLOCK sockets. Avoid its default multi-second close wait;
+    // lwIP may still yield until its next TCP poll before aborting a full peer.
+    struct timeval close_timeout = { .tv_sec = 0, .tv_usec = 1000 };
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &close_timeout, sizeof(close_timeout)) != 0) {
+        close(fd);
+        return;
+    }
     int enabled = 1;
     (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
     (void)setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof(enabled));
@@ -472,7 +580,7 @@ static void ev_tcp_poll_link(uint8_t slot)
         ev_tcp_close_pending_links();
         return;
     }
-    if (ev_tcp_snapshot_owned_link(&ref)) {
+    if (ev_tcp_snapshot_owned_link(&ref) || ev_mux_preview_subscribed(&ref)) {
         if (xSemaphoreTake(s_socket_lock, portMAX_DELAY) == pdTRUE) {
             ev_tcp_link_t *state = &s_links[slot];
             if (state->active && (state->ref.generation == ref.generation)) {
@@ -510,7 +618,7 @@ static void ev_tcp_poll_link(uint8_t slot)
     // RX is handled before reclamation so a keepalive or same-socket reacquire
     // arriving at the idle deadline refreshes the link before it is considered
     // stale. A live session owner is never reclaimed for receive idleness.
-    if (ev_tcp_snapshot_owned_link(&ref)) {
+    if (ev_tcp_snapshot_owned_link(&ref) || ev_mux_preview_subscribed(&ref)) {
         if (xSemaphoreTake(s_socket_lock, portMAX_DELAY) == pdTRUE) {
             ev_tcp_link_t *state = &s_links[slot];
             if (state->active && (state->ref.generation == ref.generation)) {
@@ -628,9 +736,28 @@ ev_io_result_t ev_tcp_link_write(const ev_link_ref_t *link, const void *buffer, 
     return result;
 }
 
+ev_io_result_t ev_tcp_link_writev(const ev_link_ref_t *link,
+                                  const ev_io_vector_t *vectors, size_t count)
+{
+    (void)vectors;
+    (void)count;
+    return ev_tcp_link_write(link, NULL, 0);
+}
+
 void ev_tcp_link_close(const ev_link_ref_t *link)
 {
     (void)link;
+}
+
+esp_err_t ev_tcp_link_close_for_reset(const ev_link_ref_t *link,
+                                      ev_tcp_reset_close_result_t *result)
+{
+    (void)link;
+    if (result == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    memset(result, 0, sizeof(*result));
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 esp_err_t ev_tcp_init0(void)

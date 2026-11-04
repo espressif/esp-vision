@@ -32,6 +32,7 @@
 #include "uart.h"
 
 #include "ev_stdio.h"
+#include "ev_uart_baud.h"
 
 // EV-MUX congestion counters (debug.info "transport.stats"), indexed by
 // ev_control_ingress_t: 0=USJ, 1=CDC, 2=UART.
@@ -52,6 +53,8 @@ extern ringbuf_t uart_stdin_ringbuf;
 #endif
 
 static void uart_irq_handler(void *arg);
+static portMUX_TYPE uart_baud_lock = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t uart_current_baud = EV_UART_BAUD_BASELINE;
 
 #if CONFIG_IDF_TARGET_ESP32P4 || CONFIG_IDF_TARGET_ESP32S31
 static uint8_t __DECLARE_RCC_ATOMIC_ENV __attribute__ ((unused));
@@ -76,7 +79,7 @@ void uart_stdout_init(void) {
 
     uart_hal_init(&repl_hal, MICROPY_HW_UART_REPL); // Sets defaults: 8n1, no flow control
     uart_hal_set_sclk(&repl_hal, sclk);
-    uart_hal_set_baudrate(&repl_hal, MICROPY_HW_UART_REPL_BAUD, sclk_freq);
+    uart_hal_set_baudrate(&repl_hal, EV_UART_BAUD_BASELINE, sclk_freq);
     uart_hal_rxfifo_rst(&repl_hal);
     uart_hal_txfifo_rst(&repl_hal);
 
@@ -92,6 +95,39 @@ void uart_stdout_init(void) {
     uart_hal_set_rxfifo_full_thr(&repl_hal, RXFIFO_FULL_THR);
     uart_hal_set_rx_timeout(&repl_hal, RXFIFO_RX_TIMEOUT);
     uart_hal_ena_intr_mask(&repl_hal, UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT);
+}
+
+uint32_t uart_stdout_baudrate(void) {
+    return __atomic_load_n(&uart_current_baud, __ATOMIC_ACQUIRE);
+}
+
+// Caller serializes this with EV-MUX writes. Checking TX idle includes the
+// shift register: acceptance of EOF by the FIFO is not physical completion.
+esp_err_t uart_stdout_set_baudrate(uint32_t baud) {
+    if (!ev_uart_baud_candidate(baud)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    uart_hal_context_t repl_hal = REPL_HAL_DEFN();
+    soc_module_clk_t sclk;
+    uint32_t sclk_freq;
+    uart_hal_get_sclk(&repl_hal, &sclk);
+    esp_err_t error = uart_get_sclk_freq(sclk, &sclk_freq);
+    if (error != ESP_OK) {
+        return error;
+    }
+    if (!uart_hal_is_tx_idle(&repl_hal)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    portENTER_CRITICAL(&uart_baud_lock);
+    uart_hal_disable_intr_mask(&repl_hal, UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT);
+    uart_hal_set_baudrate(&repl_hal, baud, sclk_freq);
+    uart_hal_rxfifo_rst(&repl_hal);
+    uart_stdin_ringbuf.iget = uart_stdin_ringbuf.iput;
+    uart_hal_clr_intsts_mask(&repl_hal, UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT | UART_INTR_FRAM_ERR);
+    __atomic_store_n(&uart_current_baud, baud, __ATOMIC_RELEASE);
+    uart_hal_ena_intr_mask(&repl_hal, UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT);
+    portEXIT_CRITICAL(&uart_baud_lock);
+    return ESP_OK;
 }
 
 int uart_stdout_tx_some(const char *str, size_t len) {
@@ -132,6 +168,7 @@ static void IRAM_ATTR uart_irq_handler(void *arg) {
     int len;
     uart_hal_context_t repl_hal = REPL_HAL_DEFN();
 
+    portENTER_CRITICAL_ISR(&uart_baud_lock);
     uart_hal_clr_intsts_mask(&repl_hal, UART_INTR_RXFIFO_FULL | UART_INTR_RXFIFO_TOUT | UART_INTR_FRAM_ERR);
 
     len = uart_hal_get_rxfifo_len(&repl_hal);
@@ -148,6 +185,7 @@ static void IRAM_ATTR uart_irq_handler(void *arg) {
             }
         }
     }
+    portEXIT_CRITICAL_ISR(&uart_baud_lock);
 }
 
 #endif // MICROPY_HW_ENABLE_UART_REPL

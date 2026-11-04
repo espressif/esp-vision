@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 #include "ev_transport.h"
@@ -27,6 +28,8 @@ static bool s_mutation_started;
 static bool s_mutation_done;
 static bool s_driver_returned_after_mutation;
 static unsigned s_semaphore_contentions;
+static bool s_vector_write;
+static unsigned s_tcp_vector_calls;
 
 void ev_transport_test_semaphore_contended(void)
 {
@@ -65,7 +68,12 @@ static void *writer_thread(void *arg)
 {
     writer_args_t *args = arg;
     static const char byte = 'x';
-    args->result = ev_transport_write(&args->link, &byte, sizeof(byte));
+    if (s_vector_write) {
+        const ev_io_vector_t vectors[] = {{&byte, 1}, {&byte, 1}};
+        args->result = ev_transport_writev(&args->link, vectors, 2);
+    } else {
+        args->result = ev_transport_write(&args->link, &byte, sizeof(byte));
+    }
     return NULL;
 }
 
@@ -178,6 +186,33 @@ static void run_paused_write_mutation(mutation_kind_t kind)
     }
 }
 
+ev_io_result_t ev_tcp_link_writev(const ev_link_ref_t *link,
+                                  const ev_io_vector_t *vectors, size_t count)
+{
+    assert(link->transport_id == EV_TRANSPORT_TCP && link->slot == 2);
+    assert(count == 2 && vectors[0].length == 4 && vectors[1].length == 7);
+    assert(memcmp(vectors[0].base, "head", 4) == 0);
+    assert(memcmp(vectors[1].base, "payload", 7) == 0);
+    ++s_tcp_vector_calls;
+    return (ev_io_result_t) {
+        EV_IO_PROGRESS, 5, ESP_OK
+    };
+}
+
+static void test_tcp_vectors_reject_stale_generation_before_backend(void)
+{
+    ev_link_ref_t link;
+    assert(ev_transport_link_open(EV_TRANSPORT_TCP, 2, &link) == ESP_OK);
+    const ev_io_vector_t vectors[] = {{"head", 4}, {"payload", 7}};
+    ev_io_result_t result = ev_transport_writev(&link, vectors, 2);
+    assert(result.status == EV_IO_PROGRESS && result.transferred == 5);
+    assert(s_tcp_vector_calls == 1);
+    assert(ev_transport_writev(&link, NULL, 0).status == EV_IO_ERROR);
+    ev_transport_link_close(&link);
+    assert(ev_transport_writev(&link, vectors, 2).status == EV_IO_CLOSED);
+    assert(s_tcp_vector_calls == 1);
+}
+
 int main(void)
 {
     assert(ev_transport_init0() == ESP_OK);
@@ -186,6 +221,9 @@ int main(void)
     ev_link_ref_t reopened;
     assert(ev_transport_link_open(EV_TRANSPORT_USJ, 0, &reopened) == ESP_OK);
     run_paused_write_mutation(MUTATE_ADVANCE);
+    s_vector_write = true;
+    run_paused_write_mutation(MUTATE_CLOSE);
+    test_tcp_vectors_reject_stale_generation_before_backend();
     puts("serial write generation gate passed");
     return 0;
 }

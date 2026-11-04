@@ -95,6 +95,10 @@ static void esp_vision_camera_set_defaults(void)
 
 void esp_vision_camera_init0(void)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return;
+    }
+    esp_vision_camera_invalidate_observed_frame();
     esp_vision_camera_deinit();
     memset(&s_camera, 0, sizeof(s_camera));
     esp_vision_camera_set_defaults();
@@ -456,6 +460,9 @@ static void esp_vision_camera_cleanup(void)
 
 esp_err_t esp_vision_camera_init(void)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
     esp_err_t ret;
 
     if (s_camera.initialized) {
@@ -522,6 +529,10 @@ fail:
 
 void esp_vision_camera_deinit(void)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return;
+    }
+    esp_vision_camera_invalidate_observed_frame();
     esp_vision_camera_cleanup();
 }
 
@@ -538,6 +549,12 @@ bool esp_vision_camera_is_ready(void)
 
 esp_err_t esp_vision_camera_set_pixformat(uint32_t pixfmt)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (pixfmt != esp_vision_camera_get_pixformat()) {
+        esp_vision_camera_invalidate_observed_frame();
+    }
     if ((pixfmt != PIXFORMAT_RGB565) && (pixfmt != PIXFORMAT_GRAYSCALE)) {
         return ESP_ERR_NOT_SUPPORTED;
     }
@@ -560,6 +577,16 @@ uint32_t esp_vision_camera_get_pixformat(void)
 
 esp_err_t esp_vision_camera_set_framesize(esp_vision_camera_framesize_t framesize)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    uint32_t observed_width = 0;
+    uint32_t observed_height = 0;
+    if ((esp_vision_camera_get_framesize_dimensions(framesize, &observed_width, &observed_height) == ESP_OK) &&
+            ((observed_width != esp_vision_camera_get_width()) ||
+             (observed_height != esp_vision_camera_get_height()))) {
+        esp_vision_camera_invalidate_observed_frame();
+    }
     uint32_t width = 0;
     uint32_t height = 0;
     esp_err_t ret = esp_vision_camera_get_framesize_dimensions(framesize, &width, &height);
@@ -591,6 +618,12 @@ uint32_t esp_vision_camera_get_height(void)
 
 esp_err_t esp_vision_camera_set_hmirror(bool enable)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (enable != esp_vision_camera_get_hmirror()) {
+        esp_vision_camera_invalidate_observed_frame();
+    }
     s_camera.hmirror = enable;
     return ESP_OK;
 }
@@ -602,6 +635,12 @@ bool esp_vision_camera_get_hmirror(void)
 
 esp_err_t esp_vision_camera_set_vflip(bool enable)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (enable != esp_vision_camera_get_vflip()) {
+        esp_vision_camera_invalidate_observed_frame();
+    }
     s_camera.vflip = enable;
     return ESP_OK;
 }
@@ -619,12 +658,18 @@ esp_err_t esp_vision_camera_get_ipa(bool *enabled)
 
 esp_err_t esp_vision_camera_set_ipa(bool enable)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
     bool enabled;
     esp_err_t ret = esp_vision_camera_get_ipa(&enabled);
     if ((ret != ESP_OK) || (enabled == enable)) {
         return ret;
     }
 
+    // Stop/reopen may partially change the camera even when it fails. Never
+    // retain a publication (or allocation-failure latch) across that change.
+    esp_vision_camera_invalidate_observed_frame();
     const esp_vision_camera_restart_ops_t ops = {
         .release_buffers = esp_vision_camera_release_buffers,
         .open_device = esp_vision_camera_open_device,
@@ -653,12 +698,17 @@ esp_err_t esp_vision_camera_get_isp(esp_vision_isp_block_t block, esp_vision_isp
 
 esp_err_t esp_vision_camera_set_isp(esp_vision_isp_block_t block, const esp_vision_isp_config_t *config)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
     if (!esp_vision_camera_is_ready()) {
         return ESP_ERR_INVALID_STATE;
     }
     if (esp_vision_video_isp_controller_active()) {
         return ESP_ERR_INVALID_STATE;
     }
+    // A manual ISP write may apply only part of a configuration before error.
+    esp_vision_camera_invalidate_observed_frame();
     return esp_vision_video_isp_set(s_camera.fd, s_camera.isp_device_path, block, config);
 }
 #endif
@@ -673,8 +723,11 @@ size_t esp_vision_camera_frame_size(void)
     return esp_vision_camera_output_size(s_camera.width, s_camera.height, s_camera.output_pixfmt);
 }
 
-esp_err_t esp_vision_camera_capture(uint8_t *pixels, size_t pixels_size)
+esp_err_t esp_vision_camera_capture_into(uint8_t *pixels, size_t pixels_size)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
     struct v4l2_buffer buf;
     bool dequeued = false;
     esp_err_t ret;

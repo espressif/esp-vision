@@ -14,7 +14,7 @@ function fixture({ reset = 'ack', release = 'ack' } = {}) {
     ...(owned ? { sessionId: owner, vmEpoch: 1 } : {}), payload: JSON.stringify(payload),
   }))
   const parser = new EvMuxParser({ filterFrame(metadata, bytes) {
-    const payload = metadata.channel.endsWith('.rpc') ? JSON.parse(new TextDecoder().decode(bytes)) : null
+    const payload = metadata.channel.endsWith('.rpc') ? JSON.parse(new TextDecoder().decode(bytes)) : new TextDecoder().decode(bytes)
     requests.push({ metadata, payload })
     if (metadata.method === 'device.control' && payload.action === 'reset') {
       if (['SESSION_REQUIRED', 'SESSION_EXPIRED', 'NOT_OWNER'].includes(reset)) {
@@ -168,4 +168,125 @@ test('a release already in flight excludes a new destructive reset', async t => 
   assert.deepEqual(await releasing, { ok: true, accepted: true })
   assert.equal(f.session.sessionId, null)
   assert.equal(f.session.pendingRpc.size, 0)
+})
+
+function replResetFixture({ write = async () => {} } = {}) {
+  const f = fixture()
+  const original = f.session.transport.writeBytes
+  f.session.transport.writeBytes = async bytes => {
+    await original(bytes)
+    const request = f.requests.at(-1)
+    if (request.metadata.channel.startsWith('repl.')) await write(request)
+  }
+  return f
+}
+
+test('bootloader submission invalidates the lease without claiming a ROM acknowledgement', async t => {
+  const f = replResetFixture(); t.after(() => f.session.close())
+  f.session._startKeepalive()
+  assert.deepEqual(await f.session.control('bootloader'), {
+    ok: true, operation: 'bootloader', acknowledged: false, outcome: 'unknown',
+  })
+  assert.equal(f.session.sessionId, null)
+  assert.equal(f.session.keepaliveTimer, null)
+  assert.deepEqual(await f.session.release(), { ok: true, accepted: false })
+  assert.deepEqual(f.requests.map(r => r.metadata.channel), ['repl.signal', 'repl.stdin'])
+  assert.match(f.requests[1].payload, /machine\.bootloader\(\)/)
+})
+
+test('release joins a pending bootloader write and excludes concurrent commands', async t => {
+  let complete
+  const f = replResetFixture({ write: request => request.metadata.channel === 'repl.stdin'
+    ? new Promise(resolve => { complete = resolve }) : undefined })
+  t.after(() => f.session.close())
+  const bootloader = f.session.control('bootloader')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(typeof complete, 'function')
+  await assert.rejects(f.session.control('bootloader'), { code: 'DEVICE_RESETTING' })
+  await assert.rejects(f.session.control('stop'), { code: 'DEVICE_RESETTING' })
+  await assert.rejects(f.session.control('hard-reset'), { code: 'DEVICE_RESETTING' })
+  const released = f.session.release()
+  complete()
+  await bootloader
+  assert.deepEqual(await released, { ok: true, accepted: false })
+  assert.equal(f.requests.length, 2)
+})
+
+test('bootloader partial writes preserve the original failure without stale release or replay', async t => {
+  const failure = Object.assign(new Error('USB interface removed during write'), { code: 'USB_GONE' })
+  const f = replResetFixture({ write: request => {
+    if (request.metadata.channel === 'repl.stdin') throw failure
+  } }); t.after(() => f.session.close())
+  await assert.rejects(f.session.control('bootloader'), error => error === failure
+    && error.reset?.outcome === 'unknown' && error.reset.acknowledged === false)
+  await f.session.release()
+  assert.equal(f.session.sessionId, null)
+  assert.equal(f.requests.length, 2)
+})
+
+test('pre-cancelled bootloader leaves its lease; cancellation during submission invalidates it', async t => {
+  for (const before of [true, false]) {
+    const controller = new AbortController()
+    const reason = Object.assign(new Error('Cancelled'), { code: 'CANCELLED' })
+    const f = replResetFixture({ write: request => request.metadata.channel === 'repl.stdin'
+      ? new Promise(() => {}) : undefined }); t.after(() => f.session.close())
+    if (before) controller.abort(reason)
+    const result = f.session.control('bootloader', { signal: controller.signal })
+    const rejected = assert.rejects(result, error => error === reason)
+    if (!before) {
+      await new Promise(resolve => setImmediate(resolve))
+      controller.abort(reason)
+    }
+    await rejected
+    assert.equal(f.session.sessionId, before ? f.owner : null)
+    assert.equal(f.requests.length, before ? 0 : 2)
+  }
+})
+
+test('a bounded bootloader write timeout remains unknown and never becomes a release timeout', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const f = replResetFixture({ write: request => request.metadata.channel === 'repl.stdin'
+    ? new Promise(() => {}) : undefined }); t.after(() => f.session.close())
+  const result = f.session.control('bootloader', { timeout: 50 })
+  const rejected = assert.rejects(result, error => error.code === 'TIMEOUT'
+    && error.message === 'Device reset submission timed out' && error.reset?.outcome === 'unknown')
+  await new Promise(resolve => setImmediate(resolve))
+  t.mock.timers.tick(50)
+  await rejected
+  await f.session.release()
+  assert.equal(f.requests.length, 2)
+})
+
+test('failure before a bootloader command retains its live lease and normal cleanup', async t => {
+  const failure = Object.assign(new Error('Interrupt write failed'), { code: 'WRITE_FAILED' })
+  const f = replResetFixture({ write: () => { throw failure } }); t.after(() => f.session.close())
+  await assert.rejects(f.session.control('bootloader'), error => error === failure && !error.reset)
+  assert.equal(f.session.sessionId, f.owner)
+  assert.equal(f.session.state, 'ready')
+  await f.session.release()
+  assert.deepEqual(f.requests.map(r => r.metadata.channel), ['repl.signal', 'user.rpc'])
+})
+
+test('bootloader cleanup waits for an actual transport drain, without treating it as a device ACK', async t => {
+  let drained
+  const f = replResetFixture(); t.after(() => f.session.close())
+  f.session.transport.drain = () => new Promise(resolve => { drained = resolve })
+  const resetting = f.session.control('bootloader')
+  const release = f.session.release()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(f.session.state, 'resetting')
+  assert.equal(f.session.sessionId, f.owner)
+  drained()
+  assert.equal((await resetting).acknowledged, false)
+  assert.deepEqual(await release, { ok: true, accepted: false })
+  assert.equal(f.requests.length, 2)
+})
+
+test('a release already in flight excludes a bootloader command', async t => {
+  const f = fixture({ release: 'defer' }); t.after(() => f.session.close())
+  const releasing = f.session.release()
+  await assert.rejects(f.session.control('bootloader'), { code: 'DEVICE_RELEASING' })
+  assert.equal(f.requests.length, 1)
+  f.ackRelease()
+  await releasing
 })

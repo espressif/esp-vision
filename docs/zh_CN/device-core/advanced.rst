@@ -187,7 +187,7 @@ DeviceSession
     发送关联 RPC，等待 JSON 或 binaryResponse；超时、取消、固件错误会拒绝。
 
 ``DeviceSession.captureImage(method, payload = {}, options = {})``
-    调用抓图方法，返回 JPEG {data,mimeType,metadata}。
+    调用抓图方法，返回 JPEG {data,mimeType,metadata}。相机方法（包括直接 ``rpc`` 和请求 ``writeFrame``）要求 ``debug.capture_frame.observed.v1``，旧的不安全固件会在发送字节前被拒绝。``CAMERA_FRAME_NOT_READY`` 和 ``NO_MEM`` 保留为明确固件错误，不另行物理采帧。
 
 ``DeviceSession.negotiate(options = {})``
     探测 v4、校验身份/限制、获取所有权，可验证 REPL。
@@ -1347,7 +1347,7 @@ FirmwareFlashSession.flash 返回值
 ------------------------------------------------------------------
 
 ``openBrowserRom({ port, logger = {}, signal? })``
-    SDK 0.5.1 已包含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载锁定的 tasmota 9.4.2，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、完整回读和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化，不中断已开始的写入与回读。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块，根与 Node 入口也不加载浏览器后端。
+    SDK 0.6.0 包含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载官方 ``esptool-js@0.7.1``，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、完整回读和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化，不中断已开始的写入与回读。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块，根与 Node 入口也不加载浏览器后端。
 
 @esp-vision/device-core/firmware 发布读取器（0.5.1）
 ------------------------------------------------------

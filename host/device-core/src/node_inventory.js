@@ -87,7 +87,7 @@ export async function inventory(options = {}, dependencies = {}) {
     signal?.throwIfAborted()
     const device = (dependencies.createDevice ?? createDevice)({ transport: (dependencies.transportFor ?? transportFor)(row, options) })
     try {
-      const result = await device.connect({ role: row.interface === 'serial' ? 'unknown' : row.interface, timeout: options.probeTimeout ?? 5000, signal, probeRepl: false, ...(row.advertisement ? { expectedDevice: row.advertisement } : {}) })
+      const result = await device.connect({ role: row.interface === 'serial' ? 'unknown' : row.interface, timeout: options.probeTimeout ?? 5000, signal, probeRepl: false, autoBaud: false, ...(row.advertisement ? { expectedDevice: row.advertisement } : {}) })
       row.identity = result.identity; row.inspection = await device.inspect({ fields: options.fields, signal }); row.status = 'identified'
     } catch (error) {
       if (signal?.aborted) throw error

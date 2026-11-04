@@ -2,3 +2,6 @@
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="boards/ESP32_P4X_EYE/partitions-16MiB-esp-vision.csv"
+
+# Leave room for camera/ISP/codec VFS drivers alongside storage and consoles.
+CONFIG_VFS_MAX_COUNT=16

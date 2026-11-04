@@ -12,12 +12,12 @@ Device Core npm 包对接
 
 Device Core 源码在 ESP-VISION 固件仓库的 ``host/device-core/`` 维护。``host/`` 表示运行在主机的代码，不是固件模块；IDE 和自定义应用直接使用 SDK，Agent 设备控制工作流使用单独打包的 Device CLI。协议变更应在同一个 MR 对齐固件、Core、文档与测试。
 
-包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.5.1``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。依赖锁定到 minor，并在 lockfile 记录解析后的 patch；安装前请在公开 npm registry 确认所选版本；dry run 或创建 MR 不等于发布。
+包使用独立版本，不与固件版本或 IDE 版本绑定。本页示例面向 ``@esp-vision/device-core@0.6.0``，只支持 EV-MUX v4；v3 返回 ``VERSION_MISMATCH``，应用应提示更新固件。依赖锁定到 minor，并在 lockfile 记录解析后的 patch；安装前请在公开 npm registry 确认所选版本；dry run 或创建 MR 不等于发布。
 
 .. code-block:: console
 
-   npm view @esp-vision/device-core@0.5.1 version dist.integrity
-   npm install '@esp-vision/device-core@~0.5.0'
+   npm view @esp-vision/device-core@0.6.0 version dist.integrity
+   npm install '@esp-vision/device-core@~0.6.0'
 
 Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析包名，以及 Web Serial 或二进制 WebSocket 桥。Device Core 不附带串口驱动、网络桥、模型或 IDE UI。Node 串口枚举需要安装 pyserial 的 Python；Node mDNS 发现使用 ``multicast-dns``。单独的 Device CLI 以 ``@esp-vision/device-cli@0.1.0`` 安装，是 Agent 设备操作的受支持命令。固定 npm 版本并更新 lockfile。
 
@@ -233,7 +233,7 @@ Node inventory 汇总系统串口枚举和局域网发现，并返回 ``devices`
    // image: { data: Uint8Array, mimeType: 'image/jpeg', metadata }
    // Call unsubscribePreview()/unsubscribeLog() and revoke the final URL on UI teardown.
 
-``imageView`` 与 ``systemLog`` 是宿主 UI 对象。``on`` 返回取消订阅函数，图像事件和抓帧结果都包含原始 JPEG 字节，不需要 UI 再解析 EV-MUX。Core 分发前核验会话及 epoch；preview 由设备程序 ``img.flush()`` 触发，拥塞时允许丢帧。摄像头抓帧需要可执行 VM。
+``imageView`` 与 ``systemLog`` 是宿主 UI 对象。``on`` 返回取消订阅函数，图像事件和抓帧结果都包含原始 JPEG 字节，不需要 UI 再解析 EV-MUX。Core 分发前核验会话及 epoch；preview 由设备程序 ``img.flush()`` 触发，拥塞时允许丢帧。相机观测要求 VM 可执行，并同时具有 ``debug.capture_frame`` 和 ``debug.capture_frame.observed.v1``。它只编码应用最近一次成功 snapshot 发布的独立帧，不初始化或物理采集摄像头，不覆盖应用持有的图像。缺少安全能力时会在发送 RPC 前以 ``UNSUPPORTED_OPERATION`` 拒绝并提示升级。``CAMERA_FRAME_NOT_READY`` 表示没有有效发布帧；``NO_MEM`` 表示观察副本分配失败，但应用 snapshot 仍成功。观察既有程序时应通过 ``probeRepl: false`` 连接，避免默认的 REPL 中断。
 
 ``capture({ source: 'screen', format: 'jpeg' })`` 调用专用 ``debug.capture_screen``，返回 LCD 最后提交的 RGB565 帧编码的 JPEG；它在 VM 任务中运行，不调用摄像头或改变屏幕。无 LCD 返回 ``NOT_SUPPORTED``，未初始化/无有效帧返回 ``DISPLAY_NOT_READY``；不会回退到摄像头。旧固件缺少该能力时由 Core 报告不支持。高速原始二进制上传仍未实现。真机测试通过 ``npm run test:hardware`` 的 ``--screen-output`` 显示测试图案并保存抓屏，见 :doc:`communication/validation <../communication/validation>`。
 
@@ -262,7 +262,7 @@ Node 宿主可从 ``@esp-vision/device-core/node`` 导入 ``openNodeRom``，传�
 浏览器 ROM 烧录
 -----------------------------
 
-SDK 0.5.1 已包含 ``/browser`` 入口。须使用 webpack、Vite 或 esbuild 打包，在支持 Web Serial 的浏览器中通过 HTTPS 或 localhost 运行。无需 Python、主机端 tasmota 适配器或包管理器补丁。
+SDK 0.6.0 通过 ``/browser`` 入口提供共享的运行态串口与 ROM 适配器。须使用 webpack、Vite 或 esbuild 打包，在支持 Web Serial 的浏览器中通过 HTTPS 或 localhost 运行。无需 Python、主机端 tasmota 适配器或包管理器补丁。
 
 .. code-block:: javascript
 
@@ -282,4 +282,4 @@ SDK 0.5.1 已包含 ``/browser`` 入口。须使用 webpack、Vite 或 esbuild �
 
 ``selectedRelease`` 来自针对物理板型的 ``firmware.check``。Core 在获取 ROM 端口前下载与校验镜像，在启动 stub 前校验芯片、修订和安全模式，检查既有分区（update）或实测容量（install），完整回读每个写入字节。不可用猜测偏移替代缺失元数据，也不自动切换安装模式。Promise 完成前保持页面与端口可用；写入前可取消，开始写入后不允许中断写入与回读。单独的芯片识别界面可保留一个适配器、先 ``initialize()``，再把同一对象作为 ``openLoader`` 返回；应在 ``finally`` 关闭，即使镜像校验失败早于 Core 获取端口。原生 USB 烧录后可能需要物理复位。此 ROM 适配器与 EV-MUX 运行时串口、TCP OTA 分开。
 
-锁定的 tasmota 9.4.2 提供 P4 修订 301/302 电源/eFuse 处理、S31 支持、兼容打包器的 stub JSON 及官方双许可 esp-flasher-stub v1.4.0。Core 在实例级保留有界 SLIP 前导日志容错、原生 USB MEM_END 超时后仍须上游确认 OHAI 的 stub 启动，以及按大小缩放的擦除超时。不支持的 stub 或损坏的 SLIP 帧仍明确失败。包的根与 Node 入口不加载浏览器后端。
+SDK 0.6.0 锁定官方 ``esptool-js@0.7.1``，在压缩写入前协商 UART 下载速率，处理 USB-OTG ROM 直接同步，并校验有界读回包、尾随 MD5 与完整写入范围的 SHA-256。运行态 UART 协商仍是独立的 EV-MUX 生命周期。不支持的 stub 或损坏的 SLIP 帧仍明确失败。包的根与 Node 入口不加载浏览器后端。

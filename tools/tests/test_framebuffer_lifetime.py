@@ -25,16 +25,33 @@ class FramebufferLifetimeTests(unittest.TestCase):
 
     def test_snapshot_lazy_reuse_failure_and_release(self):
         source = (ROOT / 'platform/camera_framebuffer.c').read_text()
-        source = '\n'.join(line for line in source.splitlines() if not line.startswith('#include'))
+        source = '\n'.join(line for line in source.splitlines() if not line.startswith(('#include', '#ifndef', '#define', '#endif')))
         self.compile_run(r'''
 #include <assert.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <limits.h>
 typedef int esp_err_t;
 #define ESP_OK 0
 #define ESP_ERR_INVALID_ARG 1
 #define ESP_ERR_NO_MEM 2
+#define ESP_ERR_INVALID_STATE 3
+#define ESP_ERR_INVALID_SIZE 4
+#define PIXFORMAT_GRAYSCALE 1
+#define PIXFORMAT_RGB565 2
+#define ESP_VISION_MEMORY_PREFER_SPIRAM 1
+typedef void *TaskHandle_t;
+typedef struct { int32_t w,h; uint32_t pixfmt,size; uint8_t *_raw,*pixels; } image_t;
+static TaskHandle_t xTaskGetCurrentTaskHandle(void) {return (TaskHandle_t)1;}
+static bool esp_vision_camera_is_ready(void) {return true;}
+static uint32_t esp_vision_camera_get_width(void) {return 4;}
+static uint32_t esp_vision_camera_get_height(void) {return 4;}
+static uint32_t esp_vision_camera_get_pixformat(void) {return PIXFORMAT_GRAYSCALE;}
+static size_t esp_vision_camera_frame_size(void) {return 16;}
+static int esp_vision_camera_capture_into(uint8_t *p,size_t n) {(void)p;(void)n;return 0;}
 #define MALLOC_CAP_SPIRAM 1
 #define MALLOC_CAP_8BIT 2
 #define MALLOC_CAP_INTERNAL 4
@@ -50,8 +67,12 @@ static void *esp_vision_memory_malloc(size_t n, unsigned int required_caps) {
     if (p == NULL) p = heap_caps_malloc(n, MALLOC_CAP_INTERNAL | required_caps);
     return p;
 }
+static void *esp_vision_memory_malloc_preferred(size_t n,unsigned int caps,int preference) {
+    assert(preference==ESP_VISION_MEMORY_PREFER_SPIRAM);return esp_vision_memory_malloc(n,caps);
+}
 ''' + source + r'''
 int main(void) {
+    esp_vision_camera_framebuffer_init0();
     uint8_t *first=NULL,*next=NULL;
     assert(allocations==0 && frees==0);
     assert(esp_vision_camera_get_snapshot_buffer(0,&first)==ESP_ERR_INVALID_ARG);

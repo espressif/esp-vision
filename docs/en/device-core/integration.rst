@@ -12,12 +12,12 @@ Source, versions and installation
 
 Device Core is maintained in ``host/device-core/`` in the ESP-VISION firmware repository. ``host/`` contains code running on the host, not firmware modules. IDEs and custom applications consume the SDK directly; agent workflows use the separately packaged Device CLI for device control. Protocol changes should align firmware, Core, documentation and tests in one MR.
 
-The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.5.1`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Declare a minor-locked range, record the resolved patch in the lockfile, and verify it in the public npm registry before installing; a dry run or an open MR alone does not publish it.
+The package has its own version, independent of firmware and IDE versions. These examples target ``@esp-vision/device-core@0.6.0`` and EV-MUX v4 only. v3 returns ``VERSION_MISMATCH`` and applications should request a firmware update. Declare a minor-locked range, record the resolved patch in the lockfile, and verify it in the public npm registry before installing; a dry run or an open MR alone does not publish it.
 
 .. code-block:: console
 
-   npm view @esp-vision/device-core@0.5.1 version dist.integrity
-   npm install '@esp-vision/device-core@~0.5.0'
+   npm view @esp-vision/device-core@0.6.0 version dist.integrity
+   npm install '@esp-vision/device-core@~0.6.0'
 
 Node.js 22 is the Node host baseline. Browsers need a bundler/import map for package specifiers and Web Serial or a binary WebSocket bridge. Device Core contains no serial driver, network bridge, model or IDE UI. Node serial enumeration requires Python with pyserial; Node mDNS discovery uses ``multicast-dns``. The separate Device CLI installs as ``@esp-vision/device-cli@0.1.0`` and provides the supported agent-facing device command. Pin npm versions and update lockfiles.
 
@@ -233,7 +233,7 @@ Preview, logs and capture
    // image: { data: Uint8Array, mimeType: 'image/jpeg', metadata }
    // Call unsubscribePreview()/unsubscribeLog() and revoke the final URL on UI teardown.
 
-``imageView`` and ``systemLog`` are host UI objects. ``on`` returns an unsubscribe function. Image events and capture results contain raw JPEG bytes; UIs do not parse EV-MUX again. Core checks session and epoch before dispatch. Device programs trigger preview using ``img.flush()`` and frames may be dropped under congestion. Camera capture needs an executable VM.
+``imageView`` and ``systemLog`` are host UI objects. ``on`` returns an unsubscribe function. Image events and capture results contain raw JPEG bytes; UIs do not parse EV-MUX again. Core checks session and epoch before dispatch. Device programs trigger preview using ``img.flush()`` and frames may be dropped under congestion. Camera observation needs an executable VM and both ``debug.capture_frame`` and ``debug.capture_frame.observed.v1``. It only encodes the independent frame published by the application's last successful snapshot; it never initializes or physically captures from the sensor and never overwrites an application-held image. Missing safety support rejects before sending the RPC with ``UNSUPPORTED_OPERATION`` and an upgrade message. ``CAMERA_FRAME_NOT_READY`` means no valid published frame; ``NO_MEM`` reports failure to allocate the observation copy without failing the application snapshot. Connect with ``probeRepl: false`` to avoid interrupting an existing application.
 
 ``capture({ source: 'screen', format: 'jpeg' })`` calls dedicated ``debug.capture_screen`` and returns JPEG encoded from the last submitted LCD RGB565 frame. It runs in the VM task without camera calls or screen changes. An absent LCD returns ``NOT_SUPPORTED``; an uninitialized display or absent valid frame returns ``DISPLAY_NOT_READY``. It never falls back to the camera. Core reports unsupported capability on older firmware. High-throughput raw binary upload remains unimplemented. Hardware testing uses ``npm run test:hardware`` with ``--screen-output`` to display a pattern and save a screenshot; see :doc:`communication/validation <../communication/validation>`.
 
@@ -262,7 +262,7 @@ Node hosts import ``openNodeRom`` from ``@esp-vision/device-core/node`` and pass
 Browser ROM flashing
 ---------------------------------
 
-SDK 0.5.1 includes the ``/browser`` entry point. Use webpack, Vite or esbuild in a Web Serial-capable browser over HTTPS or localhost. No Python installation, host-maintained tasmota adapter or package-manager patch is needed.
+SDK 0.6.0 provides shared runtime serial and ROM adapters through the ``/browser`` entry point. Use webpack, Vite or esbuild in a Web Serial-capable browser over HTTPS or localhost. No Python installation, host-maintained tasmota adapter or package-manager patch is needed.
 
 .. code-block:: javascript
 
@@ -282,4 +282,4 @@ SDK 0.5.1 includes the ``/browser`` entry point. Use webpack, Vite or esbuild in
 
 ``selectedRelease`` comes from ``firmware.check`` for the physical board. Core downloads and validates before acquiring the ROM port, validates chip/revision/security before stub startup, checks existing layout (update) or measured capacity (install), and verifies every written byte. Never replace missing metadata with guessed offsets or silently switch update to install. Keep the page and port alive until the Promise settles: cancellation applies before writing and cannot interrupt a started write/readback. For a separate chip-detection UI, retain one adapter, await ``initialize()``, then pass that adapter as ``openLoader``; close it in ``finally`` even if download/metadata validation fails before Core acquires it. Native USB may require physical reset after verified flashing. This ROM adapter is separate from runtime EV-MUX serial transport and TCP OTA.
 
-Pinned tasmota 9.4.2 supplies P4 revision 301/302 power/eFuse handling, S31 support, bundler-compatible stub JSON and official dual-licensed esp-flasher-stub v1.4.0. Core adds per-instance bounded pre-SLIP log tolerance, native USB MEM_END timeout recovery that still requires upstream OHAI confirmation, and size-scaled stub erase timeouts. Unsupported stubs and malformed SLIP packets remain explicit errors. The package root and Node entry points do not load this browser backend.
+SDK 0.6.0 pins official ``esptool-js@0.7.1``. It negotiates UART download speeds before compressed writes, handles direct USB-OTG ROM synchronization and validates bounded readback packets, their trailing MD5 and the complete write-range SHA-256. Runtime UART negotiation remains a separate EV-MUX lifecycle. Unsupported stubs and malformed SLIP packets remain explicit errors. The package root and Node entry points do not load this browser backend.

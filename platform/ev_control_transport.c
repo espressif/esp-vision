@@ -17,6 +17,7 @@
 #include "extmod/vfs.h"
 #include "esp_heap_caps.h"
 #include "esp_idf_version.h"
+#include "esp_log.h"
 #include "esp_system.h"
 #include "esp_task.h"
 #include "esp_timer.h"
@@ -38,6 +39,7 @@
 #include "ev_session.h"
 #include "ev_control_json.h"
 #include "ev_mux.h"
+#include "ev_uart_baud.h"
 #include "ev_tcp.h"
 #include "ev_repl_queue.h"
 #include "ev_vm_output.h"
@@ -96,6 +98,7 @@ extern void mp_usbd_cdc_transport_clear_rx_if_unmounted(void);
 #define EV_CONTROL_TRANSPORT_TASK_PRIORITY (ESP_TASK_PRIO_MIN + 2)
 #define EV_CONTROL_TRANSPORT_PUMP_MS (2)
 #define EV_CONTROL_RX_CHUNK_MAX (256)
+#define EV_CONTROL_UART_RX_CHUNKS (4)
 #define EV_CONTROL_FRAME_IDLE_TIMEOUT_MS (3000U)
 #define EV_CONTROL_FRAME_TOTAL_TIMEOUT_MS (10000U)
 #define EV_CONTROL_RESPONSE_CONTEXTS (6)
@@ -172,7 +175,10 @@ typedef struct {
 
 // The frame parsers are owned by the transport task (single consumer of the
 // physical ingress ring buffers once EV-MUX is enabled).
-static ev_control_parser_t s_parsers[EV_TRANSPORT_MAX][EV_TRANSPORT_LINK_SLOTS_MAX];
+// Serial endpoints have exactly one slot. A rectangular transport/slot
+// array wastes three large RX parsers for every added TCP connection.
+#define EV_CONTROL_PARSER_COUNT (EV_TRANSPORT_TCP + EV_TRANSPORT_TCP_LINKS)
+static ev_control_parser_t s_parsers[EV_CONTROL_PARSER_COUNT];
 static ev_repl_queue_t s_repl_rx;
 // Producers: transport task (repl.stdin) and VM task (script.run injection).
 // Consumer: VM task. Producers serialize on s_repl_rx_mux.
@@ -252,6 +258,10 @@ static StaticSemaphore_t s_transport_state_lock_buf;
 static SemaphoreHandle_t s_transport_state_lock;
 static TaskHandle_t s_transport_task;
 static bool s_control_initialized;
+static ev_uart_baud_t s_uart_baud;
+static ev_link_ref_t s_uart_baud_link;
+static char s_uart_baud_session[EV_SESSION_ID_HEX_LEN + 1];
+static portMUX_TYPE s_uart_baud_mux = portMUX_INITIALIZER_UNLOCKED;
 #if MICROPY_HW_USB_CDC
 static bool s_cdc_connection_known;
 static bool s_cdc_mounted;
@@ -273,7 +283,9 @@ static void ev_control_network_changed(const esp_vision_network_snapshot_t *snap
 static bool ev_control_json_get_string(const char *json, const char *key, char *out, size_t out_len);
 static uint32_t ev_control_json_get_u32(const char *json, const char *key, uint32_t fallback);
 static esp_err_t ev_control_send_error(const char *method, uint32_t seq, const char *code, const char *message);
+static esp_err_t ev_control_send_reset(uint32_t seq);
 static bool ev_control_rpc_needs_vm(ev_control_rpc_domain_t domain, const char *method, const char *payload);
+static bool ev_control_link_equal(const ev_link_ref_t *left, const ev_link_ref_t *right);
 #if MICROPY_HW_USB_CDC
 static void ev_control_transport_cdc_update(void);
 #endif
@@ -942,6 +954,8 @@ enum {
     EV_CONTROL_TX_DONE_RELEASE,
     EV_CONTROL_TX_DONE_NETWORK,
     EV_CONTROL_TX_DONE_CLOSE_LINK,
+    EV_CONTROL_TX_DONE_UART_PREPARE,
+    EV_CONTROL_TX_DONE_UART_COMMIT,
 };
 
 typedef struct {
@@ -973,6 +987,20 @@ static void ev_control_tx_complete(esp_err_t result,
         break;
     case EV_CONTROL_TX_DONE_CLOSE_LINK:
         ev_transport_link_close(&link);
+        break;
+    case EV_CONTROL_TX_DONE_UART_PREPARE:
+        portENTER_CRITICAL(&s_uart_baud_mux);
+        ev_uart_baud_prepare_complete(&s_uart_baud, tx_context->value, result == ESP_OK,
+                                      ev_control_now_ms());
+        portEXIT_CRITICAL(&s_uart_baud_mux);
+        break;
+    case EV_CONTROL_TX_DONE_UART_COMMIT:
+        portENTER_CRITICAL(&s_uart_baud_mux);
+        ev_uart_baud_commit_complete(&s_uart_baud, tx_context->value, result == ESP_OK);
+        if (s_uart_baud.phase == EV_UART_BAUD_ACTIVE) {
+            ev_mux_uart_pause(false);
+        }
+        portEXIT_CRITICAL(&s_uart_baud_mux);
         break;
     default:
         break;
@@ -1074,6 +1102,8 @@ static esp_err_t ev_control_submit_rpc_link(const ev_link_ref_t *link,
         .session_id = session_id,
         .vm_epoch = tx_vm_epoch,
         .tx_class = ev_control_tx_class(type, method),
+        .uart_baud_control = (strncmp(method, "transport.uart.", 15) == 0) ||
+        (strcmp(method, "session.release") == 0),
         .completion = s_response_completion,
         .completion_context = s_response_completion_context_len ? s_response_completion_context : NULL,
         .completion_context_len = s_response_completion_context_len,
@@ -1403,7 +1433,7 @@ static int ev_control_append_sink(char *payload, size_t capacity, int *pos, bool
         (void)snprintf(tx_timeout, sizeof(tx_timeout),
                        ",\"txTimeout\":{\"baseMs\":1500,\"bitsPerByte\":10,\"factor\":2,"
                        "\"marginMs\":250,\"maxMs\":10000,\"baud\":%u}",
-                       (unsigned int)MICROPY_HW_UART_REPL_BAUD);
+                       (unsigned int)ev_transport_uart_baudrate());
     }
     int n = snprintf(payload + *pos,
                      capacity - (size_t) * pos,
@@ -1458,6 +1488,15 @@ static esp_err_t ev_control_send_capabilities(uint32_t seq)
 #if defined(ESP_VISION_ENABLE_TCP_TRANSPORT) && ESP_VISION_ENABLE_TCP_TRANSPORT
     tcp_supported = true;
 #endif
+    char uart_baud[256] = "null";
+    if (ev_transport_uart_baudrate() != 0) {
+        (void)snprintf(uart_baud, sizeof(uart_baud),
+                       "{\"baseline\":%u,\"current\":%u,"
+                       "\"candidates\":[2000000,1500000,921600,460800,115200],"
+                       "\"probeBytes\":%u,\"timeoutMs\":%u,\"switchDelayMs\":%u}",
+                       EV_UART_BAUD_BASELINE, (unsigned int)ev_transport_uart_baudrate(),
+                       EV_UART_BAUD_PROBE_BYTES, EV_UART_BAUD_TIMEOUT_MS, EV_UART_BAUD_SWITCH_DELAY_MS);
+    }
     int n = snprintf(payload + pos, sizeof(payload) - (size_t)pos,
                      "],\"streams\":[\"user\",\"debug\"],"
                      "\"channels\":[\"user.rpc\",\"debug.rpc\",\"repl.stdin\",\"repl.stdout\","
@@ -1465,23 +1504,28 @@ static esp_err_t ev_control_send_capabilities(uint32_t seq)
                      "\"features\":[\"hello\",\"capabilities\",\"transport.state\",\"route.get\","
                      "\"route.changed\",\"session.firstCome\",\"session.keepalive\","
                      "\"network.background\",\"network.configure\",\"framed.repl\","
+                     "\"preview.subscribe\",\"preview.unsubscribe\",\"preview.observers.v1\","
                      "\"file.write.binary\",\"script.write\",\"script.write.chunked\",\"script.run\","
                      "\"launcher.boot.status.v1\",\"launcher.trial.status.v1\",\"launcher.typed-runner.v1\","
 #if MICROPY_HW_ENABLE_USBDEV && MICROPY_HW_USB_MSC
-                     "\"debug.info\",\"debug.capture_frame\",\"debug.capture_screen\",\"device.control\",\"storage.writer.lease\"],"
+                     "\"debug.info\",\"debug.capture_frame\",\"debug.capture_frame.observed.v1\",\"debug.capture_screen\",\"device.control\",\"storage.writer.lease\"],"
 #else
-                     "\"debug.info\",\"debug.capture_frame\",\"debug.capture_screen\",\"device.control\"],"
+                     "\"debug.info\",\"debug.capture_frame\",\"debug.capture_frame.observed.v1\",\"debug.capture_screen\",\"device.control\"],"
 #endif
                      "\"limits\":{\"metadataMax\":384,\"rxPayloadMax\":2048,"
                      "\"fileWriteChunkMax\":16384,\"replInputMax\":511,\"vmPendingMax\":1,\"txLargePayloadMax\":%u,"
                      "\"txFrameTimeoutMs\":1500,\"txQueueTimeoutMs\":2000},"
                      "\"session\":{\"policy\":\"firstCome\",\"leaseMs\":%u,\"keepaliveMs\":%u},"
-                     "\"tcp\":{\"supported\":%s,\"port\":%u,\"maxLinks\":2,\"handshakeTimeoutMs\":3000}}",
+                     "\"tcp\":{\"supported\":%s,\"port\":%u,\"maxLinks\":%u,\"maxObservers\":%u,\"observerFrameTimeoutMs\":%u,\"observerIdleTimeoutMs\":%u,\"handshakeTimeoutMs\":3000},\"uartBaud\":%s}",
                      (unsigned int)EV_MUX_LARGE_PAYLOAD_MAX,
                      (unsigned int)EV_SESSION_LEASE_MS,
                      (unsigned int)EV_SESSION_KEEPALIVE_MS,
                      ev_control_bool_str(tcp_supported),
-                     (unsigned int)ESP_VISION_TCP_PORT);
+                     (unsigned int)ESP_VISION_TCP_PORT,
+                     (unsigned int)EV_TRANSPORT_TCP_LINKS,
+                     (unsigned int)EV_TRANSPORT_PREVIEW_OBSERVERS,
+                     (unsigned int)EV_MUX_OBSERVER_FRAME_TIMEOUT_MS,
+                     (unsigned int)EV_MUX_OBSERVER_IDLE_TIMEOUT_MS, uart_baud);
     if ((n <= 0) || ((size_t)n >= sizeof(payload) - (size_t)pos)) {
         return ESP_ERR_INVALID_SIZE;
     }
@@ -2089,7 +2133,9 @@ static esp_err_t ev_control_send_debug_info_fs_read(uint32_t seq, const char *re
 
 static esp_err_t ev_control_send_debug_info_transport_stats(uint32_t seq)
 {
-    char payload[640];
+    ev_mux_timeout_info_t last_timeout;
+    ev_mux_tx_timeout_snapshot(&last_timeout);
+    char payload[768];
     int len = snprintf(payload,
                        sizeof(payload),
                        "{\"ok\":true,\"scope\":\"transport.stats\","
@@ -2097,6 +2143,8 @@ static esp_err_t ev_control_send_debug_info_transport_stats(uint32_t seq)
                        "\"ringFull\":{\"usj\":%" PRIu32 ",\"usb\":%" PRIu32 ",\"uart\":%" PRIu32 "},"
                        "\"frames\":{\"ok\":%" PRIu32 ",\"bad\":%" PRIu32 ",\"rejected\":%" PRIu32 "},"
                        "\"tcpTaskStackMinFreeBytes\":%" PRIu32 ","
+                       "\"lastTxTimeout\":{\"transport\":%" PRIu32 ",\"slot\":%" PRIu32 ","
+                       "\"offset\":%" PRIu32 ",\"bytes\":%" PRIu32 ",\"elapsedMs\":%" PRIu32 ",\"idleMs\":%" PRIu32 "},"
                        "\"parserTimeouts\":%" PRIu32 ",\"staleGenerationDrops\":%" PRIu32 ","
                        "\"drops\":{\"replRx\":%" PRIu32 ",\"vmBusy\":%" PRIu32 ","
                        "\"txTimeout\":%" PRIu32 ",\"txDrop\":%" PRIu32 ","
@@ -2112,6 +2160,8 @@ static esp_err_t ev_control_send_debug_info_transport_stats(uint32_t seq)
                        s_stats.frames_bad,
                        s_stats.frames_rejected,
                        ev_tcp_task_stack_min_free_bytes(),
+                       last_timeout.transport, last_timeout.slot, last_timeout.offset,
+                       last_timeout.bytes, last_timeout.elapsed_ms, last_timeout.idle_ms,
                        s_stats.parser_timeouts,
                        s_stats.stale_generation_drops,
                        s_stats.repl_rx_dropped,
@@ -2157,24 +2207,14 @@ static esp_err_t ev_control_send_debug_capture_frame(uint32_t seq, const char *r
     if ((quality <= 0) || (quality > 100)) {
         quality = ESP_VISION_JPEG_QUALITY_LOW;
     }
-    if (!esp_vision_camera_is_ready()) {
-        esp_err_t init_ret = esp_vision_camera_init();
-        if (init_ret != ESP_OK) {
-            return ev_control_send_error("debug.capture_frame", seq, "CAMERA_INIT_FAILED", esp_err_to_name(init_ret));
-        }
-    }
-
-    size_t frame_size = esp_vision_camera_frame_size();
-    uint8_t *pixels = NULL;
-    esp_err_t ret = esp_vision_camera_get_snapshot_buffer(frame_size, &pixels);
-    if (ret != ESP_OK) {
-        return ev_control_send_error("debug.capture_frame", seq, "NO_MEM", "failed to allocate frame buffer");
-    }
-
+    // Passive observation: no camera initialization, physical capture or writes
+    // to the application's Image. All publication and encoding is VM-task-only.
     image_t img;
-    ret = esp_vision_camera_snapshot(&img, pixels, frame_size);
+    esp_err_t ret = esp_vision_camera_get_observed_frame(&img);
     if (ret != ESP_OK) {
-        return ev_control_send_error("debug.capture_frame", seq, "CAPTURE_FAILED", esp_err_to_name(ret));
+        return ev_control_send_error("debug.capture_frame", seq,
+                                     (ret == ESP_ERR_NO_MEM) ? "NO_MEM" : "CAMERA_FRAME_NOT_READY",
+                                     esp_err_to_name(ret));
     }
 
     uint8_t *jpeg_buf = NULL;
@@ -2469,24 +2509,146 @@ static esp_err_t ev_control_send_device_control(uint32_t seq, const char *reques
         return ev_control_send_rpc_with_seq("rsp", "device.control", "{\"ok\":true,\"action\":\"stop\"}", seq);
     }
     if (strcmp(action, "reset") == 0) {
-        ev_mux_ticket_t ticket = 0;
-        s_response_ticket_out = &ticket;
-        esp_err_t ret = ev_control_send_rpc_with_seq("rsp", "device.control", "{\"ok\":true,\"action\":\"reset\"}", seq);
-        s_response_ticket_out = NULL;
-        if ((ret == ESP_OK) && (ticket != 0)) {
-            esp_err_t tx_result = ESP_FAIL;
-            (void)ev_mux_wait(ticket, 1000, &tx_result);
-            ev_mux_ticket_forget(ticket);
-        }
-        esp_restart();
-        return ret;
+        return ev_control_send_reset(seq);
     }
     return ev_control_send_error("device.control", seq, "INVALID_ACTION", "unsupported action");
 }
 
+static esp_err_t ev_control_send_reset(uint32_t seq)
+{
+    ev_mux_ticket_t ticket = 0;
+    s_response_ticket_out = &ticket;
+    esp_err_t queued = ev_control_send_rpc_with_seq("rsp", "device.control", "{\"ok\":true,\"action\":\"reset\"}", seq);
+    s_response_ticket_out = NULL;
+
+    esp_err_t waited = ESP_ERR_INVALID_STATE;
+    esp_err_t tx_result = ESP_FAIL;
+    if ((queued == ESP_OK) && (ticket != 0)) {
+        waited = ev_mux_wait(ticket, 1000, &tx_result);
+        ev_mux_ticket_forget(ticket);
+    }
+    esp_err_t result = (queued != ESP_OK) ? queued :
+                       ((waited != ESP_OK) ? waited : tx_result);
+    if (result != ESP_OK) {
+        ESP_LOGW("ev_control", "reset response unconfirmed: enqueue=%d wait=%d tx=%d",
+                 (int)queued, (int)waited, (int)tx_result);
+    } else if (s_response_link.transport_id == EV_TRANSPORT_TCP) {
+        ev_tcp_reset_close_result_t local_close;
+        result = ev_tcp_link_close_for_reset(&s_response_link, &local_close);
+        if (result != ESP_OK) {
+            ESP_LOGW("ev_control", "reset TCP close failed: result=%d detached=%d linger=%d abort=%d close_attempted=%d setup_errno=%d fallback_errno=%d close_errno=%d",
+                     (int)result, (int)local_close.detached, (int)local_close.linger_configured,
+                     (int)local_close.abort_configured, (int)local_close.close_attempted,
+                     local_close.setup_errno, local_close.fallback_errno, local_close.close_errno);
+        }
+    }
+
+    // A queued acceptance ACK cannot safely be retracted after a partial write.
+    // Keep one best-effort restart even if sending or closing failed. Only the
+    // host's received RPC ACK confirms acceptance; no local close proves it.
+    esp_restart();
+    return result;
+}
+
+static esp_err_t ev_control_send_uart_baud(uint32_t seq, const char *method, const char *payload)
+{
+    if ((s_response_link.transport_id != EV_TRANSPORT_UART) ||
+            (ev_transport_uart_baudrate() == 0)) {
+        return ev_control_send_error(method, seq, "UNSUPPORTED_OPERATION", "UART owner required");
+    }
+    char token[EV_UART_BAUD_TOKEN_MAX + 1] = "";
+    char data[EV_UART_BAUD_PROBE_BYTES + 1] = "";
+    bool prepare = strcmp(method, "transport.uart.prepare") == 0;
+    bool probe = strcmp(method, "transport.uart.probe") == 0;
+    bool commit = strcmp(method, "transport.uart.commit") == 0;
+    if (!prepare && !probe && !commit) {
+        return ev_control_send_error(method, seq, "UNKNOWN_METHOD", "unsupported UART method");
+    }
+    ev_control_json_field_t fields[] = {
+        ev_control_json_string_field("token", true, token, sizeof(token)),
+        ev_control_json_uint32_field("baudRate", prepare),
+        ev_control_json_string_field("data", probe, data, sizeof(data)),
+    };
+    if (!ev_control_json_parse_object(payload, strlen(payload), fields, MP_ARRAY_SIZE(fields)) ||
+            !ev_uart_baud_token_valid(token)) {
+        return ev_control_send_error(method, seq, "INVALID_ARGUMENT", "invalid UART negotiation parameters");
+    }
+    uint32_t baud = fields[1].value.uint32;
+    if (prepare && !ev_uart_baud_candidate(baud)) {
+        return ev_control_send_error(method, seq, "INVALID_ARGUMENT", "unsupported UART baud rate");
+    }
+    if (probe) {
+        size_t length = fields[2].value.string.length;
+        if ((length == 0) || (length > EV_UART_BAUD_PROBE_BYTES)) {
+            return ev_control_send_error(method, seq, "INVALID_ARGUMENT", "probe must contain 1 to 512 ASCII bytes");
+        }
+        for (size_t i = 0; i < length; ++i) {
+            if (((uint8_t)data[i] < 0x20) || ((uint8_t)data[i] > 0x7e)) {
+                return ev_control_send_error(method, seq, "INVALID_ARGUMENT", "probe must contain printable ASCII");
+            }
+        }
+    }
+
+    bool accepted;
+    portENTER_CRITICAL(&s_uart_baud_mux);
+    if (prepare) {
+        accepted = ev_uart_baud_prepare(&s_uart_baud, baud, token, ev_control_now_ms());
+        if (accepted) {
+            s_uart_baud_link = s_response_link;
+            memcpy(s_uart_baud_session, s_response_session_id, sizeof(s_uart_baud_session));
+            ev_mux_uart_pause(true);
+        }
+    } else {
+        accepted = ev_control_link_equal(&s_response_link, &s_uart_baud_link) &&
+                   (strcmp(s_response_session_id, s_uart_baud_session) == 0);
+        if (accepted && probe) {
+            accepted = ev_uart_baud_matches(&s_uart_baud, token);
+            if (accepted) {
+                s_uart_baud.probed = true;
+            }
+        } else if (accepted && commit) {
+            accepted = ev_uart_baud_commit(&s_uart_baud, token);
+        }
+        baud = s_uart_baud.requested;
+    }
+    portEXIT_CRITICAL(&s_uart_baud_mux);
+    if (!accepted) {
+        return ev_control_send_error(method, seq, "INVALID_STATE", "UART negotiation is busy or token is stale");
+    }
+
+    char response[EV_UART_BAUD_PROBE_BYTES * 2 + 192];
+    int length;
+    if (probe) {
+        char escaped[EV_UART_BAUD_PROBE_BYTES * 2 + 1];
+        ev_control_json_escape(escaped, sizeof(escaped), data);
+        length = snprintf(response, sizeof(response),
+                          "{\"ok\":true,\"token\":\"%s\",\"data\":\"%s\",\"baudRate\":%" PRIu32 "}",
+                          token, escaped, baud);
+    } else {
+        length = snprintf(response, sizeof(response),
+                          "{\"ok\":true,\"token\":\"%s\",\"baudRate\":%" PRIu32 ","
+                          "\"timeoutMs\":%u,\"switchDelayMs\":%u}",
+                          token, baud, EV_UART_BAUD_TIMEOUT_MS, EV_UART_BAUD_SWITCH_DELAY_MS);
+        (void)ev_control_set_completion(prepare ? EV_CONTROL_TX_DONE_UART_PREPARE :
+                                        EV_CONTROL_TX_DONE_UART_COMMIT, token);
+    }
+    esp_err_t result = (length > 0 && (size_t)length < sizeof(response)) ?
+                       ev_control_send_rpc_with_seq("rsp", method, response, seq) : ESP_ERR_INVALID_SIZE;
+    if (result != ESP_OK && !probe) {
+        s_response_completion = NULL;
+        s_response_completion_context_len = 0;
+        portENTER_CRITICAL(&s_uart_baud_mux);
+        s_uart_baud.phase = EV_UART_BAUD_RESTORE;
+        portEXIT_CRITICAL(&s_uart_baud_mux);
+    }
+    return result;
+}
+
 static void ev_control_handle_user_rpc(uint32_t seq, const char *method, const char *payload)
 {
-    if (strcmp(method, "session.keepalive") == 0) {
+    if (strncmp(method, "transport.uart.", 15) == 0) {
+        (void)ev_control_send_uart_baud(seq, method, payload);
+    } else if (strcmp(method, "session.keepalive") == 0) {
         ev_session_snapshot_t session;
         ev_session_result_t result = ev_session_keepalive(&s_response_link,
                                                           s_response_session_id,
@@ -2793,6 +2955,31 @@ static void ev_control_handle_frame(ev_control_parser_t *parser, const ev_link_r
     s_response_input_generation = 0;
     s_response_transition_id = 0;
 
+    if ((strcmp(channel, "user.rpc") == 0) &&
+            ((strcmp(method, "preview.subscribe") == 0) || (strcmp(method, "preview.unsubscribe") == 0))) {
+        s_response_session_id[0] = '\0';
+        s_response_vm_epoch = 0;
+        bool enable = strcmp(method, "preview.subscribe") == 0;
+        esp_err_t result = ev_mux_preview_subscribe(link, enable);
+        if (result == ESP_OK) {
+            (void)ev_control_send_rpc_with_seq("rsp", method,
+                                               enable ? "{\"ok\":true,\"subscribed\":true,\"channel\":\"preview.frame\",\"maxObservers\":2}" :
+                                               "{\"ok\":true,\"subscribed\":false}", seq);
+        } else {
+            (void)ev_control_send_error(method, seq,
+                                        (result == ESP_ERR_NO_MEM) ? "OBSERVER_LIMIT" : "INVALID_STATE",
+                                        "preview subscription requires a non-owner TCP link and a free observer slot");
+        }
+        ev_control_response_context_clear();
+        return;
+    }
+    // An observer connection cannot be promoted into a control session.
+    if (ev_mux_preview_subscribed(link) && (strcmp(method, "hello") == 0)) {
+        (void)ev_control_send_error(method, seq, "READ_ONLY", "reconnect to acquire a control session");
+        ev_control_response_context_clear();
+        return;
+    }
+
     if (ev_control_is_bootstrap_method(channel, method)) {
         s_response_session_id[0] = '\0';
         s_response_vm_epoch = 0;
@@ -3049,7 +3236,9 @@ esp_err_t ev_control_transport_rx(const ev_link_ref_t *link,
         ++s_stats.stale_generation_drops;
         return ESP_ERR_INVALID_STATE;
     }
-    ev_control_parser_t *parser = &s_parsers[link->transport_id][link->slot];
+    size_t parser_index = (link->transport_id == EV_TRANSPORT_TCP) ?
+                          EV_TRANSPORT_TCP + link->slot : link->transport_id;
+    ev_control_parser_t *parser = &s_parsers[parser_index];
     if (!parser->link_bound || !ev_control_link_equal(&parser->link, link)) {
         ev_control_parser_reset(parser);
         parser->link_bound = true;
@@ -3083,10 +3272,8 @@ void ev_control_transport_init0(void)
     }
     xSemaphoreTake(s_transport_state_lock, portMAX_DELAY);
     if (!s_control_initialized) {
-        for (size_t id = 0; id < EV_TRANSPORT_MAX; ++id) {
-            for (size_t slot = 0; slot < EV_TRANSPORT_LINK_SLOTS_MAX; ++slot) {
-                ev_control_parser_reset(&s_parsers[id][slot]);
-            }
+        for (size_t i = 0; i < EV_CONTROL_PARSER_COUNT; ++i) {
+            ev_control_parser_reset(&s_parsers[i]);
         }
         (void)ev_file_transfer_init();
         ev_control_repl_rx_clear();
@@ -3265,7 +3452,7 @@ static void ev_control_transport_poll_serial(void)
 #if MICROPY_HW_USB_CDC
 static void ev_control_transport_cdc_reset_parser(void)
 {
-    ev_control_parser_reset(&s_parsers[EV_TRANSPORT_USB][EV_TRANSPORT_PHYSICAL_SLOT]);
+    ev_control_parser_reset(&s_parsers[EV_TRANSPORT_USB]);
 }
 
 static void ev_control_transport_cdc_close(void)
@@ -3385,11 +3572,71 @@ static ev_io_result_t ev_control_transport_read_link(const ev_link_ref_t *link,
     return ev_transport_read(link, buffer, capacity);
 }
 
-// Drain one bounded chunk per compiled serial endpoint. TCP has its own socket
-// manager and calls ev_control_transport_rx directly, preserving parser
-// ownership and backpressure at recv().
+// Runs under the transport-state mutex, so RX reset cannot race the parser.
+// A TX completion only means bytes entered the UART FIFO. The backend setter
+// also checks the hardware shift register and returns INVALID_STATE until EOF
+// has physically left the wire; retrying here keeps the TX worker nonblocking.
+static void ev_control_transport_uart_baud_poll(void)
+{
+    ev_session_snapshot_t session;
+    bool has_session = ev_session_snapshot(&session);
+    uint32_t now_ms = ev_control_now_ms();
+    portENTER_CRITICAL(&s_uart_baud_mux);
+    if (s_uart_baud.phase == EV_UART_BAUD_IDLE) {
+        portEXIT_CRITICAL(&s_uart_baud_mux);
+        return;
+    }
+    ev_link_ref_t link = s_uart_baud_link;
+    bool same_owner = has_session && session.has_owner &&
+                      ev_control_link_equal(&session.owner_link, &link) &&
+                      (strcmp(session.session_id, s_uart_baud_session) == 0);
+    if (!same_owner || ev_uart_baud_expired(&s_uart_baud, now_ms)) {
+        s_uart_baud.phase = EV_UART_BAUD_RESTORE;
+    }
+    bool restore = s_uart_baud.phase == EV_UART_BAUD_RESTORE;
+    bool switch_due = ev_uart_baud_switch_due(&s_uart_baud, now_ms);
+    uint32_t requested = restore ? EV_UART_BAUD_BASELINE : s_uart_baud.requested;
+    if (restore) {
+        ev_mux_uart_pause(true);
+    }
+    portEXIT_CRITICAL(&s_uart_baud_mux);
+    if (!restore && !switch_due) {
+        return;
+    }
+    if (restore && same_owner) {
+        // Recovery always starts a fresh session. It cannot leave an owner at
+        // an unknown speed, nor reinterpret old buffered input after rollback.
+        (void)ev_session_link_lost(&link, EV_SESSION_CHANGE_LINK_LOST);
+    }
+    esp_err_t result = ev_transport_uart_set_baudrate(requested);
+    if (result == ESP_ERR_INVALID_STATE) {
+        return;
+    }
+    if (result != ESP_OK) {
+        portENTER_CRITICAL(&s_uart_baud_mux);
+        s_uart_baud.phase = EV_UART_BAUD_RESTORE;
+        portEXIT_CRITICAL(&s_uart_baud_mux);
+        return;
+    }
+    ev_control_parser_reset(&s_parsers[EV_TRANSPORT_UART]);
+    portENTER_CRITICAL(&s_uart_baud_mux);
+    if (restore) {
+        memset(&s_uart_baud, 0, sizeof(s_uart_baud));
+        memset(s_uart_baud_session, 0, sizeof(s_uart_baud_session));
+        ev_mux_uart_pause(false);
+    } else if (s_uart_baud.phase == EV_UART_BAUD_WAIT_SWITCH) {
+        s_uart_baud.phase = EV_UART_BAUD_PROBING;
+    }
+    portEXIT_CRITICAL(&s_uart_baud_mux);
+}
+
+// UART at 2 Mbps can receive 400 bytes per 2 ms cycle. Drain a bounded burst
+// there, or long file writes would overflow the 2 KiB RX ring despite small
+// negotiation probes succeeding. TCP has its own socket manager and calls
+// ev_control_transport_rx directly, preserving parser ownership/backpressure.
 static void ev_control_transport_pump(void)
 {
+    ev_control_transport_uart_baud_poll();
     ev_control_transport_poll_serial();
 #if MICROPY_HW_USB_CDC
     ev_control_transport_cdc_update();
@@ -3400,11 +3647,17 @@ static void ev_control_transport_pump(void)
         if (!ev_transport_link_ref(id, EV_TRANSPORT_PHYSICAL_SLOT, &link)) {
             continue;
         }
-        ev_io_result_t result = ev_control_transport_read_link(&link, chunk, sizeof(chunk));
-        if (result.status == EV_IO_PROGRESS) {
-            (void)ev_control_transport_rx(&link, chunk, result.transferred);
-        } else if (result.status == EV_IO_WOULD_BLOCK) {
-            (void)ev_control_transport_rx(&link, NULL, 0);
+        unsigned chunks = (id == EV_TRANSPORT_UART) ? EV_CONTROL_UART_RX_CHUNKS : 1;
+        for (unsigned i = 0; i < chunks; ++i) {
+            ev_io_result_t result = ev_control_transport_read_link(&link, chunk, sizeof(chunk));
+            if (result.status == EV_IO_PROGRESS) {
+                (void)ev_control_transport_rx(&link, chunk, result.transferred);
+            } else {
+                if (result.status == EV_IO_WOULD_BLOCK) {
+                    (void)ev_control_transport_rx(&link, NULL, 0);
+                }
+                break;
+            }
         }
     }
 }

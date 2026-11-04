@@ -187,7 +187,7 @@ Low-level v4 interpreter. Inject transport, EvMuxParser, EvRepl and makeEvMuxFra
     Send a correlated RPC, awaiting JSON or binaryResponse; reject timeout/cancellation/firmware error.
 
 ``DeviceSession.captureImage(method, payload = {}, options = {})``
-    Call a capture method and return JPEG {data,mimeType,metadata}.
+    Call a capture method and return JPEG {data,mimeType,metadata}. Camera methods, including direct ``rpc`` and request ``writeFrame`` calls, require ``debug.capture_frame.observed.v1`` and reject unsafe older firmware before sending bytes. ``CAMERA_FRAME_NOT_READY`` and ``NO_MEM`` remain explicit firmware errors; no physical capture fallback is issued.
 
 ``DeviceSession.negotiate(options = {})``
     Probe v4, validate identity/limits, acquire ownership and optionally prove REPL readiness.
@@ -1347,7 +1347,7 @@ After verified readback, flash returns ``{ verified: true, needsReset: boolean }
 ------------------------------------------------------------------
 
 ``openBrowserRom({ port, logger = {}, signal? })``
-    Included in SDK 0.5.1. Return a passive browser ROM adapter for a selected Web Serial ``SerialPort``. Request the port in the user gesture and release any runtime connection first. ``initialize()`` lazily loads pinned tasmota 9.4.2, opens/detects the chip and exposes ``chipName/chipFamily/chipRevision``; it does not start a stub. The adapter implements ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` for ``firmware.update``. Core checks the approved image and ROM security before starting the stub and owns all write/readback/reset semantics. ``logger`` optionally provides ``log/error/debug`` functions. ``signal`` cancels initialization; it never closes a started write/readback. ``disconnect()`` is idempotent and releases the port; initialization failures also close acquired resources. A disconnected adapter cannot be reused. Use a browser bundler; direct upstream native ESM loading is unsupported. See :doc:`integration` for the complete example. This subpath imports no Node modules; the root and Node paths do not load this browser backend.
+    Included in SDK 0.6.0. Return a passive browser ROM adapter for a selected Web Serial ``SerialPort``. Request the port in the user gesture and release any runtime connection first. ``initialize()`` lazily loads official ``esptool-js@0.7.1``, opens/detects the chip and exposes ``chipName/chipFamily/chipRevision``; it does not start a stub. The adapter implements ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` for ``firmware.update``. Core checks the approved image and ROM security before starting the stub and owns all write/readback/reset semantics. ``logger`` optionally provides ``log/error/debug`` functions. ``signal`` cancels initialization; it never closes a started write/readback. ``disconnect()`` is idempotent and releases the port; initialization failures also close acquired resources. A disconnected adapter cannot be reused. Use a browser bundler; direct upstream native ESM loading is unsupported. See :doc:`integration` for the complete example. This subpath imports no Node modules; the root and Node paths do not load this browser backend.
 
 Release readers in @esp-vision/device-core/firmware (0.5.1)
 ------------------------------------------------------------------

@@ -3,6 +3,7 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { EV_REPL_INPUT_MAX_BYTES, evReplExecInputBytes } from '../src/evrepl.js'
+import { validateJpegImage } from '../src/jpeg_validate.js'
 
 export const DEVICE_CHECKS = Object.freeze(['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation', 'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream', 'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy'])
 const MARKER = '__EVDEVICECHECK__'
@@ -23,8 +24,8 @@ export function parseCheckResult(output, name) {
 
 export async function saveJpeg(image, output) {
   const data = image?.data
-  if (image?.mimeType !== 'image/jpeg' || !(data instanceof Uint8Array) || data.length < 4 || data[0] !== 255 || data[1] !== 216 || data.at(-2) !== 255 || data.at(-1) !== 217) throw failure('CAPTURE_INVALID', 'Capture is not a complete JPEG')
-  if (!(image.metadata?.width > 0 && image.metadata?.height > 0)) throw failure('CAPTURE_INVALID', 'Capture has no valid image dimensions')
+  if (image?.mimeType !== 'image/jpeg') throw failure('CAPTURE_INVALID', 'Capture is not a JPEG')
+  try { validateJpegImage(data, image.metadata) } catch { throw failure('CAPTURE_INVALID', 'Capture is not a structurally valid JPEG with matching dimensions') }
   if (output) { await mkdir(dirname(output), { recursive: true }); await writeFile(output, data) }
   return { bytes: data.length, width: image.metadata.width, height: image.metadata.height }
 }
@@ -103,6 +104,9 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
           data = { identity: info.identity, features: info.capabilities.features, vmReady: info.runtime.vmReady,
             storage: info.storage && Object.fromEntries(Object.entries(info.storage).map(([volume, state]) => [volume, { present: state.present, mounted: state.mounted, writable: state.writable, reason: state.reason }])) }
         } else if (name === 'camera') {
+          // --capture explicitly opts into application camera setup. The public
+          // capture API itself only observes a previously published safe frame.
+          requirePass(await invoke('camera'))
           const image = await device.capture({ source: 'camera', format: 'jpeg', quality: options.quality, timeout: options.frameTimeout * 1000, signal })
           data = await saveJpeg(image, options.output)
           data.sensor = requirePass(await invoke('sensor_state'))

@@ -146,7 +146,7 @@ void esp_vision_launcher_state_init0(void)
     char boot_id[EV_LAUNCHER_BOOT_ID_HEX_LEN + 1];
     char device_id[EV_LAUNCHER_DEVICE_ID_HEX_LEN + 1] = { 0 };
     uint8_t mac[6] = { 0 };
-    const bool device_id_valid = esp_efuse_mac_get_default(mac) == ESP_OK;
+    const bool device_id_valid = esp_read_mac(mac, ESP_MAC_EFUSE_FACTORY) == ESP_OK;
     if (device_id_valid) {
         (void)snprintf(device_id, sizeof(device_id), "%02x%02x%02x%02x%02x%02x",
                        (unsigned int)mac[0], (unsigned int)mac[1], (unsigned int)mac[2],

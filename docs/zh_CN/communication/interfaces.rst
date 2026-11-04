@@ -58,7 +58,7 @@ sink 类型与实际 link
    * - ``tcp``
      - 已配网设备的 STA IPv4 TCP server。
      - accept 分配槽位，FIN/RST、socket 错误和超时回收 link。
-     - 默认 3232；两个 accepted slot，不等于两个 owner。浏览器需要 WebSocket-to-TCP 字节桥接。
+     - 默认 3232；三个 accepted slot，最多两个只读旁观者和一个控制者。浏览器需要 WebSocket-to-TCP 字节桥接。
 
 板级后端启用条件
 ----------------
@@ -149,7 +149,9 @@ link = 后端 + 槽位 + generation
 UART 为什么不能照搬 USB 的预览大小
 ----------------------------------
 
-UART 的发送预算按整帧估算：
+UART 应用通信以 115200 bps 启动。固件支持 ``capabilities.uartBaud`` 时，Device Core 按 2000000、1500000、921600、460800、115200 顺序测试，采用首个通过验证的速率。设备与主机串口必须一起切换；USB-OTG、USB-Serial-JTAG 和 TCP 不执行 UART 协商。prepare/probe/commit 与回退流程见 :doc:`wire-protocol`。ROM/stub 下载速率在烧录流程中独立协商。
+
+UART 的发送预算使用当前运行态波特率，按整帧估算：
 
 .. code-block:: text
 
@@ -165,7 +167,7 @@ TCP 的三个时间预算
 2. **会话租约**：默认 15000 ms，无合法授权活动则释放 owner；这一步是所有权回收。
 3. **曾持有会话后的空闲回收**：失去 owner 后，socket 有约 30000 ms 窗口可重新接管；窗口到期后回收该准确 generation 的槽位。这一步是连接容量回收。
 
-两个槽位允许 discovery/竞争连接短暂共存，不支持两个独立控制应用并行占用 VM。竞争接管失败的 TCP 连接在发送错误后关闭；正常释放后的同一 link 可以在规定窗口内重新接管。
+三个槽位允许两个只读旁观者与一个控制者并存，详见 :doc:`preview-debug`。竞争接管失败的 TCP 连接在发送错误后关闭；正常释放后的同一 link 可以在规定窗口内重新接管。
 
 DTR/RTS、RESET 与 ROM 下载
 --------------------------

@@ -28,7 +28,7 @@ test('application-only write is read back in full before reset, with port cleanu
   const f = await fixture()
   await f.session.connect(f.bytes)
   await f.session.flash(f.bytes)
-  assert.deepEqual(f.calls, [['initialize'], ['stub', true], ['read', 0x8000], ['write', 0x10000, false], ['read', 0x10000], ['reset'], ['close']])
+  assert.deepEqual(f.calls, [['initialize'], ['stub', true], ['read', 0x8000], ['write', 0x10000, true], ['read', 0x10000], ['reset'], ['close']])
 })
 test('corrupt readback never reports success or resets into unverified firmware', async () => {
   const f = await fixture()

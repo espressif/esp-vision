@@ -80,8 +80,8 @@ evmux_host_checks:
   image: python:3.11-slim
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends ca-certificates git gcc libc6-dev libssl-dev
-    - python -m pip install PyYAML
+    - apt-get install -y --no-install-recommends ca-certificates git gcc g++ libc6-dev libssl-dev
+    - python -m pip install PyYAML Pillow
     - git submodule sync -- lib/micropython
     - git submodule update --init --depth 1 lib/micropython
   script:

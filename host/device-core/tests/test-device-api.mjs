@@ -6,9 +6,10 @@ import * as api from '../src/index.js'
 import { DeviceSession, EV_MUX_REQUIRED_FEATURES, EV_MUX_REQUIRED_CHANNELS, EV_MUX_DEFAULT_LIMITS } from '../src/device_session.js'
 import { EvMuxParser, makeEvMuxFrame } from '../src/evmux.js'
 import { EvRepl } from '../src/evrepl.js'
+import { jpegFixture } from './jpeg-fixtures.mjs'
 
 const capabilities = { ok: true, protocol: { evMuxVersion: 4 },
-  features: [...EV_MUX_REQUIRED_FEATURES, 'debug.capture_frame', 'script.write', 'script.run', 'device.control'],
+  features: [...EV_MUX_REQUIRED_FEATURES, 'debug.capture_frame', 'debug.capture_frame.observed.v1', 'script.write', 'script.run', 'device.control'],
   channels: EV_MUX_REQUIRED_CHANNELS, limits: { ...EV_MUX_DEFAULT_LIMITS, txLargePayloadMax: 262144 },
   session: { policy: 'firstCome', leaseMs: 15000, keepaliveMs: 5000 } }
 function peer({ silent = false, screen = false, vmReady = true, interactiveScripts = false } = {}) {
@@ -44,7 +45,7 @@ function peer({ silent = false, screen = false, vmReady = true, interactiveScrip
     if (metadata.method === 'capabilities') result = { ...capabilities, features: [...capabilities.features, ...(screen ? ['debug.capture_screen'] : [])] }
     if (metadata.method === 'session.keepalive') result = { ok: true, sessionId: id, vmEpoch: 1 }
     if (metadata.method === 'debug.capture_frame' || (screen && metadata.method === 'debug.capture_screen')) {
-      handlers.data(makeEvMuxFrame({ channel: 'debug.rpc', type: 'rsp', method: metadata.method, seq: metadata.seq, sessionId: id, vmEpoch: 1, contentType: 'image/jpeg', width: 2, height: 1, payload: new Uint8Array([255,216,0,255,217]) })); return false
+      handlers.data(makeEvMuxFrame({ channel: 'debug.rpc', type: 'rsp', method: metadata.method, seq: metadata.seq, sessionId: id, vmEpoch: 1, contentType: 'image/jpeg', encoding: 'binary', width: 2, height: 1, payload: jpegFixture().data })); return false
     }
     handlers.data(makeEvMuxFrame({ channel: metadata.channel, type: 'rsp', method: metadata.method, seq: metadata.seq, ...((metadata.method !== 'capabilities' && (metadata.method !== 'hello' || payload.acquire)) ? {sessionId: id, vmEpoch: 1} : {}), payload: JSON.stringify(result) }))
     return false
@@ -104,6 +105,20 @@ test('hard reset disposes an open transport without releasing its expired lease 
   } finally { await d.disconnect() }
 })
 
+test('bootloader submission survives facade cleanup without releasing the obsolete lease', async () => {
+  const p = peer(), d = api.createDevice({ transport: p.transport })
+  try {
+    await d.connect({ role: 'tcp', probeRepl: false })
+    assert.deepEqual(await d.control({ action: 'bootloader' }), {
+      ok: true, operation: 'bootloader', acknowledged: false, outcome: 'unknown',
+    })
+    await d.disconnect()
+    assert.equal(p.disconnects, 1)
+    assert.equal(p.subscriptions, 0)
+    assert.equal(p.requests.filter(r => r.metadata.method === 'session.release').length, 0)
+  } finally { await d.disconnect() }
+})
+
 test('connect can acquire and inspect a session without interrupting the REPL', async () => {
   const p = peer({ vmReady: false }), d = api.createDevice({ transport: p.transport })
   try {
@@ -131,7 +146,7 @@ test('capture returns binary bytes and unsupported LCD capture never captures th
   try {
     await d.connect({role:'tcp'})
     const image = await d.capture({source:'camera',quality:70})
-    assert.deepEqual(image.data,new Uint8Array([255,216,0,255,217]))
+    assert.deepEqual(image.data,jpegFixture().data)
     assert.equal(image.mimeType,'image/jpeg')
     const count=p.requests.length
     await assert.rejects(d.capture({source:'screen'}),{code:'UNSUPPORTED_OPERATION'})
@@ -218,13 +233,13 @@ test('binary capture results correlate by sequence even when responses arrive in
   let s;const requests=[]
   const parser=new EvMuxParser({filterFrame(metadata){requests.push(metadata);return false}})
   s=new DeviceSession({transport:{async writeBytes(b){parser.feedBytes(b)}},EvMuxParser,EvRepl,makeEvMuxFrame})
-  s.state='ready';s.sessionId='a'.repeat(32);s.vmEpoch=1;s.vmReady=true;s.capabilities={features:[]}
+  s.state='ready';s.sessionId='a'.repeat(32);s.vmEpoch=1;s.vmReady=true;s.capabilities={features:['debug.capture_frame', 'debug.capture_frame.observed.v1']}
   try {
     const first=s.captureImage('debug.capture_frame'),second=s.captureImage('debug.capture_frame')
     first.catch(()=>{});second.catch(()=>{})
     await new Promise(setImmediate)
-    for(const [index,payload] of [[1,22],[0,11]]){const req=requests[index];s.feedBytes(makeEvMuxFrame({channel:'debug.rpc',type:'rsp',method:req.method,seq:req.seq,sessionId:s.sessionId,vmEpoch:1,contentType:'image/jpeg',payload:new Uint8Array([payload])}))}
-    assert.deepEqual((await first).data,new Uint8Array([11]));assert.deepEqual((await second).data,new Uint8Array([22]))
+    for(const [index,name] of [[1,'alternate'],[0,'tiny']]){const req=requests[index];s.feedBytes(makeEvMuxFrame({channel:'debug.rpc',type:'rsp',method:req.method,seq:req.seq,sessionId:s.sessionId,vmEpoch:1,contentType:'image/jpeg',encoding:'binary',width:2,height:1,payload:jpegFixture(name).data}))}
+    assert.deepEqual((await first).data,jpegFixture().data);assert.deepEqual((await second).data,jpegFixture('alternate').data)
   }finally{s.close()}
 })
 
@@ -269,7 +284,7 @@ test('LCD capture uses its advertised screen method and preserves dimensions and
     assert.equal(image.mimeType, 'image/jpeg')
     assert.equal(image.metadata.width, 2)
     assert.equal(image.metadata.height, 1)
-    assert.deepEqual(image.data, new Uint8Array([255,216,0,255,217]))
+    assert.deepEqual(image.data, jpegFixture().data)
     const request = p.requests.find(x => x.metadata.method === 'debug.capture_screen')
     assert.deepEqual(request.payload, { quality: 85 })
     assert.equal(p.requests.some(x => x.metadata.method === 'debug.capture_frame'), false)

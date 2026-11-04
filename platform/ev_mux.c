@@ -31,6 +31,9 @@
 #include "ev_session.h"
 
 #define EV_MUX_SERIAL_TARGETS (3)
+#define EV_MUX_OWNER_PREVIEW_FRAMES (2)
+#define EV_MUX_PREVIEW_FRAMES (EV_MUX_OWNER_PREVIEW_FRAMES + 2 * EV_TRANSPORT_PREVIEW_OBSERVERS)
+#define EV_MUX_OBSERVER_BUFFERS (EV_TRANSPORT_PREVIEW_OBSERVERS + 1)
 #define EV_MUX_TARGET_COUNT (EV_MUX_SERIAL_TARGETS + EV_TRANSPORT_TCP_LINKS)
 #define EV_MUX_QUEUE_BYTES (16 * 1024)
 #define EV_MUX_QUEUE_RESERVED_BYTES (4 * 1024)
@@ -53,18 +56,18 @@
 #define EV_MUX_TX_TASK_PRIORITY (ESP_TASK_PRIO_MIN + 3)
 #define EV_MUX_ARENA_BYTES ((EV_MUX_SERIAL_TARGETS + 1) * EV_MUX_QUEUE_BYTES)
 
-#ifndef ESP_VISION_EV_MUX_UART_BAUD
-#if defined(MICROPY_HW_UART_REPL_BAUD)
-#define ESP_VISION_EV_MUX_UART_BAUD (MICROPY_HW_UART_REPL_BAUD)
-#else
-#define ESP_VISION_EV_MUX_UART_BAUD (115200)
-#endif
-#endif
+static bool s_uart_paused;
+
+void ev_mux_uart_pause(bool paused)
+{
+    __atomic_store_n(&s_uart_paused, paused, __ATOMIC_RELEASE);
+}
 
 _Static_assert(EV_MUX_BLOCK_COUNT == 64, "EV-MUX queue bitmap expects 64 blocks");
 
 typedef struct {
     bool used;
+    bool uart_baud_control;
     bool tcp_quota_reserved;
     bool tcp_discovery_reservation;
     bool tcp_low_reservation;
@@ -76,8 +79,10 @@ typedef struct {
     uint32_t vm_epoch;
     uint32_t output_input_generation;
     uint32_t output_transition_id;
+    bool preview_observer;
     uint32_t enqueue_ms;
     uint32_t start_ms;
+    uint32_t last_progress_ms;
     bool attempted;
     uint32_t enqueue_order;
     uint32_t frame_timeout_ms;
@@ -130,6 +135,7 @@ typedef enum {
     EV_MUX_SPECIAL_NONE = 0,
     EV_MUX_SPECIAL_PREVIEW,
     EV_MUX_SPECIAL_LARGE,
+    EV_MUX_SPECIAL_OBSERVER,
 } ev_mux_special_kind_t;
 
 typedef struct {
@@ -176,7 +182,9 @@ static uint8_t *s_arena_slab;
 static uint8_t *s_tcp_arena;
 static ev_mux_target_queue_t s_targets[EV_MUX_TARGET_COUNT];
 static ev_mux_ticket_state_t s_tickets[EV_MUX_TICKET_COUNT];
-static ev_mux_special_frame_t s_preview_frames[2];
+static ev_mux_special_frame_t s_preview_frames[EV_MUX_PREVIEW_FRAMES];
+static uint32_t s_observer_generations[EV_TRANSPORT_TCP_LINKS];
+static uint8_t *s_observer_buffers[EV_MUX_OBSERVER_BUFFERS];
 static ev_mux_special_frame_t s_large_frame;
 static uintptr_t s_special_partial_frame[EV_MUX_TARGET_COUNT];
 static uint8_t *s_preview_buffers[2];
@@ -194,6 +202,8 @@ static size_t s_tcp_discovery_bytes_used;
 static uint8_t s_tcp_discovery_frames_used;
 static size_t s_tcp_low_bytes_used;
 static uint8_t s_tcp_low_frames_used;
+static portMUX_TYPE s_timeout_mux = portMUX_INITIALIZER_UNLOCKED;
+static ev_mux_timeout_info_t s_last_timeout;
 static TaskHandle_t s_tx_task;
 static StaticTask_t s_tx_task_tcb;
 static StackType_t s_tx_task_stack[EV_MUX_TX_TASK_STACK_SIZE / sizeof(StackType_t)];
@@ -408,7 +418,7 @@ static uint32_t ev_mux_frame_timeout(const ev_link_ref_t *link, size_t encoded_l
     if (link->transport_id != EV_TRANSPORT_UART) {
         return EV_MUX_FRAME_TIMEOUT_MS;
     }
-    uint32_t baud = ESP_VISION_EV_MUX_UART_BAUD;
+    uint32_t baud = ev_transport_uart_baudrate();
     if (baud == 0) {
         return 0;
     }
@@ -692,6 +702,7 @@ static bool ev_mux_copy_options(ev_mux_frame_t *frame, const ev_mux_submit_optio
     memset(frame, 0, sizeof(*frame));
     frame->link = *options->link;
     frame->priority = (uint8_t)options->tx_class;
+    frame->uart_baud_control = options->uart_baud_control;
     frame->vm_epoch = options->vm_epoch;
     frame->completion = options->completion;
     frame->completion_context_len = (uint8_t)options->completion_context_len;
@@ -1844,6 +1855,144 @@ bool ev_mux_preview_slot_available(void)
     return available;
 }
 
+bool ev_mux_preview_subscribed(const ev_link_ref_t *link)
+{
+    return (link != NULL) && (link->transport_id == EV_TRANSPORT_TCP) &&
+           (link->slot < EV_TRANSPORT_TCP_LINKS) && (link->generation != 0) &&
+           (__atomic_load_n(&s_observer_generations[link->slot], __ATOMIC_ACQUIRE) == link->generation) &&
+           ev_transport_link_is_current(link);
+}
+
+esp_err_t ev_mux_preview_subscribe(const ev_link_ref_t *link, bool enable)
+{
+    if ((link == NULL) || (link->transport_id != EV_TRANSPORT_TCP) ||
+            (link->slot >= EV_TRANSPORT_TCP_LINKS) || !ev_transport_link_is_current(link)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    ev_session_snapshot_t session;
+    if (ev_session_snapshot(&session) && session.has_owner &&
+            ev_mux_link_equal(link, &session.owner_link)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if ((ev_mux_init0() != ESP_OK) ||
+            (xSemaphoreTake(s_special_mutex, pdMS_TO_TICKS(20)) != pdTRUE)) {
+        return ESP_ERR_TIMEOUT;
+    }
+    unsigned count = 0;
+    for (uint8_t slot = 0; slot < EV_TRANSPORT_TCP_LINKS; ++slot) {
+        ev_link_ref_t current;
+        if (ev_transport_link_ref(EV_TRANSPORT_TCP, slot, &current) &&
+                ev_mux_preview_subscribed(&current)) {
+            ++count;
+        }
+    }
+    esp_err_t result = ESP_OK;
+    if (enable && !ev_mux_preview_subscribed(link) && (count >= EV_TRANSPORT_PREVIEW_OBSERVERS)) {
+        result = ESP_ERR_NO_MEM;
+    } else {
+        __atomic_store_n(&s_observer_generations[link->slot], enable ? link->generation : 0, __ATOMIC_RELEASE);
+    }
+    xSemaphoreGive(s_special_mutex);
+    return result;
+}
+
+bool ev_mux_preview_observers_ready(void)
+{
+    for (uint8_t slot = 0; slot < EV_TRANSPORT_TCP_LINKS; ++slot) {
+        ev_link_ref_t link;
+        if (ev_transport_link_ref(EV_TRANSPORT_TCP, slot, &link) && ev_mux_preview_subscribed(&link)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+esp_err_t ev_mux_preview_publish_observers(const char *metadata, const void *payload, size_t payload_len)
+{
+    if ((metadata == NULL) || (payload == NULL) || (payload_len > EV_MUX_LARGE_PAYLOAD_MAX) ||
+            (strlen(metadata) > EV_MUX_METADATA_MAX)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if ((ev_mux_init0() != ESP_OK) ||
+            (xSemaphoreTake(s_special_mutex, pdMS_TO_TICKS(20)) != pdTRUE)) {
+        return ESP_ERR_TIMEOUT;
+    }
+    // Replacement must not refresh a socket's blocked-send deadline, even
+    // when send() has not accepted the first header byte yet.
+    uint32_t waiting_generation[EV_TRANSPORT_TCP_LINKS] = {0};
+    uint32_t waiting_since[EV_TRANSPORT_TCP_LINKS] = {0};
+    uint32_t waiting_progress[EV_TRANSPORT_TCP_LINKS] = {0};
+    // Discard only frames which have not emitted any bytes. A started frame
+    // keeps its immutable shared buffer until EOF, link loss or TX deadline.
+    for (size_t i = EV_MUX_OWNER_PREVIEW_FRAMES; i < EV_MUX_PREVIEW_FRAMES; ++i) {
+        ev_mux_special_frame_t *special = &s_preview_frames[i];
+        if (special->used && (special->frame.tx_offset == 0)) {
+            if (special->frame.attempted) {
+                uint8_t slot = special->frame.link.slot;
+                waiting_generation[slot] = special->frame.link.generation;
+                waiting_since[slot] = special->frame.start_ms;
+                waiting_progress[slot] = special->frame.last_progress_ms;
+            }
+            ev_mux_completion_t ignored;
+            ev_mux_special_release_locked(special, ESP_ERR_INVALID_STATE, &ignored);
+            ev_mux_record_tx_drop();
+        }
+    }
+    int pool = -1;
+    for (size_t b = 0; b < EV_MUX_OBSERVER_BUFFERS; ++b) {
+        bool busy = false;
+        for (size_t i = EV_MUX_OWNER_PREVIEW_FRAMES; i < EV_MUX_PREVIEW_FRAMES; ++i) {
+            if (s_preview_frames[i].used && (s_preview_frames[i].payload == s_observer_buffers[b])) {
+                busy = true;
+            }
+        }
+        if (!busy) {
+            pool = (int)b;
+            break;
+        }
+    }
+    if ((pool < 0) || !ev_mux_special_buffer_alloc(&s_observer_buffers[pool])) {
+        xSemaphoreGive(s_special_mutex);
+        return ESP_ERR_NO_MEM;
+    }
+    // One copy and one CRC for all observers; no per-observer JPEG encode.
+    memcpy(s_observer_buffers[pool], payload, payload_len);
+    uint32_t crc = ev_mux_crc32(payload, payload_len);
+    for (uint8_t slot = 0; slot < EV_TRANSPORT_TCP_LINKS; ++slot) {
+        ev_link_ref_t link;
+        if (!ev_transport_link_ref(EV_TRANSPORT_TCP, slot, &link) || !ev_mux_preview_subscribed(&link)) {
+            continue;
+        }
+        ev_mux_special_frame_t *special = NULL;
+        for (size_t i = EV_MUX_OWNER_PREVIEW_FRAMES; i < EV_MUX_PREVIEW_FRAMES; ++i) {
+            if (!s_preview_frames[i].used) {
+                special = &s_preview_frames[i];
+                break;
+            }
+        }
+        if (special == NULL) {
+            continue;
+        }
+        ev_mux_submit_options_t options = {.link = &link, .tx_class = EV_MUX_TX_PREVIEW};
+        if (!ev_mux_special_prepare(&special->frame, &options, metadata, strlen(metadata), payload_len, 0)) {
+            continue;
+        }
+        special->kind = EV_MUX_SPECIAL_OBSERVER;
+        special->payload = s_observer_buffers[pool];
+        special->frame.preview_observer = true;
+        if (waiting_generation[slot] == link.generation) {
+            special->frame.attempted = true;
+            special->frame.start_ms = waiting_since[slot];
+            special->frame.last_progress_ms = waiting_progress[slot];
+        }
+        special->frame.frame_timeout_ms = EV_MUX_OBSERVER_FRAME_TIMEOUT_MS;
+        special->frame.header_ready = ev_mux_build_header(&special->frame, crc);
+        special->used = true;
+    }
+    xSemaphoreGive(s_special_mutex);
+    return ESP_OK;
+}
+
 static bool ev_mux_frame_same_session(const ev_mux_frame_t *frame,
                                       const ev_link_ref_t *link,
                                       const char *session_id)
@@ -1889,11 +2038,11 @@ static size_t ev_mux_cancel_special_frames(bool by_epoch,
                                            uint32_t vm_epoch,
                                            const ev_link_ref_t *link,
                                            const char *session_id,
-                                           ev_mux_completion_t completions[3])
+                                           ev_mux_completion_t completions[EV_MUX_PREVIEW_FRAMES + 1])
 {
     size_t count = 0;
-    memset(completions, 0, sizeof(ev_mux_completion_t) * 3);
-    for (size_t i = 0; i < 2; ++i) {
+    memset(completions, 0, sizeof(ev_mux_completion_t) * (EV_MUX_PREVIEW_FRAMES + 1));
+    for (size_t i = 0; i < EV_MUX_PREVIEW_FRAMES; ++i) {
         ev_mux_special_frame_t *special = &s_preview_frames[i];
         bool matches = by_epoch ? ev_mux_frame_matches_epoch(&special->frame, vm_epoch) :
                        ((link != NULL) && (session_id != NULL) &&
@@ -1929,7 +2078,7 @@ void ev_mux_cancel_vm_epoch(uint32_t vm_epoch)
     if (xSemaphoreTake(s_special_mutex, pdMS_TO_TICKS(20)) != pdTRUE) {
         return;
     }
-    ev_mux_completion_t special_completions[3];
+    ev_mux_completion_t special_completions[EV_MUX_PREVIEW_FRAMES + 1];
     size_t special_count = ev_mux_cancel_special_frames(true, vm_epoch, NULL, NULL,
                                                         special_completions);
     xSemaphoreGive(s_special_mutex);
@@ -1957,7 +2106,7 @@ void ev_mux_cancel_session(const ev_link_ref_t *link, const char *session_id)
     if (xSemaphoreTake(s_special_mutex, pdMS_TO_TICKS(20)) != pdTRUE) {
         return;
     }
-    ev_mux_completion_t special_completions[3];
+    ev_mux_completion_t special_completions[EV_MUX_PREVIEW_FRAMES + 1];
     size_t special_count = ev_mux_cancel_special_frames(false, 0, link, session_id,
                                                         special_completions);
     xSemaphoreGive(s_special_mutex);
@@ -1979,6 +2128,14 @@ void ev_mux_cancel_session(const ev_link_ref_t *link, const char *session_id)
 
 static ev_mux_frame_auth_t ev_mux_frame_authorized(const ev_mux_frame_t *frame)
 {
+    if (frame->preview_observer && (frame->tx_offset == 0) &&
+            !ev_mux_preview_subscribed(&frame->link)) {
+        return EV_MUX_FRAME_STALE;
+    }
+    if ((frame->link.transport_id == EV_TRANSPORT_UART) && !frame->uart_baud_control &&
+            (frame->tx_offset == 0) && __atomic_load_n(&s_uart_paused, __ATOMIC_ACQUIRE)) {
+        return EV_MUX_FRAME_WAIT;
+    }
     if ((frame->session_id[0] == '\0') && (frame->vm_epoch == 0)) {
         return EV_MUX_FRAME_ALLOWED;
     }
@@ -2113,6 +2270,12 @@ static int ev_mux_candidate_priority(const ev_mux_frame_t *frame)
     return frame->used ? (int)frame->priority : 100;
 }
 
+static bool ev_mux_uart_frame_paused(const ev_mux_frame_t *frame)
+{
+    return (frame->link.transport_id == EV_TRANSPORT_UART) && !frame->uart_baud_control &&
+           __atomic_load_n(&s_uart_paused, __ATOMIC_ACQUIRE);
+}
+
 static bool ev_mux_choose_frame_locked(ev_mux_target_queue_t *queue,
                                        int target_index,
                                        bool special_locked,
@@ -2145,7 +2308,7 @@ static bool ev_mux_choose_frame_locked(ev_mux_target_queue_t *queue,
         }
     }
     if (special_locked) {
-        for (size_t i = 0; i < 2; ++i) {
+        for (size_t i = 0; i < EV_MUX_PREVIEW_FRAMES; ++i) {
             ev_mux_special_frame_t *special = &s_preview_frames[i];
             if (special->used && (ev_mux_target_index(&special->frame.link) == target_index) &&
                     (special->frame.tx_offset != 0)) {
@@ -2165,7 +2328,7 @@ static bool ev_mux_choose_frame_locked(ev_mux_target_queue_t *queue,
 
     for (int i = 0; i < EV_MUX_QUEUE_FRAMES; ++i) {
         ev_mux_frame_t *frame = &queue->frames[i];
-        if (!frame->used) {
+        if (!frame->used || ev_mux_uart_frame_paused(frame)) {
             continue;
         }
         if ((uint32_t)(now_ms - frame->enqueue_ms) >= EV_MUX_QUEUE_TIMEOUT_MS) {
@@ -2182,10 +2345,11 @@ static bool ev_mux_choose_frame_locked(ev_mux_target_queue_t *queue,
         }
     }
     if (special_locked) {
-        for (size_t i = 0; i < 2; ++i) {
+        for (size_t i = 0; i < EV_MUX_PREVIEW_FRAMES; ++i) {
             ev_mux_special_frame_t *special = &s_preview_frames[i];
             ev_mux_frame_t *frame = &special->frame;
-            if (!special->used || (ev_mux_target_index(&frame->link) != target_index) ||
+            if (!special->used || ev_mux_uart_frame_paused(frame) ||
+                    (ev_mux_target_index(&frame->link) != target_index) ||
                     ((uint32_t)(now_ms - frame->enqueue_ms) >= EV_MUX_QUEUE_TIMEOUT_MS)) {
                 continue;
             }
@@ -2200,6 +2364,7 @@ static bool ev_mux_choose_frame_locked(ev_mux_target_queue_t *queue,
             }
         }
         if (s_large_frame.used &&
+                !ev_mux_uart_frame_paused(&s_large_frame.frame) &&
                 (ev_mux_target_index(&s_large_frame.frame.link) == target_index) &&
                 ((uint32_t)(now_ms - s_large_frame.frame.enqueue_ms) < EV_MUX_QUEUE_TIMEOUT_MS)) {
             ev_mux_frame_t *frame = &s_large_frame.frame;
@@ -2240,6 +2405,15 @@ static void ev_mux_fail_session(const ev_link_ref_t *link, const char *session_i
     }
 }
 
+void ev_mux_tx_timeout_snapshot(ev_mux_timeout_info_t *out)
+{
+    if (out != NULL) {
+        portENTER_CRITICAL(&s_timeout_mux);
+        *out = s_last_timeout;
+        portEXIT_CRITICAL(&s_timeout_mux);
+    }
+}
+
 static void ev_mux_process_target(size_t target_index)
 {
     ev_mux_target_queue_t *queue = &s_targets[target_index];
@@ -2273,7 +2447,7 @@ static void ev_mux_process_target(size_t target_index)
             }
         }
         if (special_locked) {
-            for (size_t i = 0; i < 2; ++i) {
+            for (size_t i = 0; i < EV_MUX_PREVIEW_FRAMES; ++i) {
                 ev_mux_special_frame_t *expired = &s_preview_frames[i];
                 if (expired->used && (ev_mux_target_index(&expired->frame.link) == (int)target_index) &&
                         (expired->frame.tx_offset == 0) &&
@@ -2339,9 +2513,25 @@ static void ev_mux_process_target(size_t target_index)
             // hello response completion flips the manager's handshake gate.
         } else if (!ev_mux_frame_crc_step(queue, special, frame)) {
             // CRC work is chunked so a large debug frame yields to other links.
+        } else if (!frame->attempted && (frame->link.transport_id == EV_TRANSPORT_UART) &&
+                   ((frame->frame_timeout_ms = ev_mux_frame_timeout(&frame->link, frame->total_len)) == 0)) {
+            // A queued UART frame may outlive a speed change. Recheck only its
+            // budget; TCP observers retain their independent frame deadline.
+            ev_mux_drop_frame_locked(queue, frame, special, slot, ESP_ERR_INVALID_SIZE, &completion);
+            did_finish = true;
         } else if (frame->attempted &&
-                   ((uint32_t)(now_ms - frame->start_ms) >= frame->frame_timeout_ms)) {
+                   (((uint32_t)(now_ms - frame->start_ms) >= frame->frame_timeout_ms) ||
+                    (frame->preview_observer &&
+                     ((uint32_t)(now_ms - frame->last_progress_ms) >= EV_MUX_OBSERVER_IDLE_TIMEOUT_MS)))) {
             __atomic_fetch_add(&s_tx_timeout_count, 1, __ATOMIC_RELAXED);
+            portENTER_CRITICAL(&s_timeout_mux);
+            s_last_timeout = (ev_mux_timeout_info_t) {
+                .transport = frame->link.transport_id, .slot = frame->link.slot,
+                .offset = frame->tx_offset, .bytes = frame->total_len,
+                .elapsed_ms = (uint32_t)(now_ms - frame->start_ms),
+                .idle_ms = (uint32_t)(now_ms - frame->last_progress_ms),
+            };
+            portEXIT_CRITICAL(&s_timeout_mux);
             failed_partial = frame->tx_offset != 0;
             close_tcp = frame->link.transport_id == EV_TRANSPORT_TCP;
             ev_mux_drop_frame_locked(queue, frame, special, slot, ESP_ERR_TIMEOUT, &completion);
@@ -2350,6 +2540,7 @@ static void ev_mux_process_target(size_t target_index)
             if (!frame->attempted) {
                 frame->attempted = true;
                 frame->start_ms = now_ms;
+                frame->last_progress_ms = now_ms;
             }
             size_t segment_len = 0;
             const uint8_t *segment = ev_mux_frame_segment(queue,
@@ -2360,7 +2551,29 @@ static void ev_mux_process_target(size_t target_index)
             if (segment_len > EV_MUX_WRITE_CHUNK_BYTES) {
                 segment_len = EV_MUX_WRITE_CHUNK_BYTES;
             }
-            ev_io_result_t io = ev_transport_write(&frame->link, segment, segment_len);
+            ev_io_result_t io;
+            if (frame->link.transport_id == EV_TRANSPORT_TCP) {
+                ev_io_vector_t vectors[EV_IO_VECTORS_MAX];
+                size_t count = 0;
+                size_t offset = frame->tx_offset;
+                segment_len = 0;
+                while ((count < EV_IO_VECTORS_MAX) && (offset < frame->total_len) &&
+                        (segment_len < EV_MUX_WRITE_CHUNK_BYTES)) {
+                    size_t length;
+                    const uint8_t *data = ev_mux_frame_segment(queue, special, frame, offset, &length);
+                    if (length > EV_MUX_WRITE_CHUNK_BYTES - segment_len) {
+                        length = EV_MUX_WRITE_CHUNK_BYTES - segment_len;
+                    }
+                    vectors[count++] = (ev_io_vector_t) {
+                        .base = data, .length = length
+                    };
+                    segment_len += length;
+                    offset += length;
+                }
+                io = ev_transport_writev(&frame->link, vectors, count);
+            } else {
+                io = ev_transport_write(&frame->link, segment, segment_len);
+            }
             if ((io.status == EV_IO_PROGRESS) && (io.transferred > 0) &&
                     (io.transferred <= segment_len)) {
                 if ((special != NULL) && (special->kind == EV_MUX_SPECIAL_PREVIEW) &&
@@ -2370,6 +2583,7 @@ static void ev_mux_process_target(size_t target_index)
                     }
                     s_preview_active = (int8_t)special->pool_index;
                 }
+                frame->last_progress_ms = ev_mux_now_ms();
                 frame->tx_offset += io.transferred;
                 if ((special != NULL) && (frame->tx_offset < frame->total_len)) {
                     int special_target = ev_mux_target_index(&frame->link);

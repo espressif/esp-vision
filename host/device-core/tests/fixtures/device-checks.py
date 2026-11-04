@@ -11,6 +11,16 @@ def is_unsupported(exc):
     return any(token in message for token in ('esp_err_not_supported', 'esp_err_not_found', 'no module named', 'enodev'))
 
 
+def camera(opts):
+    """Explicitly publish an application snapshot before passive observation."""
+    import sensor
+    sensor.reset()
+    sensor.set_pixformat(getattr(sensor, opts['pixformat']))
+    sensor.set_framesize(getattr(sensor, opts['framesize']))
+    frame = sensor.snapshot()
+    return dict(width=frame.width(), height=frame.height())
+
+
 def framesizes(opts):
     import sensor
     sensor.reset()
@@ -510,7 +520,7 @@ def run_check(name, opts):
     import json
     if isinstance(opts, str):
         opts = json.loads(opts)
-    functions = dict(memory=memory, sensor_state=sensor_state, framesizes=framesizes,
+    functions = dict(memory=memory, camera=camera, sensor_state=sensor_state, framesizes=framesizes,
                      pixformats=pixformats, orientation=orientation, ipa_stats=ipa_stats,
                      snapshot_rate=snapshot_rate, preview=preview, image_ops=image_ops,
                      display=display, display_stream=display_stream,

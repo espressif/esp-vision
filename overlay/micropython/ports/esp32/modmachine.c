@@ -30,6 +30,7 @@
 // This file is never compiled standalone, it's included directly from
 // extmod/modmachine.c via MICROPY_PY_MACHINE_INCLUDEFILE.
 
+#include "py/mperrno.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_mac.h"
@@ -311,7 +312,10 @@ MP_NORETURN static void mp_machine_reset(void) {
 
 static mp_obj_t mp_machine_unique_id(void) {
     uint8_t chipid[6];
-    esp_efuse_mac_get_default(chipid);
+    // The default API returns an 8-byte EUI-64 on IEEE 802.15.4 chips.
+    if (esp_read_mac(chipid, ESP_MAC_EFUSE_FACTORY) != ESP_OK) {
+        mp_raise_OSError(MP_EIO);
+    }
     return mp_obj_new_bytes(chipid, 6);
 }
 

@@ -315,7 +315,26 @@ async function passwordFromInput(options) {
 
 function errorInfo(failure) {
   if (!failure) return undefined
-  return { code: failure.code ?? 'COMMAND_FAILED', message: failure.message ?? 'Command failed' }
+  const info = { code: failure.code ?? 'COMMAND_FAILED', message: failure.message ?? 'Command failed' }
+  // Preserve the ROM adapter's bounded diagnostic fields, without serializing
+  // arbitrary Error causes or process output into the public JSON envelope.
+  if (failure.code === 'ROM_OPERATION_FAILED') {
+    if (typeof failure.operation === 'string') info.operation = failure.operation.slice(0, 64)
+    if (typeof failure.cause === 'string') info.detail = failure.cause.slice(0, 1024)
+  }
+  if (failure.reset?.acknowledged === false && failure.reset.outcome === 'unknown') {
+    info.reset = { acknowledged: false, outcome: 'unknown' }
+  }
+  if (String(failure.code).startsWith('ROM_') && typeof failure.transition?.command?.attempted === 'boolean') {
+    const transition = failure.transition
+    info.transition = {
+      command: { attempted: transition.command.attempted, acknowledged: transition.command.acknowledged === true,
+        outcome: ['unknown', 'not_attempted'].includes(transition.command.outcome) ? transition.command.outcome : 'unknown' },
+      observed: transition.observed === 'rom' ? 'rom' : null,
+      cleanup: typeof transition.cleanup?.ok === 'boolean' ? { ok: transition.cleanup.ok } : null,
+    }
+  }
+  return info
 }
 
 function attachCleanupFailure(primary, cleanupFailure) {

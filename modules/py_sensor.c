@@ -41,8 +41,16 @@ static void sensor_raise_esp_err(esp_err_t err)
     mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("camera error: %s"), esp_err_to_name(err));
 }
 
+static void sensor_ensure_vm_task(void)
+{
+    if (!esp_vision_camera_is_vm_task()) {
+        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("camera must run on the main VM task"));
+    }
+}
+
 static void sensor_ensure_camera_ready(void)
 {
+    sensor_ensure_vm_task();
     if (!esp_vision_camera_is_ready()) {
         esp_err_t ret = esp_vision_camera_init();
         if (ret != ESP_OK) {
@@ -70,6 +78,7 @@ static void sensor_drop_frame(uint8_t *pixels, size_t frame_size)
 
 static mp_obj_t sensor_reset(void)
 {
+    sensor_ensure_vm_task();
     esp_vision_camera_release_snapshot_buffer();
     esp_vision_camera_init0();
     esp_err_t ret = esp_vision_camera_init();
@@ -82,6 +91,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(sensor_reset_obj, sensor_reset);
 
 static mp_obj_t sensor_shutdown(size_t n_args, const mp_obj_t *args)
 {
+    sensor_ensure_vm_task();
     bool enable = true;
     if (n_args > 0) {
         enable = mp_obj_is_true(args[0]);
@@ -99,6 +109,7 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(sensor_shutdown_obj, 0, 1, sensor_shu
 
 static mp_obj_t sensor_set_pixformat(mp_obj_t pixformat_in)
 {
+    sensor_ensure_vm_task();
     uint32_t previous = esp_vision_camera_get_pixformat();
     esp_err_t ret = esp_vision_camera_set_pixformat((uint32_t)mp_obj_get_int(pixformat_in));
     if (ret != ESP_OK) {
@@ -119,6 +130,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(sensor_get_pixformat_obj, sensor_get_pixformat)
 
 static mp_obj_t sensor_set_framesize(mp_obj_t framesize_in)
 {
+    sensor_ensure_vm_task();
     uint32_t previous_width = esp_vision_camera_get_width();
     uint32_t previous_height = esp_vision_camera_get_height();
     esp_err_t ret = esp_vision_camera_set_framesize((esp_vision_camera_framesize_t)mp_obj_get_int(framesize_in));
@@ -172,6 +184,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(sensor_get_id_obj, sensor_get_id);
 
 static mp_obj_t sensor_set_hmirror(mp_obj_t enable_in)
 {
+    sensor_ensure_vm_task();
     esp_err_t ret = esp_vision_camera_set_hmirror(mp_obj_is_true(enable_in));
     if (ret != ESP_OK) {
         sensor_raise_esp_err(ret);
@@ -188,6 +201,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(sensor_get_hmirror_obj, sensor_get_hmirror);
 
 static mp_obj_t sensor_set_vflip(mp_obj_t enable_in)
 {
+    sensor_ensure_vm_task();
     esp_err_t ret = esp_vision_camera_set_vflip(mp_obj_is_true(enable_in));
     if (ret != ESP_OK) {
         sensor_raise_esp_err(ret);
@@ -205,6 +219,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(sensor_get_vflip_obj, sensor_get_vflip);
 #if ESP_VISION_ENABLE_CAMERA_IPA_CONTROL
 static mp_obj_t sensor_set_ipa(mp_obj_t enable_in)
 {
+    sensor_ensure_vm_task();
     esp_err_t ret = esp_vision_camera_set_ipa(mp_obj_is_true(enable_in));
     if (ret != ESP_OK) {
         sensor_raise_esp_err(ret);

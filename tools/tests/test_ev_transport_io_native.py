@@ -30,6 +30,7 @@ class EvTransportIoNativeTests(unittest.TestCase):
                     "-Wextra",
                     "-Werror",
                     "-pthread",
+                    "-DESP_VISION_ENABLE_TCP_TRANSPORT=1",
                     "-DMICROPY_HW_ESP_USB_SERIAL_JTAG=1",
                     "-DMICROPY_HW_USB_CDC=0",
                     "-DMICROPY_HW_ENABLE_UART_REPL=0",

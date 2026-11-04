@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 // SPDX-License-Identifier: Apache-2.0
 
+export { serialTransport } from './browser_serial.js'
+
 /** Passive browser ROM adapter. Request the SerialPort in the UI's click handler. */
-export function openBrowserRom({ port, logger = {}, signal } = {}) {
+export function openBrowserRom({ port, logger = {}, signal, interface: romInterface = 'auto', baudRate = 'auto', onStatus = () => {} } = {}) {
   if (!port || typeof port.open !== 'function' || typeof port.close !== 'function') throw new TypeError('A browser SerialPort is required')
   if (signal !== undefined && (!signal || typeof signal.addEventListener !== 'function' || typeof signal.aborted !== 'boolean')) throw new TypeError('signal must be an AbortSignal')
   let raw, initialized, closing = false, cleanup
@@ -23,6 +25,8 @@ export function openBrowserRom({ port, logger = {}, signal } = {}) {
     get chipName() { return raw?.chipName ?? null },
     get chipFamily() { return raw?.chipFamily ?? null },
     get chipRevision() { return raw?.chipRevision ?? null },
+    get interface() { return raw?.interface ?? romInterface },
+    get baudRate() { return raw?.baudRate ?? null },
     initialize() {
       if (closing) return Promise.reject(closed())
       if (initialized) return initialized
@@ -39,7 +43,7 @@ export function openBrowserRom({ port, logger = {}, signal } = {}) {
             log: (...args) => logger.log?.(...args),
             error: (...args) => logger.error?.(...args),
             debug: (...args) => logger.debug?.(...args),
-          })
+          }, { interface: romInterface, baudRate, onStatus })
           if (closing || signal?.aborted) { await disconnect(); check() }
           await raw.initialize()
           check()

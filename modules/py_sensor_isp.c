@@ -328,6 +328,9 @@ MP_DEFINE_CONST_FUN_OBJ_1(sensor_get_isp_obj, sensor_get_isp);
 
 static mp_obj_t sensor_set_isp(size_t n_args, const mp_obj_t *args, mp_map_t *kwargs)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("camera must run on the main VM task"));
+    }
     mp_arg_check_num(n_args, kwargs->used, 1, 1, true);
     esp_vision_isp_block_t block = sensor_isp_block(args[0]);
     if (kwargs->used == 0) {

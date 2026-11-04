@@ -5,6 +5,7 @@
  */
 
 #include "jpeg.h"
+#include "jpeg_validate.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -195,6 +196,12 @@ static esp_err_t esp_vision_new_jpeg_image_format(const image_t *img,
 
 static esp_err_t esp_vision_new_jpeg_encode(const image_t *img, int quality, uint8_t **jpeg_buf, size_t *jpeg_size)
 {
+    if (jpeg_buf != NULL) {
+        *jpeg_buf = NULL;
+    }
+    if (jpeg_size != NULL) {
+        *jpeg_size = 0;
+    }
     size_t raw_size = 0;
     jpeg_pixel_format_t src_type = JPEG_PIXEL_FORMAT_RGB565_LE;
     esp_new_jpeg_subsampling_t subsampling = JPEG_SUBSAMPLE_420;
@@ -239,6 +246,12 @@ static esp_err_t esp_vision_new_jpeg_encode(const image_t *img, int quality, uin
         return esp_vision_jpeg_error_to_esp_err(jpeg_ret);
     }
 
+    if ((out_size <= 0) || ((size_t)out_size > s_new_jpeg.jpeg_buf_size)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if (!esp_vision_jpeg_validate(s_new_jpeg.jpeg_buf, (size_t)out_size, (uint32_t)img->w, (uint32_t)img->h)) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
     *jpeg_buf = s_new_jpeg.jpeg_buf;
     *jpeg_size = (size_t)out_size;
     return ESP_OK;
@@ -342,7 +355,9 @@ exit:
 
 #if SOC_JPEG_ENCODE_SUPPORTED
 
+#include "camera.h"
 #include "driver/jpeg_encode.h"
+#include "esp_log.h"
 
 #define ESP_VISION_JPEG_TIMEOUT_MS (200)
 
@@ -352,12 +367,23 @@ typedef struct {
     size_t input_buf_size;
     uint8_t *jpeg_buf;
     size_t jpeg_buf_size;
+    uint8_t *cpu_buf;
+    size_t cpu_buf_size;
 } esp_vision_jpeg_context_t;
 
 static esp_vision_jpeg_context_t s_jpeg;
+static bool s_jpeg_hw_unavailable;
+
+static void esp_vision_jpeg_free_cpu_buffer(void)
+{
+    free(s_jpeg.cpu_buf);
+    s_jpeg.cpu_buf = NULL;
+    s_jpeg.cpu_buf_size = 0;
+}
 
 static void esp_vision_jpeg_free_buffers(void)
 {
+    esp_vision_jpeg_free_cpu_buffer();
     if (s_jpeg.input_buf != NULL) {
         free(s_jpeg.input_buf);
         s_jpeg.input_buf = NULL;
@@ -372,6 +398,7 @@ static void esp_vision_jpeg_free_buffers(void)
 
 void esp_vision_jpeg_deinit(void)
 {
+    s_jpeg_hw_unavailable = false;
     if (s_jpeg.encoder != NULL) {
         jpeg_del_encoder_engine(s_jpeg.encoder);
         s_jpeg.encoder = NULL;
@@ -404,37 +431,43 @@ static size_t esp_vision_jpeg_capacity(size_t raw_size)
 
 static esp_err_t esp_vision_jpeg_ensure_buffers(size_t raw_size)
 {
-    if (s_jpeg.input_buf_size < raw_size) {
+    if ((s_jpeg.input_buf == NULL) || (s_jpeg.input_buf_size < raw_size)) {
         if (s_jpeg.input_buf != NULL) {
             free(s_jpeg.input_buf);
             s_jpeg.input_buf = NULL;
-            s_jpeg.input_buf_size = 0;
         }
+        s_jpeg.input_buf_size = 0;
 
         jpeg_encode_memory_alloc_cfg_t input_config = {
             .buffer_direction = JPEG_ENC_ALLOC_INPUT_BUFFER,
         };
-        s_jpeg.input_buf = jpeg_alloc_encoder_mem(raw_size, &input_config, &s_jpeg.input_buf_size);
+        size_t allocated_size = 0;
+        s_jpeg.input_buf = jpeg_alloc_encoder_mem(raw_size, &input_config, &allocated_size);
         if (s_jpeg.input_buf == NULL) {
             return ESP_ERR_NO_MEM;
         }
+        s_jpeg.input_buf_size = allocated_size;
     }
 
     size_t jpeg_capacity = esp_vision_jpeg_capacity(raw_size);
-    if (s_jpeg.jpeg_buf_size < jpeg_capacity) {
+    if ((s_jpeg.jpeg_buf == NULL) || (s_jpeg.jpeg_buf_size < jpeg_capacity)) {
         if (s_jpeg.jpeg_buf != NULL) {
             free(s_jpeg.jpeg_buf);
             s_jpeg.jpeg_buf = NULL;
-            s_jpeg.jpeg_buf_size = 0;
         }
+        s_jpeg.jpeg_buf_size = 0;
 
         jpeg_encode_memory_alloc_cfg_t output_config = {
             .buffer_direction = JPEG_ENC_ALLOC_OUTPUT_BUFFER,
         };
-        s_jpeg.jpeg_buf = jpeg_alloc_encoder_mem(jpeg_capacity, &output_config, &s_jpeg.jpeg_buf_size);
+        // IDF sets allocated_size before allocating; commit capacity only when
+        // the returned buffer exists so an OOM cannot poison later retries.
+        size_t allocated_size = 0;
+        s_jpeg.jpeg_buf = jpeg_alloc_encoder_mem(jpeg_capacity, &output_config, &allocated_size);
         if (s_jpeg.jpeg_buf == NULL) {
             return ESP_ERR_NO_MEM;
         }
+        s_jpeg.jpeg_buf_size = allocated_size;
     }
 
     return ESP_OK;
@@ -465,10 +498,119 @@ static esp_err_t esp_vision_jpeg_image_format(const image_t *img,
     }
 }
 
+static esp_err_t esp_vision_jpeg_encode_cpu(const image_t *img, int quality,
+                                            uint8_t **jpeg_buf, size_t *jpeg_size)
+{
+#if OMV_JPEG_CODEC_ENABLE != 0
+    (void)img;
+    (void)quality;
+    (void)jpeg_buf;
+    (void)jpeg_size;
+    return ESP_ERR_NO_MEM;
+#else
+    // imlib's quantizer tables are shared. Keep this non-reentrant CPU path on
+    // the VM task, with a caller-owned fixed output and realloc disabled: this
+    // avoids fb_alloc, MicroPython allocation/NLR and any DMA transaction.
+    if (!esp_vision_camera_is_vm_task()) {
+        ESP_LOGW("esp_vision_jpeg", "CPU fallback failed: stage=vm capacity=0 largest=%zu free=%zu",
+                 heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), heap_caps_get_free_size(MALLOC_CAP_8BIT));
+        return ESP_ERR_NO_MEM;
+    }
+    esp_vision_jpeg_free_buffers();
+    // JPEG_MAX_ALLOC_SIZE is an upper bound, not a minimum allocation. Leave
+    // room for allocator metadata/rounding within the largest native block;
+    // total free bytes (and gc.mem_free) do not establish contiguous capacity.
+    size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    size_t capacity = (largest > 64) ? largest - 64 : 0;
+    if (capacity > JPEG_MAX_ALLOC_SIZE) {
+        capacity = JPEG_MAX_ALLOC_SIZE;
+    }
+    if (capacity < 1024) {
+        ESP_LOGW("esp_vision_jpeg", "CPU fallback failed: stage=capacity capacity=%zu largest=%zu free=%zu",
+                 capacity, largest, heap_caps_get_free_size(MALLOC_CAP_8BIT));
+        return ESP_ERR_NO_MEM;
+    }
+    uint8_t *scratch = esp_vision_memory_malloc(capacity, MALLOC_CAP_8BIT);
+    if (scratch == NULL) {
+        ESP_LOGW("esp_vision_jpeg", "CPU fallback failed: stage=scratch capacity=%zu largest=%zu free=%zu",
+                 capacity, heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), heap_caps_get_free_size(MALLOC_CAP_8BIT));
+        return ESP_ERR_NO_MEM;
+    }
+    image_t source = *img;
+    image_t encoded = {
+        .w = img->w,
+        .h = img->h,
+        .pixfmt = PIXFORMAT_JPEG,
+        .size = capacity,
+        .data = scratch,
+    };
+    bool overflow = jpeg_compress(&source, &encoded, quality, false, JPEG_SUBSAMPLING_AUTO);
+    esp_err_t ret = ESP_OK;
+    const char *stage = "done";
+    if (overflow) {
+        ret = ESP_ERR_NO_MEM;
+        stage = "compress";
+    } else if ((encoded.data != scratch) || (encoded.size == 0) ||
+               (encoded.size > capacity)) {
+        ret = ESP_ERR_INVALID_SIZE;
+        stage = "codec_size";
+    } else if (!esp_vision_jpeg_validate(scratch, encoded.size, (uint32_t)img->w, (uint32_t)img->h)) {
+        ret = ESP_ERR_INVALID_RESPONSE;
+        stage = "validate";
+    } else {
+        // Shrink the owned scratch directly: allocating a second result while
+        // scratch occupies the largest native block can fail even for a tiny
+        // JPEG. Realloc may move and lose DMA alignment, so keep this CPU-only
+        // cache separate from hardware buffers and never reuse it for DMA.
+        uint8_t *compressed = esp_vision_memory_realloc(scratch, encoded.size, MALLOC_CAP_8BIT);
+        if (compressed == NULL) {
+            ret = ESP_ERR_NO_MEM;
+            stage = "shrink";
+        } else {
+            s_jpeg.cpu_buf = compressed;
+            s_jpeg.cpu_buf_size = encoded.size;
+            scratch = NULL;
+            *jpeg_buf = s_jpeg.cpu_buf;
+            *jpeg_size = encoded.size;
+        }
+    }
+    free(scratch);
+    if (ret != ESP_OK) {
+        ESP_LOGW("esp_vision_jpeg", "CPU fallback failed: stage=%s capacity=%zu largest=%zu free=%zu ret=%d",
+                 stage, capacity, largest, heap_caps_get_free_size(MALLOC_CAP_8BIT), (int)ret);
+    } else {
+        ESP_LOGD("esp_vision_jpeg", "CPU fallback: capacity=%zu jpeg=%zu largest=%zu",
+                 capacity, (size_t)encoded.size, largest);
+    }
+    return ret;
+#endif
+}
+
 esp_err_t esp_vision_jpeg_encode(const image_t *img, int quality, uint8_t **jpeg_buf, size_t *jpeg_size)
 {
+    if (jpeg_buf != NULL) {
+        *jpeg_buf = NULL;
+    }
+    if (jpeg_size != NULL) {
+        *jpeg_size = 0;
+    }
     if ((jpeg_buf == NULL) || (jpeg_size == NULL) || (quality < 1) || (quality > 100)) {
         return ESP_ERR_INVALID_ARG;
+    }
+
+    if ((img == NULL) || (img->pixels == NULL) || (img->w <= 0) || (img->h <= 0) ||
+            (quality < 1) || (quality > 100)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    // This is a borrowed view. Asynchronous consumers copy it before returning
+    // to the producer; malformed or partial JPEGs never enter any output queue.
+    if (img->pixfmt == PIXFORMAT_JPEG) {
+        if (!esp_vision_jpeg_validate(img->pixels, img->size, (uint32_t)img->w, (uint32_t)img->h)) {
+            return ESP_ERR_INVALID_RESPONSE;
+        }
+        *jpeg_buf = img->pixels;
+        *jpeg_size = img->size;
+        return ESP_OK;
     }
 
     size_t raw_size = 0;
@@ -479,12 +621,27 @@ esp_err_t esp_vision_jpeg_encode(const image_t *img, int quality, uint8_t **jpeg
     if (ret != ESP_OK) {
         return ret;
     }
-    ret = esp_vision_jpeg_ensure_encoder();
+    esp_vision_jpeg_free_cpu_buffer();
+    ret = s_jpeg_hw_unavailable ? ESP_ERR_NO_MEM : esp_vision_jpeg_ensure_encoder();
     if (ret != ESP_OK) {
+        if (ret == ESP_ERR_NO_MEM) {
+            // Composite USB consumes internal DMA memory as well. Keep the
+            // validated, bounded CPU path available when engine creation fails,
+            // without retrying the same engine allocation on every frame.
+            if (s_jpeg.encoder != NULL) {
+                jpeg_del_encoder_engine(s_jpeg.encoder);
+                s_jpeg.encoder = NULL;
+            }
+            s_jpeg_hw_unavailable = true;
+            return esp_vision_jpeg_encode_cpu(img, quality, jpeg_buf, jpeg_size);
+        }
         return ret;
     }
     ret = esp_vision_jpeg_ensure_buffers(raw_size);
     if (ret != ESP_OK) {
+        if (ret == ESP_ERR_NO_MEM) {
+            return esp_vision_jpeg_encode_cpu(img, quality, jpeg_buf, jpeg_size);
+        }
         return ret;
     }
 
@@ -510,6 +667,12 @@ esp_err_t esp_vision_jpeg_encode(const image_t *img, int quality, uint8_t **jpeg
         return ret;
     }
 
+    if ((out_size == 0) || (out_size > s_jpeg.jpeg_buf_size)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    if (!esp_vision_jpeg_validate(s_jpeg.jpeg_buf, out_size, (uint32_t)img->w, (uint32_t)img->h)) {
+        return ESP_ERR_INVALID_RESPONSE;
+    }
     *jpeg_buf = s_jpeg.jpeg_buf;
     *jpeg_size = out_size;
     return ESP_OK;
@@ -526,15 +689,32 @@ void esp_vision_jpeg_deinit(void)
 
 esp_err_t esp_vision_jpeg_encode(const image_t *img, int quality, uint8_t **jpeg_buf, size_t *jpeg_size)
 {
+    if (jpeg_buf != NULL) {
+        *jpeg_buf = NULL;
+    }
+    if (jpeg_size != NULL) {
+        *jpeg_size = 0;
+    }
     if ((jpeg_buf == NULL) || (jpeg_size == NULL)) {
         return ESP_ERR_INVALID_ARG;
     }
 
-#if ESP_VISION_HAS_NEW_JPEG_ENCODER
-    if ((quality < 1) || (quality > 100)) {
+    if ((img == NULL) || (img->pixels == NULL) || (img->w <= 0) || (img->h <= 0) ||
+            (quality < 1) || (quality > 100)) {
         return ESP_ERR_INVALID_ARG;
     }
+    // This is a borrowed view. Asynchronous consumers copy it before returning
+    // to the producer; malformed or partial JPEGs never enter any output queue.
+    if (img->pixfmt == PIXFORMAT_JPEG) {
+        if (!esp_vision_jpeg_validate(img->pixels, img->size, (uint32_t)img->w, (uint32_t)img->h)) {
+            return ESP_ERR_INVALID_RESPONSE;
+        }
+        *jpeg_buf = img->pixels;
+        *jpeg_size = img->size;
+        return ESP_OK;
+    }
 
+#if ESP_VISION_HAS_NEW_JPEG_ENCODER
     return esp_vision_new_jpeg_encode(img, quality, jpeg_buf, jpeg_size);
 #else
     (void)img;

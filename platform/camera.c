@@ -14,15 +14,26 @@
 
 ESP_VISION_WEAK void esp_vision_camera_init0(void)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return;
+    }
+    esp_vision_camera_invalidate_observed_frame();
 }
 
 ESP_VISION_WEAK esp_err_t esp_vision_camera_init(void)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
     return ESP_ERR_NOT_SUPPORTED;
 }
 
 ESP_VISION_WEAK void esp_vision_camera_deinit(void)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return;
+    }
+    esp_vision_camera_invalidate_observed_frame();
 }
 
 ESP_VISION_WEAK bool esp_vision_camera_is_ready(void)
@@ -32,6 +43,12 @@ ESP_VISION_WEAK bool esp_vision_camera_is_ready(void)
 
 ESP_VISION_WEAK esp_err_t esp_vision_camera_set_pixformat(uint32_t pixfmt)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (pixfmt != esp_vision_camera_get_pixformat()) {
+        esp_vision_camera_invalidate_observed_frame();
+    }
     (void)pixfmt;
     return ESP_ERR_NOT_SUPPORTED;
 }
@@ -43,6 +60,16 @@ ESP_VISION_WEAK uint32_t esp_vision_camera_get_pixformat(void)
 
 ESP_VISION_WEAK esp_err_t esp_vision_camera_set_framesize(esp_vision_camera_framesize_t framesize)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    uint32_t observed_width = 0;
+    uint32_t observed_height = 0;
+    if ((esp_vision_camera_get_framesize_dimensions(framesize, &observed_width, &observed_height) == ESP_OK) &&
+            ((observed_width != esp_vision_camera_get_width()) ||
+             (observed_height != esp_vision_camera_get_height()))) {
+        esp_vision_camera_invalidate_observed_frame();
+    }
     (void)framesize;
     return ESP_ERR_NOT_SUPPORTED;
 }
@@ -85,6 +112,12 @@ ESP_VISION_WEAK uint32_t esp_vision_camera_get_height(void)
 
 ESP_VISION_WEAK esp_err_t esp_vision_camera_set_hmirror(bool enable)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (enable != esp_vision_camera_get_hmirror()) {
+        esp_vision_camera_invalidate_observed_frame();
+    }
     (void)enable;
     return ESP_ERR_NOT_SUPPORTED;
 }
@@ -96,6 +129,12 @@ ESP_VISION_WEAK bool esp_vision_camera_get_hmirror(void)
 
 ESP_VISION_WEAK esp_err_t esp_vision_camera_set_vflip(bool enable)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (enable != esp_vision_camera_get_vflip()) {
+        esp_vision_camera_invalidate_observed_frame();
+    }
     (void)enable;
     return ESP_ERR_NOT_SUPPORTED;
 }
@@ -115,8 +154,11 @@ ESP_VISION_WEAK size_t esp_vision_camera_frame_size(void)
     return 0;
 }
 
-ESP_VISION_WEAK esp_err_t esp_vision_camera_capture(uint8_t *pixels, size_t pixels_size)
+ESP_VISION_WEAK esp_err_t esp_vision_camera_capture_into(uint8_t *pixels, size_t pixels_size)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
     (void)pixels;
     (void)pixels_size;
     return ESP_ERR_NOT_SUPPORTED;

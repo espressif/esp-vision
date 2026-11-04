@@ -1,8 +1,27 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
+
+### Added
+
+- Negotiate runtime UART speed through the shared session, trying 2,000,000 → 1,500,000 → 921,600 → 460,800 → 115,200 bps until the first verified result; preserve legacy firmware and native USB behavior.
+- Expose a shared browser serial transport with safe internal reopen and preserve subscriptions; support live Node serial retuning through a binary-safe adapter control channel.
+- Require the firmware's versioned `debug.capture_frame.observed.v1` capability for camera observation. Camera capture observes the last successfully published independent camera frame; older unsafe implementations reject locally with `UNSUPPORTED_OPERATION` and a firmware-upgrade message, without issuing a capture RPC. Screen capture remains independent.
+
+### Changed
+
+- Declare this release as a minor version after 0.5.1. Device Core, CLI and Plugin retain independent publication lifecycles; a new Core release does not update existing CLI/Plugin bundles or authorize changing their registry locks.
 
 ### Fixed
+
+- Rebind an explicitly selected native USB runtime to its matching ROM only after EV-MUX MAC/interface verification and one bootloader request. Wait for path readiness, preserve uncertain control/cleanup outcomes, and verify the actual ROM MAC before accepting writes; never replay initialization on the same loader.
+- Serialize bootloader handoff with session cleanup, drain Node serial output before closing its bridge, and discard obsolete leases without claiming an unobserved ROM acknowledgement. Preserve bounded ROM method/error details in CLI JSON diagnostics.
+- Identify existing ROM/stub connections without reset before a bounded reset fallback on descriptor-qualified UART bridges or USB Serial/JTAG; suppress reset fallback on native/unknown USB and close failed handles.
+
+- Validate binary capture and preview JPEG structure, table references, dimensions, scans and final EOI before delivery, after existing CRC and response correlation checks. Reject malformed or JPEG-less capture success with `INVALID_IMAGE`; drop invalid previews with diagnostics and counters, while preserving unrelated requests and recovery on the next good frame. This is bounded structural validation, without entropy decoding.
+- Return each `frame.capture` action's correlated image so concurrent, out-of-order responses cannot exchange images through shared state. Use self-created, independently decoded JPEG fixtures in source and installed-package regressions.
+- Replace the browser flashing backend with pinned official esptool-js, compressed writes, qualified pre-write speed fallback, direct USB-OTG ROM synchronization and bounded readback with validated trailing MD5 plus full SHA-256 verification.
+- Normalize signed SPI register responses to 24-bit JEDEC flash IDs and preserve chip/security, installation bounds, partition-layout and reset checks.
 
 - Invalidate the old lease after acknowledged or uncertain hard reset, block concurrent renegotiation, and serialize cleanup with reset so stale release failures cannot mask its result. Retain live leases after confirmed reset denials and discard explicit ownership rejections.
 

@@ -4,14 +4,18 @@ import { spawn } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { defaultPython } from './node_inventory.js'
+import { prepareNodeRomPort, recoverNodeRomPort } from './node_rom_port.js'
 
-export function openNodeRom({ port, python = defaultPython, signal } = {}) {
+export function openNodeRom({ port, python = defaultPython, signal } = {}, dependencies = {}) {
   if (!port) throw new TypeError('Firmware update requires a local --port')
-  let child, input, pending, sequence = 0, closed = false
+  const lifecycle = new AbortController()
+  signal = signal ? AbortSignal.any([signal, lifecycle.signal]) : lifecycle.signal
+  let child, input, pending, sequence = 0, closed = false, initializing = false, romReady = false
   const fail = code => Object.assign(new Error(code === 'ESPTOOL_UNAVAILABLE' ? 'Install Python esptool>=5.3,<6 for the built-in flasher' : 'ROM operation failed'), { code })
   const reject = code => { if (pending) { clearTimeout(pending.timer); pending.reject(fail(code)); pending = null } }
   function rpc(method, args = []) {
     if (closed) return Promise.reject(fail('ROM_CLOSED'))
+    if (!child || (method !== 'initialize' && !romReady)) return Promise.reject(fail('ROM_NOT_INITIALIZED'))
     if (pending) return Promise.reject(fail('ROM_BUSY'))
     return new Promise((resolve, rejectPromise) => {
       const id = ++sequence
@@ -19,27 +23,77 @@ export function openNodeRom({ port, python = defaultPython, signal } = {}) {
       child.stdin.write(JSON.stringify({ id, method, args }) + '\n', error => { if (error) reject('ROM_IO_FAILED') })
     })
   }
+  async function closeProcess() {
+    const process = child
+    child = null; romReady = false; reject('ROM_CLOSED'); input?.close(); input = null
+    if (!process || process.exitCode !== null) return
+    await new Promise(resolve => {
+      const timer = setTimeout(() => { process.kill(); resolve() }, 2000)
+      process.once('exit', () => { clearTimeout(timer); resolve() })
+      process.stdin.end()
+    })
+  }
+  function startProcess(selected) {
+    signal.throwIfAborted()
+    const process = (dependencies.spawn ?? spawn)(python, ['-u', fileURLToPath(new URL('./node_rom.py', import.meta.url)), selected.port], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
+    child = process
+    const active = action => { if (child === process) action() }
+    process.on('error', () => active(() => reject('ESPTOOL_UNAVAILABLE')))
+    process.on('exit', () => active(() => reject('ROM_CLOSED')))
+    process.stdin.on('error', () => active(() => reject('ROM_IO_FAILED')))
+    input = createInterface({ input: process.stdout })
+    input.on('line', line => {
+      if (child !== process) return
+      try {
+        const message = JSON.parse(line)
+        if (message.error && !message.id) return reject(message.error)
+        if (!pending || message.id !== pending.id) return
+        const operation = pending; pending = null; clearTimeout(operation.timer)
+        if (message.error) operation.reject(Object.assign(fail(message.error), { operation: message.method, cause: message.detail })); else operation.resolve(message.result)
+      } catch { reject('ROM_RESPONSE_INVALID') }
+    })
+    return rpc('initialize')
+  }
   const loader = {
     async initialize() {
-      signal?.throwIfAborted()
-      child = spawn(python, ['-u', fileURLToPath(new URL('./node_rom.py', import.meta.url)), port], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
-      child.on('error', () => reject('ESPTOOL_UNAVAILABLE'))
-      child.on('exit', () => reject('ROM_CLOSED'))
-      child.stdin.on('error', () => reject('ROM_IO_FAILED'))
-      input = createInterface({ input: child.stdout })
-      input.on('line', line => {
-        try {
-          const message = JSON.parse(line)
-          if (message.error && !message.id) return reject(message.error)
-          if (!pending || message.id !== pending.id) return
-          const operation = pending; pending = null; clearTimeout(operation.timer)
-          if (message.error) operation.reject(Object.assign(fail(message.error), { operation: message.method, cause: message.detail })); else operation.resolve(message.result)
-        } catch { reject('ROM_RESPONSE_INVALID') }
-      })
+      signal.throwIfAborted()
+      if (closed) throw fail('ROM_CLOSED')
+      if (initializing || child) throw fail('ROM_ALREADY_INITIALIZED')
+      initializing = true
+      let selected
       const cancelled = () => { reject('CANCELLED'); void loader.disconnect() }
-      signal?.addEventListener('abort', cancelled, { once: true })
-      try { Object.assign(loader, await rpc('initialize')) }
-      finally { signal?.removeEventListener('abort', cancelled) }
+      signal.addEventListener('abort', cancelled, { once: true })
+      try {
+        selected = await (dependencies.preparePort ?? prepareNodeRomPort)({ port, python, signal })
+        signal.throwIfAborted()
+        let identity
+        try { identity = await startProcess(selected) }
+        catch (error) {
+          await closeProcess()
+          signal.throwIfAborted()
+          // No writes have been accepted. A ROM/stub can return to its app
+          // between enumeration and SYNC. Recover only after observing that
+          // same physical device's runtime; never repeat a previous handoff.
+          if (error.code !== 'ROM_OPERATION_FAILED' || error.operation !== 'initialize'
+              || !selected.expectedMac || selected.transition?.observed !== 'rom'
+              || selected.transition.requested !== false) throw error
+          const recovered = await (dependencies.recoverPort ?? recoverNodeRomPort)(selected, { python, signal })
+          if (!recovered) throw error
+          selected = recovered
+          selected.transition.previousInitialization = { code: error.code, operation: error.operation, detail: String(error.cause ?? '').slice(0, 1024) }
+          signal.throwIfAborted()
+          identity = await startProcess(selected)
+        }
+        if (selected.expectedMac && identity.chipMac !== selected.expectedMac) {
+          throw Object.assign(new Error('ROM MAC differs from the selected USB device'), { code: 'ROM_IDENTITY_CHANGED' })
+        }
+        Object.assign(loader, identity, { port: selected.port, usbTransition: selected.transition })
+        romReady = true
+      } catch (error) {
+        if (error && typeof error === 'object' && selected?.transition) error.transition ??= selected.transition
+        await loader.disconnect()
+        throw error
+      } finally { initializing = false; signal.removeEventListener('abort', cancelled) }
     },
     flashId: () => rpc('flashId'),
     getSecurityInfo: () => rpc('security'),
@@ -51,13 +105,8 @@ export function openNodeRom({ port, python = defaultPython, signal } = {}) {
     hardReset: () => rpc('reset'),
     async disconnect() {
       if (closed) return
-      closed = true; reject('ROM_CLOSED'); input?.close()
-      if (!child || child.exitCode !== null) return
-      await new Promise(resolve => {
-        const timer = setTimeout(() => { child.kill(); resolve() }, 2000)
-        child.once('exit', () => { clearTimeout(timer); resolve() })
-        child.stdin.end()
-      })
+      closed = true; lifecycle.abort(fail('ROM_CLOSED'))
+      await closeProcess()
     },
   }
   return loader

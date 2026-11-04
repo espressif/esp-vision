@@ -8,9 +8,12 @@
  * drift between the two entry points.
  */
 
+import { requireObservedCameraCapture } from './device_capture.js'
+
 export const EV_MUX_PAYLOAD_LIMIT = 1800
 export const EV_MUX_SCRIPT_CHUNK_BYTES = 900
 export const EV_MUX_VERSION = 4
+export const UART_BAUD_CANDIDATES = Object.freeze([2000000, 1500000, 921600, 460800, 115200])
 const INLINE_PYTHON_REPL_TIMEOUT_MS = 5000
 const SCRIPT_START_ACK_TIMEOUT_MS = 5000
 // MicroPython has a 128-byte VFS path buffer; script.write also appends .tmp.
@@ -49,6 +52,9 @@ const EV_MUX_USER_RPC_METHODS = new Set([
   'capabilities',
   'session.keepalive',
   'session.release',
+  'transport.uart.prepare',
+  'transport.uart.probe',
+  'transport.uart.commit',
   'file.write',
   'script.write',
   'script.run',
@@ -361,10 +367,19 @@ export class DeviceSession {
       },
       rawText: (text) => this.handlers.rawText?.(text),
       preview: (base64, metadata, bytes) => this.handlers.preview?.(base64, metadata, bytes),
+      invalidImage: (metadata, error, payload) => {
+        this._diagnostic('image.invalid', { channel: metadata.channel, method: metadata.method ?? null, seq: metadata.seq,
+          code: 'INVALID_IMAGE', reason: error.reason ?? 'invalid JPEG structure' })
+        const seq = Number(metadata.seq), pending = this.pendingRpc.get(seq)
+        if (metadata.type === 'rsp' && pending && this._matchesPendingResponse(metadata, payload)) {
+          this.pendingRpc.delete(seq)
+          pending.reject(error)
+        }
+      },
       debugImage: (base64, metadata, bytes, frameMetadata) => {
         this.lastDebugImage = { base64, metadata }
         const pending = this.pendingRpc.get(Number(metadata.seq))
-        if (pending?.binaryResponse && frameMetadata && this._matchesPendingResponse(frameMetadata, { ok: true })) {
+        if (pending && frameMetadata && this._matchesPendingResponse(frameMetadata, { ok: true })) {
           pending.image = { data: bytes.slice(), mimeType: 'image/jpeg', metadata: { ...metadata } }
         }
         this.handlers.debugImage?.(base64, metadata)
@@ -692,10 +707,12 @@ export class DeviceSession {
     signal = null,
     writeTimeout = null,
     encoding = undefined,
+    resetToken = null,
   } = {}) {
     if (this.state === 'disconnected') {
       throw new Error('EV-MUX is not connected')
     }
+    if (type === 'req' && method === 'debug.capture_frame') requireObservedCameraCapture(this)
     const seq = requestedSeq === null ? this._allocateSequence() : requestedSeq >>> 0
     const requestPayload = typeof payload === 'string' && method
       ? (() => { try { return JSON.parse(payload) } catch (_err) { return {} } })()
@@ -703,7 +720,8 @@ export class DeviceSession {
     const needsAuthorization = authorize ?? !(method === 'hello' || method === 'capabilities')
     const usesVm = vmRequest ?? (channel === 'repl.stdin' || channel === 'repl.signal'
       || (Boolean(method) && isVmRpc(method, requestPayload)))
-    if (this.state === 'resetting' && !(method === 'device.control' && requestPayload?.action === 'reset')) {
+    if (this.state === 'resetting' && !(resetToken && resetToken === this.resetWriteToken)
+        && !(method === 'device.control' && requestPayload?.action === 'reset')) {
       throw Object.assign(new Error('Device reset is in progress'), { code: 'DEVICE_RESETTING' })
     }
     if (needsAuthorization && !this.sessionId) {
@@ -775,6 +793,7 @@ export class DeviceSession {
       throw new Error('EV-MUX is not connected')
     }
     if (signal?.aborted) throw abortError(signal)
+    if (method === 'debug.capture_frame') requireObservedCameraCapture(this)
     if (payload instanceof Uint8Array && method !== 'file.write') throw new TypeError('Raw binary requests are only supported for file.write')
     if (method === 'script.write' || method === 'script.run') validateRpcPath(payload?.path)
     if (method === 'debug.info' && (payload?.scope === 'fs.list' || payload?.scope === 'fs.read')) {
@@ -860,7 +879,7 @@ export class DeviceSession {
       throw error
     }
     if (binaryResponse) {
-      if (!image) throw Object.assign(new Error('Capture returned no binary image'), { code: 'INVALID_RESPONSE' })
+      if (!image) throw Object.assign(new Error('Invalid JPEG image: capture response contains no binary JPEG'), { code: 'INVALID_IMAGE' })
       return image
     }
     return this._redactRpcPayload(method, responsePayload, { requestPayload: payload, redactSsid: false })
@@ -868,6 +887,120 @@ export class DeviceSession {
 
   captureImage(method, payload = {}, options = {}) {
     return this.rpc(method, payload, { ...options, channel: 'debug.rpc', binaryResponse: true })
+  }
+
+  async _setUartBaudRate(baudRate, signal) {
+    const controller = new AbortController()
+    const abort = () => controller.abort(abortError(signal))
+    signal?.addEventListener('abort', abort, { once: true })
+    if (signal?.aborted) abort()
+    try {
+      return await withTimeout(() => this.transport.setBaudRate(baudRate, { signal: controller.signal }), 2000, 'UART speed change timed out', controller.signal)
+    } catch (error) {
+      // Web Serial cannot cancel open(). Mark its in-flight attempt stale so
+      // a late open closes itself rather than changing a recovered link.
+      controller.abort(error)
+      throw error
+    } finally { signal?.removeEventListener('abort', abort) }
+  }
+
+  async _negotiateUartBaud({ hello, discovery, signal, expectedDevice }) {
+    const options = this.capabilities.uartBaud
+    if (options.baseline !== 115200 || !Array.isArray(options.candidates)
+        || !Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1000 || options.timeoutMs > 10000
+        || !Number.isSafeInteger(options.probeBytes) || options.probeBytes < 32 || options.probeBytes > 512) {
+      this._diagnostic('uart.baud.skipped', { reason: 'invalid_capabilities' })
+      return { hello, discovery }
+    }
+    const candidates = UART_BAUD_CANDIDATES.filter(baud => options.candidates.includes(baud))
+    if (!candidates.includes(115200)) return { hello, discovery }
+    let current = { hello, discovery }
+    for (const baudRate of candidates) {
+      if (signal?.aborted) throw abortError(signal)
+      clearTimeout(this.keepaliveTimer)
+      this.keepaliveGeneration += 1
+      this.state = 'negotiating'
+      const token = randomHex()
+      let commitSent = false
+      this._diagnostic('uart.baud.testing', { baudRate })
+      try {
+        const prepared = await this.rpc('transport.uart.prepare', { baudRate, token }, { timeout: 1500, signal })
+        if (prepared.baudRate !== baudRate || prepared.token !== token || prepared.timeoutMs !== options.timeoutMs) {
+          throw Object.assign(new Error('Invalid UART switch acknowledgement'), { code: 'UART_BAUD_INVALID_RESPONSE' })
+        }
+        const delay = prepared.switchDelayMs ?? options.switchDelayMs ?? 100
+        if (!Number.isSafeInteger(delay) || delay < 0 || delay > 1000) {
+          throw Object.assign(new Error('Invalid UART switch delay'), { code: 'UART_BAUD_INVALID_RESPONSE' })
+        }
+        await this._setUartBaudRate(baudRate, signal)
+        // Firmware drains the old-rate ACK before changing hardware. The host
+        // must not send a new-rate probe into that drain/guard interval.
+        await awaitWithSignal(this.sleep(delay + 20), signal)
+        this.parser.reset()
+        this.parser.active = true
+        for (const length of [...new Set([32, Math.min(128, options.probeBytes), options.probeBytes])]) {
+          for (let round = 0; round < 2; round += 1) {
+            // Framing validates CRC in both directions; exact echo also rejects
+            // stale responses and byte corruption at different packet lengths.
+            const data = randomHex(Math.ceil(length / 2)).slice(0, length)
+            const probe = await this.rpc('transport.uart.probe', { token, data }, { timeout: 800, signal })
+            if (probe.token !== token || probe.data !== data) {
+              throw Object.assign(new Error('UART bidirectional verification failed'), { code: 'UART_BAUD_BAD_ECHO' })
+            }
+          }
+        }
+        commitSent = true
+        let committed
+        try {
+          committed = await this.rpc('transport.uart.commit', { token }, { timeout: 800, signal })
+        } catch (error) {
+          if (signal?.aborted || error.code !== 'TIMEOUT') throw error
+          // Commit is token-idempotent; retry a lost ACK, never business data.
+          committed = await this.rpc('transport.uart.commit', { token }, { timeout: 800, signal })
+        }
+        if (committed.token !== token || committed.baudRate !== baudRate) {
+          throw Object.assign(new Error('Invalid UART commit acknowledgement'), { code: 'UART_BAUD_INVALID_RESPONSE' })
+        }
+        this.capabilities = { ...this.capabilities, uartBaud: { ...options, current: baudRate } }
+        this._diagnostic('uart.baud.selected', { baudRate })
+        this._startKeepalive()
+        return current
+      } catch (error) {
+        if (signal?.aborted) throw abortError(signal)
+        this._diagnostic('uart.baud.failed', { baudRate, code: error.code ?? 'SERIAL_ERROR' })
+        // A reopen can reset a board, or a damaged ACK can hide a successful
+        // device-side switch. Release if possible, then wait for the firmware's
+        // independent rollback before reacquiring at the baseline.
+        let released = false
+        try {
+          await this.rpc('session.release', {}, { timeout: 500, signal })
+          released = true
+        } catch { /* The firmware timeout is the independent recovery path. */ }
+        const rollbackMs = released ? 150 : commitSent ? this.leaseMs + 250 : options.timeoutMs + 250
+        // Each authenticated request may renew the lease, even if its ACK is
+        // lost. Count conservatively from the last release attempt, rather
+        // than from prepare submission or an earlier successful probe.
+        await awaitWithSignal(this.sleep(rollbackMs), signal)
+        await this._setUartBaudRate(115200, signal)
+        clearTimeout(this.keepaliveTimer)
+        this.keepaliveGeneration += 1
+        this.sessionGeneration += 1
+        this.sessionId = null
+        this.vmEpoch = null
+        this.vmReady = false
+        this.vmReadyKnown = false
+        this.clientNonce = randomHex()
+        this.parser.reset()
+        this.state = 'negotiating'
+        current = await this._negotiate({ role: this.role, drainMs: 0, probeRepl: false, autoBaud: false, signal, expectedDevice })
+        this.state = 'negotiating'
+        if (current.hello.session.owner !== 'uart') {
+          throw Object.assign(new Error('UART owner changed during speed recovery'), { code: 'UART_BAUD_RECOVERY_FAILED' })
+        }
+        if (baudRate === 115200) throw Object.assign(new Error('UART baseline verification failed'), { code: 'UART_BAUD_VERIFICATION_FAILED', cause: error })
+      }
+    }
+    return current
   }
 
   negotiate(options = {}) {
@@ -885,7 +1018,7 @@ export class DeviceSession {
     this.negotiateController = controller
     const deadlineError = new Error('EV-MUX negotiation deadline exceeded')
     deadlineError.code = 'TIMEOUT'
-    const deadlineTimer = setTimeout(() => controller.abort(deadlineError), 30000)
+    const deadlineTimer = setTimeout(() => controller.abort(deadlineError), 60000)
     const operation = this._negotiate({ ...options, signal: controller.signal })
     const tracked = operation.finally(() => {
       clearTimeout(deadlineTimer)
@@ -898,7 +1031,7 @@ export class DeviceSession {
     return tracked
   }
 
-  async _negotiate({ role = 'unknown', drainMs = 300, signal = null, acquire = true, probeRepl = true, expectedDevice = null } = {}) {
+  async _negotiate({ role = 'unknown', drainMs = 300, signal = null, acquire = true, probeRepl = true, expectedDevice = null, autoBaud = true } = {}) {
     this.role = role
     this.state = 'negotiating'
     this._diagnostic('negotiate.begin', { role })
@@ -993,7 +1126,6 @@ export class DeviceSession {
       this.keepaliveMs = hello.session.keepaliveMs || this.keepaliveMs
       this.leaseMs = hello.session.leaseMs || this.leaseMs
       this.parser.active = true
-      this.state = 'ready'
       this._startKeepalive()
     }
 
@@ -1039,6 +1171,13 @@ export class DeviceSession {
       // Start with the lease timing from the accepted hello immediately, then
       // refresh its cadence once the full capability response is available.
       this._startKeepalive()
+      if (autoBaud && typeof this.transport.setBaudRate === 'function'
+          && hello.session.owner === 'uart' && this.capabilities.uartBaud) {
+        const negotiated = await this._negotiateUartBaud({ hello, discovery, signal, expectedDevice })
+        hello = negotiated.hello
+        discovery = negotiated.discovery
+        capabilities = this.capabilities
+      }
     } else {
       this.parser.active = true
       this.state = 'discovered'
@@ -1310,10 +1449,65 @@ export class DeviceSession {
     }[operation]
     if (!command) throw new Error(`Unsupported device control operation: ${operation}`)
     if (operation === 'soft-reset') return this._softReset(command, { timeout, signal })
-    await this.writeFrame('repl.signal', 'signal', null, new Uint8Array([0x03]), { signal })
-    await this.writeFrame('repl.stdin', 'data', null, command, { signal })
-    await awaitWithSignal(this.sleep(100), signal)
-    return { ok: true, operation, acknowledged: false }
+    return this._resetViaRepl(operation, command, { timeout, signal })
+  }
+
+  _resetViaRepl(operation, command, { timeout, signal }) {
+    if (!Number.isFinite(timeout) || timeout <= 0) throw new RangeError('Reset timeout must be positive')
+    if (this.releasePromise) {
+      throw Object.assign(new Error('Device session is being released'), { code: 'DEVICE_RELEASING' })
+    }
+    if (this.resetPromise || this.state !== 'ready') {
+      throw Object.assign(new Error('Device is not ready for reset'), { code: 'DEVICE_RESETTING' })
+    }
+    const deadline = createOperationDeadline(signal, timeout,
+      Object.assign(new Error('Device reset submission timed out'), { code: 'TIMEOUT' }))
+    const owner = this.sessionId
+    const generation = this.sessionGeneration
+    const resetToken = Symbol('REPL reset')
+    this.resetWriteToken = resetToken
+    this.state = 'resetting'
+    clearTimeout(this.keepaliveTimer)
+    this.keepaliveTimer = null
+    this.keepaliveGeneration += 1
+    let commandAttempted = false
+    const resetting = (async () => {
+      try {
+        const options = { signal: deadline.signal, resetToken }
+        await this.writeFrame('repl.signal', 'signal', null, new Uint8Array([0x03]), options)
+        if (deadline.signal.aborted) throw abortError(deadline.signal)
+        commandAttempted = true
+        await this.writeFrame('repl.stdin', 'data', null, command, options)
+        // The Node bridge's pipe write is not a serial write acknowledgement.
+        // Drain its output before cleanup can terminate that bridge process.
+        await awaitWithSignal(this.transport.drain
+          ? this.transport.drain({ signal: deadline.signal }) : this.sleep(100), deadline.signal)
+        // Framed REPL has no reset ACK. A completed write only confirms
+        // submission; ROM identification belongs to the next connection.
+        this.close(Object.assign(new Error('Device reset submitted'), { code: 'DEVICE_RESET' }))
+        return { ok: true, operation, acknowledged: false, outcome: 'unknown' }
+      } catch (error) {
+        // A failed write may have reached the VM. Do not replay it or send
+        // session.release to a possibly rebooted device using the old lease.
+        if (commandAttempted) {
+          error.reset = { acknowledged: false, outcome: 'unknown' }
+          this.close(error)
+        } else if (this.sessionId === owner && this.sessionGeneration === generation) {
+          // Only the interrupt was attempted; no reset command was submitted.
+          this.state = 'ready'
+          this._startKeepalive()
+        }
+        throw error
+      } finally {
+        deadline.dispose()
+        if (this.resetWriteToken === resetToken) this.resetWriteToken = null
+      }
+    })()
+    const tracked = resetting.finally(() => {
+      if (this.resetPromise === tracked) this.resetPromise = null
+    })
+    this.resetPromise = tracked
+    return tracked
   }
 
   _hardReset({ timeout, signal }) {

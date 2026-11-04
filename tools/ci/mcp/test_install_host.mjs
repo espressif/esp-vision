@@ -98,6 +98,37 @@ test('MR staging fails if npm changes an unrelated locked dependency', async t =
   assert.match(result.stderr, /Unrelated locked dependency changed: node_modules\/host-lock-fixture/)
 })
 
+test('MR staging permits removal of former Core-only transitive dependencies', async t => {
+  const f = await fixture(t)
+  const lock = JSON.parse(f.tracked)
+  lock.packages['node_modules/@esp-vision/device-core'].dependencies = { 'former-rom-adapter': '1.0.0' }
+  lock.packages['node_modules/former-rom-adapter'] = { version: '1.0.0', dev: true,
+    optionalDependencies: { 'former-codec': '1.0.0' } }
+  lock.packages['node_modules/former-rom-adapter/node_modules/former-codec'] = { version: '1.0.0', dev: true }
+  const tracked = JSON.stringify(lock, null, 2) + '\n'
+  await writeFile(join(f.cli, 'package-lock.json'), tracked)
+  const result = f.run()
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(await readFile(join(f.cli, 'package-lock.json'), 'utf8'), tracked)
+  assert.equal(await readFile(join(f.cli, 'node_modules/host-lock-fixture/index.js'), 'utf8'),
+    'export const unchanged = true\n')
+})
+
+test('MR staging still protects dependencies shared by Core and another host dependency', async t => {
+  const f = await fixture(t)
+  const lock = JSON.parse(f.tracked)
+  lock.packages['node_modules/@esp-vision/device-core'].dependencies = { 'host-lock-fixture': '1.0.0' }
+  await writeFile(join(f.cli, 'package-lock.json'), JSON.stringify(lock, null, 2) + '\n')
+  await injectNpmFault(f, `if (args.includes('--package-lock-only')) {
+  const lock = JSON.parse(fs.readFileSync('package-lock.json'))
+  lock.packages['node_modules/host-lock-fixture'].integrity = 'sha512-tampered'
+  fs.writeFileSync('package-lock.json', JSON.stringify(lock))
+}`)
+  const result = f.run()
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /Unrelated locked dependency changed: node_modules\/host-lock-fixture/)
+})
+
 test('MR staging rejects installed Core bytes that differ from the verified artifact source', async t => {
   const f = await fixture(t)
   await injectNpmFault(f, `if (args[0] === 'ci') fs.writeFileSync('node_modules/@esp-vision/device-core/index.js', 'tampered')`)

@@ -62,6 +62,8 @@ static mock_link_t s_mock_links[EV_TRANSPORT_TCP_LINKS];
 static int s_write_calls;
 static int s_would_block_calls;
 static bool s_block_forever;
+static bool s_full_vectors;
+static bool s_block_slot[EV_TRANSPORT_TCP_LINKS];
 static size_t s_max_write;
 static int s_close_calls;
 static int s_lost_calls;
@@ -79,6 +81,12 @@ static mock_completion_record_t s_completion_records[MOCK_COMPLETION_RECORDS];
 static int s_switch_owner_after_delay;
 static ev_link_ref_t s_switch_owner_link;
 static char s_switch_owner_session[EV_SESSION_ID_HEX_LEN + 1];
+static uint32_t s_mock_uart_baud = 115200;
+
+uint32_t ev_transport_uart_baudrate(void)
+{
+    return s_mock_uart_baud;
+}
 
 static void mock_set_owner(const ev_link_ref_t *link, const char *session_id);
 
@@ -127,6 +135,8 @@ static void mock_reset_io(void)
     s_write_calls = 0;
     s_would_block_calls = 0;
     s_block_forever = false;
+    s_full_vectors = false;
+    memset(s_block_slot, 0, sizeof(s_block_slot));
     s_max_write = SIZE_MAX;
     s_close_calls = 0;
     s_lost_calls = 0;
@@ -141,6 +151,8 @@ static void mock_reset_io(void)
 
 static void mock_reset_mux(void)
 {
+    ev_mux_uart_pause(false);
+    s_mock_uart_baud = 115200;
     assert(ev_mux_init0() == ESP_OK);
     for (size_t i = 0; i < EV_MUX_TARGET_COUNT; ++i) {
         ev_mux_target_queue_t *queue = &s_targets[i];
@@ -168,6 +180,7 @@ static void mock_reset_mux(void)
         __atomic_store_n(&s_special_partial_frame[i], (uintptr_t)0, __ATOMIC_RELEASE);
     }
     memset(s_preview_frames, 0, sizeof(s_preview_frames));
+    memset(s_observer_generations, 0, sizeof(s_observer_generations));
     memset(&s_large_frame, 0, sizeof(s_large_frame));
     s_preview_pending = -1;
     s_preview_active = -1;
@@ -253,7 +266,8 @@ static ev_link_ref_t mock_tcp_link(uint8_t slot)
 
 bool ev_transport_link_is_current(const ev_link_ref_t *link)
 {
-    if ((link == NULL) || (link->transport_id != EV_TRANSPORT_TCP) ||
+    if ((link == NULL) || ((link->transport_id != EV_TRANSPORT_TCP) &&
+                           (link->transport_id != EV_TRANSPORT_UART)) ||
             (link->slot >= EV_TRANSPORT_TCP_LINKS)) {
         return false;
     }
@@ -288,7 +302,7 @@ ev_io_result_t ev_transport_write(const ev_link_ref_t *link, const void *buffer,
         };
     }
     ++s_write_calls;
-    if (s_block_forever || (s_would_block_calls > 0)) {
+    if (s_block_forever || s_block_slot[link->slot] || (s_would_block_calls > 0)) {
         if (s_would_block_calls > 0) {
             --s_would_block_calls;
         }
@@ -304,6 +318,25 @@ ev_io_result_t ev_transport_write(const ev_link_ref_t *link, const void *buffer,
     return (ev_io_result_t) {
         EV_IO_PROGRESS, transferred, ESP_OK
     };
+}
+
+// Simulate a backend that accepts only the first vector: this intentionally
+// exercises short scatter/gather progress and all existing frame boundaries.
+ev_io_result_t ev_transport_writev(const ev_link_ref_t *link,
+                                   const ev_io_vector_t *vectors, size_t count)
+{
+    assert(count > 0 && count <= EV_IO_VECTORS_MAX);
+    if (!s_full_vectors) {
+        return ev_transport_write(link, vectors[0].base, vectors[0].length);
+    }
+    uint8_t joined[EV_MUX_WRITE_CHUNK_BYTES];
+    size_t bytes = 0;
+    for (size_t i = 0; i < count; ++i) {
+        assert(bytes + vectors[i].length <= sizeof(joined));
+        memcpy(joined + bytes, vectors[i].base, vectors[i].length);
+        bytes += vectors[i].length;
+    }
+    return ev_transport_write(link, joined, bytes);
 }
 
 void ev_transport_link_close(const ev_link_ref_t *link)
@@ -427,6 +460,9 @@ static size_t mock_drain_worker(void)
             queued |= s_targets[target].frames_used != 0;
         }
         queued |= s_preview_pending >= 0 || s_preview_active >= 0;
+        for (size_t i = 2; i < EV_MUX_PREVIEW_FRAMES; ++i) {
+            queued |= s_preview_frames[i].used;
+        }
         if (!queued) {
             break;
         }
@@ -1771,6 +1807,273 @@ static void test_unowned_repl_metadata_stays_unbound(void)
                               2) == ESP_ERR_INVALID_STATE);
 }
 
+static const char observer_metadata[] =
+    "{\"channel\":\"preview.frame\",\"type\":\"data\",\"seq\":1}";
+
+static void test_observers_share_payload_and_reserve_control_slot(void)
+{
+    mock_reset_mux();
+    ev_link_ref_t a = mock_tcp_link(0), b = mock_tcp_link(1), control = mock_tcp_link(2);
+    assert(ev_mux_preview_subscribe(&a, true) == ESP_OK);
+    assert(ev_mux_preview_subscribe(&b, true) == ESP_OK);
+    assert(ev_mux_preview_subscribe(&control, true) == ESP_ERR_NO_MEM);
+    mock_set_owner(&control, "0123456789abcdef0123456789abcdef");
+    assert(ev_mux_preview_subscribe(&control, true) == ESP_ERR_INVALID_STATE);
+    assert(ev_mux_preview_observers_ready());
+    uint8_t bytes[2048];
+    memset(bytes, 'A', sizeof(bytes));
+    assert(ev_mux_preview_publish_observers(observer_metadata, bytes, sizeof(bytes)) == ESP_OK);
+    assert(s_preview_frames[2].payload == s_preview_frames[3].payload);
+    memset(bytes, 'B', sizeof(bytes));
+    mock_drain_worker();
+    for (unsigned i = 0; i < 2; ++i) {
+        mock_parsed_frame_t frame;
+        assert(mock_parse_frame(s_mock_links[i].output, s_mock_links[i].output_len, 0, &frame));
+        assert(frame.payload_len == sizeof(bytes));
+        assert(frame.payload[0] == 'A' && frame.payload[sizeof(bytes) - 1] == 'A');
+        assert(!frame.metadata.has_session_id && !frame.metadata.has_vm_epoch);
+        assert(frame.total_len == s_mock_links[i].output_len);
+    }
+    assert(s_mock_links[2].output_len == 0 && s_mock_owner);
+}
+
+static void test_observer_latest_frame_preserves_partial_and_generation(void)
+{
+    mock_reset_mux();
+    ev_link_ref_t link = mock_tcp_link(0);
+    assert(ev_mux_preview_subscribe(&link, true) == ESP_OK);
+    s_max_write = 7;
+    assert(ev_mux_preview_publish_observers(observer_metadata, "first", 5) == ESP_OK);
+    ev_mux_tx_worker_step();
+    assert(s_mock_links[0].output_len == 7);
+    assert(ev_mux_preview_publish_observers(observer_metadata, "old", 3) == ESP_OK);
+    assert(ev_mux_preview_publish_observers(observer_metadata, "latest", 6) == ESP_OK);
+    mock_drain_worker();
+    mock_parsed_frame_t first, latest;
+    assert(mock_parse_frame(s_mock_links[0].output, s_mock_links[0].output_len, 0, &first));
+    assert(first.payload_len == 5 && memcmp(first.payload, "first", 5) == 0);
+    assert(mock_parse_frame(s_mock_links[0].output, s_mock_links[0].output_len, first.total_len, &latest));
+    assert(latest.payload_len == 6 && memcmp(latest.payload, "latest", 6) == 0);
+    assert(first.total_len + latest.total_len == s_mock_links[0].output_len);
+    assert(ev_mux_preview_subscribe(&link, false) == ESP_OK);
+    assert(!ev_mux_preview_observers_ready());
+    assert(ev_mux_preview_subscribe(&link, true) == ESP_OK);
+    assert(ev_mux_preview_publish_observers(observer_metadata, "stale", 5) == ESP_OK);
+    ++s_mock_links[0].generation;
+    assert(!ev_mux_preview_subscribed(&link));
+    size_t before = s_mock_links[0].output_len;
+    mock_drain_worker();
+    assert(s_mock_links[0].output_len == before);
+    link = mock_tcp_link(0);
+    assert(!ev_mux_preview_subscribed(&link));
+}
+
+static void test_observer_stall_closes_only_its_link(void)
+{
+    mock_reset_mux();
+    ev_link_ref_t link = mock_tcp_link(0), control = mock_tcp_link(2);
+    mock_set_owner(&control, "0123456789abcdef0123456789abcdef");
+    assert(ev_mux_preview_subscribe(&link, true) == ESP_OK);
+    assert(ev_mux_preview_publish_observers(observer_metadata, "frame", 5) == ESP_OK);
+    ev_mux_tx_worker_step();
+    assert(s_mock_links[0].output_len > 0);
+    s_block_forever = true;
+    ev_mux_test_time_us += INT64_C(4100000);
+    ev_mux_tx_worker_step();
+    assert(s_close_calls == 1 && !s_mock_links[0].current);
+    assert(s_mock_links[2].current && s_mock_owner && s_lost_calls == 0);
+    assert(!ev_mux_preview_observers_ready());
+}
+
+static void test_slow_observer_does_not_block_fast_observer_or_control(void)
+{
+    mock_reset_mux();
+    ev_link_ref_t slow = mock_tcp_link(0), fast = mock_tcp_link(1), control = mock_tcp_link(2);
+    mock_set_owner(&control, "0123456789abcdef0123456789abcdef");
+    assert(ev_mux_preview_subscribe(&slow, true) == ESP_OK);
+    assert(ev_mux_preview_subscribe(&fast, true) == ESP_OK);
+    assert(ev_mux_preview_publish_observers(observer_metadata, "first", 5) == ESP_OK);
+    ev_mux_tx_worker_step();
+    s_block_slot[0] = true;
+    for (unsigned i = 0; i < 100; ++i) {
+        ev_mux_tx_worker_step();
+    }
+    size_t first_fast_bytes = s_mock_links[1].output_len;
+    assert(first_fast_bytes > 0);
+    for (unsigned i = 0; i < 20; ++i) {
+        assert(ev_mux_preview_publish_observers(observer_metadata, "latest", 6) == ESP_OK);
+        for (unsigned j = 0; j < 10; ++j) {
+            ev_mux_tx_worker_step();
+        }
+    }
+    assert(s_mock_links[1].output_len > first_fast_bytes * 10);
+    ev_mux_submit_options_t options = {
+        .link = &control, .session_id = s_mock_session.session_id, .tx_class = EV_MUX_TX_CONTROL,
+    };
+    assert(ev_mux_submit_link(&options, "{}", "ack", 3, NULL) == ESP_OK);
+    for (unsigned i = 0; i < 10; ++i) {
+        ev_mux_tx_worker_step();
+    }
+    assert(s_mock_links[2].output_len > 0);
+    assert(s_mock_links[0].output_len < first_fast_bytes);
+    // Partial bytes still refer to the first immutable JPEG after repeated
+    // replacement and reuse of all other shared payload slots.
+    s_block_slot[0] = false;
+    mock_drain_worker();
+    mock_parsed_frame_t frame;
+    assert(mock_parse_frame(s_mock_links[0].output, s_mock_links[0].output_len, 0, &frame));
+    assert(frame.payload_len == 5 && memcmp(frame.payload, "first", 5) == 0);
+}
+
+static void test_replacing_unstarted_observer_frame_keeps_blocked_send_deadline(void)
+{
+    mock_reset_mux();
+    ev_link_ref_t slow = mock_tcp_link(0), fast = mock_tcp_link(1);
+    assert(ev_mux_preview_subscribe(&slow, true) == ESP_OK);
+    assert(ev_mux_preview_subscribe(&fast, true) == ESP_OK);
+    s_block_slot[0] = true;
+    for (unsigned i = 0; i < 60 && s_mock_links[0].current; ++i) {
+        assert(ev_mux_preview_publish_observers(observer_metadata, "new", 3) == ESP_OK);
+        for (unsigned j = 0; j < 10; ++j) {
+            ev_mux_tx_worker_step();
+        }
+        ev_mux_test_time_us += INT64_C(100000);
+    }
+    assert(s_close_calls == 1 && !s_mock_links[0].current);
+    assert(s_mock_links[0].output_len == 0);
+    assert(s_mock_links[1].current && s_mock_links[1].output_len > 0);
+}
+
+static void test_tcp_vectors_coalesce_complete_frame_and_preserve_short_cursor(void)
+{
+    for (unsigned short_write = 0; short_write < 2; ++short_write) {
+        mock_reset_mux();
+        s_full_vectors = true;
+        s_max_write = short_write ? 5 : SIZE_MAX;
+        ev_link_ref_t link = mock_tcp_link(0);
+        assert(ev_mux_preview_subscribe(&link, true) == ESP_OK);
+        assert(ev_mux_preview_publish_observers(observer_metadata, "jpeg", 4) == ESP_OK);
+        mock_drain_worker();
+        uint8_t expected[512];
+        size_t length = mock_make_frame(observer_metadata, (const uint8_t *)"jpeg", 4,
+                                        expected, sizeof(expected));
+        assert(s_mock_links[0].output_len == length);
+        assert(memcmp(s_mock_links[0].output, expected, length) == 0);
+        assert(short_write || s_write_calls == 1);
+    }
+}
+
+static void test_observer_progress_budget_and_absolute_deadline(void)
+{
+    mock_reset_mux();
+    ev_link_ref_t link = mock_tcp_link(0);
+    s_max_write = 1;
+    assert(ev_mux_preview_subscribe(&link, true) == ESP_OK);
+    assert(ev_mux_preview_publish_observers(observer_metadata, "jpeg", 4) == ESP_OK);
+    for (unsigned i = 0; i < 200 && s_preview_frames[2].used; ++i) {
+        ev_mux_tx_worker_step();
+        ev_mux_test_time_us += INT64_C(20000);
+    }
+    assert(s_close_calls == 0 && s_mock_links[0].current);
+    mock_parsed_frame_t frame;
+    assert(mock_parse_frame(s_mock_links[0].output, s_mock_links[0].output_len, 0, &frame));
+    assert(frame.payload_len == 4 && memcmp(frame.payload, "jpeg", 4) == 0);
+
+    mock_reset_mux();
+    link = mock_tcp_link(0);
+    s_max_write = 1;
+    assert(ev_mux_preview_subscribe(&link, true) == ESP_OK);
+    assert(ev_mux_preview_publish_observers(observer_metadata, "jpeg", 4) == ESP_OK);
+    for (unsigned i = 0; i < 20 && s_mock_links[0].current; ++i) {
+        ev_mux_tx_worker_step();
+        ev_mux_test_time_us += INT64_C(500000);
+    }
+    assert(s_close_calls == 1);
+    ev_mux_timeout_info_t info;
+    ev_mux_tx_timeout_snapshot(&info);
+    assert(info.elapsed_ms >= EV_MUX_OBSERVER_FRAME_TIMEOUT_MS);
+    assert(info.idle_ms < EV_MUX_OBSERVER_IDLE_TIMEOUT_MS);
+    assert(info.offset < info.bytes);
+}
+
+static void test_uart_pause_and_dynamic_deadline(void)
+{
+    mock_reset_mux();
+    ev_link_ref_t uart = { .transport_id = EV_TRANSPORT_UART, .generation = 1 };
+    ev_link_ref_t tcp = mock_tcp_link(1);
+    assert(ev_mux_frame_timeout(&uart, 50000) == 8932);
+    s_mock_uart_baud = 2000000;
+    assert(ev_mux_frame_timeout(&uart, 50000) == 1500);
+    assert(ev_mux_frame_timeout(&tcp, 50000) == 1500);
+
+    ev_mux_submit_options_t options = { .link = &uart, .tx_class = EV_MUX_TX_LOG };
+    assert(ev_mux_submit_link(&options, "{}", "partial", 7, NULL) == ESP_OK);
+    s_max_write = 3;
+    ev_mux_process_target(EV_TRANSPORT_UART);
+    size_t partial = s_mock_links[0].output_len;
+    assert(partial > 0);
+    ev_mux_uart_pause(true);
+    assert(ev_mux_submit_link(&options, "{}", "paused", 6, NULL) == ESP_OK);
+    options.uart_baud_control = true;
+    assert(ev_mux_submit_link(&options, "{}", "ack", 3, NULL) == ESP_OK);
+    options.link = &tcp;
+    options.uart_baud_control = false;
+    assert(ev_mux_submit_link(&options, "{}", "tcp", 3, NULL) == ESP_OK);
+    mock_drain_worker();
+    assert(s_targets[EV_TRANSPORT_UART].frames_used == 1);
+    assert(s_mock_links[1].output_len > 0);
+    uint8_t expected[256];
+    size_t expected_len = mock_make_frame("{}", (const uint8_t *)"partial", 7,
+                                          expected, sizeof(expected));
+    expected_len += mock_make_frame("{}", (const uint8_t *)"ack", 3,
+                                    expected + expected_len, sizeof(expected) - expected_len);
+    assert(s_mock_links[0].output_len == expected_len);
+    assert(memcmp(s_mock_links[0].output, expected, expected_len) == 0);
+    ev_mux_uart_pause(false);
+    mock_drain_worker();
+    assert(s_targets[EV_TRANSPORT_UART].frames_used == 0);
+    assert(s_mock_links[0].output_len > expected_len);
+}
+
+static void test_uart_pause_keeps_observer_fanout_and_revocation_independent(void)
+{
+    mock_reset_mux();
+    ev_link_ref_t uart = { .transport_id = EV_TRANSPORT_UART, .generation = 1 };
+    ev_link_ref_t a = mock_tcp_link(1), b = mock_tcp_link(2);
+    mock_set_owner(&uart, "0123456789abcdef0123456789abcdef");
+    assert(ev_mux_preview_subscribe(&a, true) == ESP_OK);
+    assert(ev_mux_preview_subscribe(&b, true) == ESP_OK);
+    const char metadata[] = "{\"channel\":\"log.idf\",\"type\":\"data\",\"seq\":1}";
+    ev_mux_submit_options_t options = { .link = &uart, .tx_class = EV_MUX_TX_LOG };
+    ev_mux_uart_pause(true);
+    assert(ev_mux_submit_link(&options, metadata, "paused", 6, NULL) == ESP_OK);
+    options.uart_baud_control = true;
+    assert(ev_mux_submit_link(&options, metadata, "ack", 3, NULL) == ESP_OK);
+    assert(ev_mux_preview_publish_observers(observer_metadata, "owned", 5) == ESP_OK);
+    mock_drain_worker();
+    assert(s_targets[EV_TRANSPORT_UART].frames_used == 1);
+    mock_parsed_frame_t frame;
+    assert(mock_parse_frame(s_mock_links[0].output, s_mock_links[0].output_len, 0, &frame));
+    assert(frame.payload_len == 3 && memcmp(frame.payload, "ack", 3) == 0);
+    for (unsigned slot = 1; slot <= 2; ++slot) {
+        assert(mock_parse_frame(s_mock_links[slot].output, s_mock_links[slot].output_len, 0, &frame));
+        assert(frame.payload_len == 5 && memcmp(frame.payload, "owned", 5) == 0);
+        assert(!frame.metadata.has_session_id && !frame.metadata.has_vm_epoch);
+    }
+    size_t a_bytes = s_mock_links[1].output_len;
+    size_t b_bytes = s_mock_links[2].output_len;
+    assert(ev_mux_preview_publish_observers(observer_metadata, "next", 4) == ESP_OK);
+    assert(ev_mux_preview_subscribe(&a, false) == ESP_OK);
+    mock_drain_worker();
+    assert(s_mock_links[1].output_len == a_bytes);
+    assert(s_mock_links[2].output_len > b_bytes);
+    assert(s_targets[EV_TRANSPORT_UART].frames_used == 1);
+    assert(s_close_calls == 0 && s_lost_calls == 0);
+    ev_mux_uart_pause(false);
+    mock_drain_worker();
+    assert(s_targets[EV_TRANSPORT_UART].frames_used == 0);
+}
+
 int main(void)
 {
     ev_mux_test_time_us = 0;
@@ -1801,6 +2104,15 @@ int main(void)
     test_vm_output_origin_rejects_generation_and_transition_changes();
     test_queued_vm_output_origin_is_rechecked_by_worker();
     test_unowned_repl_metadata_stays_unbound();
+    test_tcp_vectors_coalesce_complete_frame_and_preserve_short_cursor();
+    test_observer_progress_budget_and_absolute_deadline();
+    test_observers_share_payload_and_reserve_control_slot();
+    test_observer_latest_frame_preserves_partial_and_generation();
+    test_observer_stall_closes_only_its_link();
+    test_replacing_unstarted_observer_frame_keeps_blocked_send_deadline();
+    test_slow_observer_does_not_block_fast_observer_or_control();
+    test_uart_pause_and_dynamic_deadline();
+    test_uart_pause_keeps_observer_fanout_and_revocation_independent();
     puts("EV-MUX TX fault-injection tests passed");
     return 0;
 }

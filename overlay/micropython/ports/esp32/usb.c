@@ -76,7 +76,11 @@ void usb_usj_mode(void) {
 void mp_usbd_port_get_serial_number(char *serial_buf) {
     // use factory default MAC as serial ID
     uint8_t mac[6];
-    esp_efuse_mac_get_default(mac);
+    // Select the 6-byte factory address, not the default API's possible EUI-64.
+    if (esp_read_mac(mac, ESP_MAC_EFUSE_FACTORY) != ESP_OK) {
+        serial_buf[0] = '\0';
+        return;
+    }
     MP_STATIC_ASSERT(sizeof(mac) * 2 <= MICROPY_HW_USB_DESC_STR_MAX);
     mp_usbd_hex_str(serial_buf, mac, sizeof(mac));
 }

@@ -37,6 +37,8 @@ H/P 使用 UTF-8 或实际二进制的**字节数**。例如字符“你”通�
 
 CRC32 只覆盖 payload，不覆盖 metadata/header；使用标准 CRC32（主机 Python 可用 ``zlib.crc32(payload) & 0xffffffff``），以八位十六进制表示。设备生成的帧带 payload CRC；入站命令 ``c=00000000`` 被解释为跳过校验。CRC 提供损坏检测，不提供身份认证，也不证明操作最终完成。
 
+JPEG 响应和预览还需独立验证图像有效性。固件在入队前校验编码输出，Core 在交付前再次检查 JPEG 结构与尺寸；不能只凭 EV-MUX 帧完整或 CRC 正确就交付图像。坏抓图响应在本地返回 ``INVALID_IMAGE``，坏预览整帧丢弃；校验范围及限制见 :doc:`preview-debug`。
+
 主机必须处理任意拆包与粘包
 --------------------------
 
@@ -176,6 +178,10 @@ RPC 方法清单与执行层
      - transport
      - 续租、查询 ready/epoch、释放 owner。
    * - user.rpc
+     - ``transport.uart.prepare`` / ``transport.uart.probe`` / ``transport.uart.commit``
+     - transport
+     - UART owner 协商波特率；提交或回退前暂停普通 UART 输出。
+   * - user.rpc
      - ``file.write``
      - transport / native VFS
      - 可靠二进制上传；绑定会话/VM 代次，不执行解释器。
@@ -198,7 +204,7 @@ RPC 方法清单与执行层
    * - debug.rpc
      - ``debug.capture_frame``
      - VM
-     - 抓一张图，在此 RPC 的 rsp 中返回 JPEG。
+     - 在此 RPC rsp 中编码应用最近发布的独立采帧副本；不初始化传感器或物理采帧。要求 ``debug.capture_frame.observed.v1`` 能力。
    * - debug.rpc
      - ``debug.capture_screen``
      - VM
@@ -262,3 +268,16 @@ RPC 方法清单与执行层
 该函数只编码帧，不实现会话、并发 reader、期限、RPC 关联或恢复。它不能替代完整客户端，也不能在设备 MicroPython 中直接假定可用主机 ``zlib``/线程/socket 组合。
 
 file.write 是经过会话授权后的有界例外：二进制 payload 可携带 16384 字节文件内容和 20 字节 ID/offset 前缀，并校验 CRC32；其他控制 payload 仍限制 2048 字节。begin/data/commit/abort 见 :doc:`python-files`。
+
+运行态 UART 波特率协商
+--------------------------------
+
+启用 UART 的固件通过 ``capabilities.uartBaud`` 发布 ``baseline:115200``、``current``、``candidates:[2000000,1500000,921600,460800,115200]``、``probeBytes:512``、``timeoutMs:5000`` 和 ``switchDelayMs:100``。未启用 UART 时该字段为 ``null``。这些参数用于应用运行期间的通信；ROM/stub 烧录使用独立的协议与连接生命周期。
+
+已授权的 UART owner 在 ``user.rpc`` 上携带当前 session ID 调用以下传输层方法，VM 软复位期间仍可调用。USB-OTG、USB-Serial-JTAG 和 TCP owner 无权改变 UART 波特率。
+
+1. ``transport.uart.prepare`` 接受 ``{baudRate,token}``，速率须为公布的候选值，token 为 1–32 个 ASCII 字母、数字、下划线或连字符。固件以 **旧速率** 返回 ``{ok:true,baudRate,token,timeoutMs,switchDelayMs}``。协商期间暂停普通 UART 输出，让已开始的帧发送完毕，并确认硬件 FIFO **及移位寄存器** 排空，再在公布的延迟后切换。主机传输适配器重新打开或调整串口，并等待公布的延迟加保护时间后开始探测。
+2. ``transport.uart.probe`` 接受 ``{token,data}``，data 为 1–512 字节可打印 ASCII。响应原样返回 ``token``、``data`` 以及 ``baudRate``。主机使用不同长度和内容进行多组双向校验，按候选列表顺序选择首个通过的速率并停止。探测帧使用普通 EV-MUX CRC32。
+3. 至少一次探测后调用 ``transport.uart.commit``，参数为 ``{token}``，响应为 ``{ok:true,token,baudRate,...}``。提交响应进入硬件后恢复普通输出。相同已提交 token 的 probe/commit 支持幂等重试，以恢复丢失的最终确认。
+
+未完成的协商在 5000 ms 后超时，释放 owner、恢复 115200，并清空 UART RX 与解析状态。协商成功后，正常释放会话或租约过期同样恢复 115200；丢失最终提交响应的情况可能需要通过 15000 ms 会话租约恢复。硬复位从 115200 启动，VM 软复位保留物理速率与会话生命周期。旧固件未发布该能力时保持初始速率，主机不得试发变速命令。
