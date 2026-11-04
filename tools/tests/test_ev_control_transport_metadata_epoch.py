@@ -49,6 +49,7 @@ typedef struct {
     const char *session_id;
     uint32_t vm_epoch;
     ev_mux_tx_class_t tx_class;
+    bool uart_baud_control;
     ev_mux_completion_cb_t completion;
     const void *completion_context;
     size_t completion_context_len;
@@ -62,6 +63,7 @@ static char s_session_id[EV_SESSION_ID_HEX_LEN + 1];
 static bool s_has_session_id;
 static uint32_t s_tx_vm_epoch;
 static ev_mux_tx_class_t s_tx_class;
+static bool s_uart_baud_control;
 
 static const char *ev_control_rpc_channel(ev_control_rpc_domain_t domain)
 {
@@ -91,6 +93,7 @@ static esp_err_t ev_mux_submit_link(const ev_mux_submit_options_t *options,
     }
     s_tx_vm_epoch = options->vm_epoch;
     s_tx_class = options->tx_class;
+    s_uart_baud_control = options->uart_baud_control;
     return ESP_OK;
 }
 
@@ -114,6 +117,11 @@ int main(void)
     assert(strstr(s_metadata, "\"vmEpoch\":17") != NULL);
     assert(s_has_session_id && strcmp(s_session_id, session_id) == 0);
     assert(s_tx_vm_epoch == 17 && s_tx_class == EV_MUX_TX_CONTROL);
+    assert(!s_uart_baud_control);
+
+    assert(ev_control_submit_rpc_link(&link, EV_RPC_USER, "rsp", "transport.uart.prepare", payload,
+                                      4, session_id, 17, 0, NULL) == ESP_OK);
+    assert(s_uart_baud_control && s_tx_vm_epoch == 0);
 
     assert(ev_control_submit_rpc_link(&link, EV_RPC_USER, "event", "hello", payload,
                                       3, NULL, 0, 0, NULL) == ESP_OK);

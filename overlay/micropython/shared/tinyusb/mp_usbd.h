@@ -24,8 +24,8 @@
  * THE SOFTWARE.
  */
 
-// ESP-VISION overlay: identical to the upstream v1.28.0 file except for the
-// added mp_usbd_lock()/mp_usbd_unlock() declarations (see mp_usbd.c overlay).
+// ESP-VISION overlay: USB serialization helpers and builtin UVC descriptor
+// support on the upstream v1.28.0 baseline.
 
 #ifndef MICROPY_INCLUDED_SHARED_TINYUSB_MP_USBD_H
 #define MICROPY_INCLUDED_SHARED_TINYUSB_MP_USBD_H
@@ -115,11 +115,27 @@ extern void mp_usbd_port_get_serial_number(char *buf);
 // length (2 * bytes_len + 1) (including NUL terminator).
 void mp_usbd_hex_str(char *out_str, const uint8_t *bytes, size_t bytes_len);
 
+// UVC descriptor length: VC header includes one streaming interface;
+// VS input header includes one format control byte.
+#if CFG_TUD_VIDEO
+#define MP_USBD_UVC_DESC_LEN (TUD_VIDEO_DESC_IAD_LEN + TUD_VIDEO_DESC_STD_VC_LEN + \
+    TUD_VIDEO_DESC_CS_VC_LEN + 1 + TUD_VIDEO_DESC_CAMERA_TERM_LEN + \
+    TUD_VIDEO_DESC_OUTPUT_TERM_LEN + TUD_VIDEO_DESC_STD_VS_LEN + \
+    TUD_VIDEO_DESC_CS_VS_IN_LEN + 1 + TUD_VIDEO_DESC_CS_VS_FMT_MJPEG_LEN + \
+    TUD_VIDEO_DESC_CS_VS_FRM_MJPEG_CONT_LEN + TUD_VIDEO_DESC_CS_VS_COLOR_MATCHING_LEN + \
+    TUD_VIDEO_DESC_STD_VS_LEN + 7)
+#else
+#define MP_USBD_UVC_DESC_LEN (0)
+#endif
+
 // Length of built-in configuration descriptor
 #define MP_USBD_BUILTIN_DESC_CFG_LEN (TUD_CONFIG_DESC_LEN +                     \
     (CFG_TUD_CDC ? (TUD_CDC_DESC_LEN) : 0) +  \
-    (CFG_TUD_MSC ? (TUD_MSC_DESC_LEN) : 0)    \
+    (CFG_TUD_MSC ? (TUD_MSC_DESC_LEN) : 0) +  \
+    (CFG_TUD_VIDEO ? MP_USBD_UVC_DESC_LEN : 0) \
     )
+
+const uint8_t *mp_usbd_builtin_configuration(bool other_speed);
 
 // Built-in USB device and configuration descriptor values
 extern const tusb_desc_device_t mp_usbd_builtin_desc_dev;

@@ -20,10 +20,10 @@ The following table lists the direct dependencies most relevant to redistributio
      - Local path
      - Role in ESP-VISION
      - License
-   * - tasmota-webserial-esptool 9.4.2
+   * - `esptool-js 0.7.1 <https://github.com/espressif/esptool-js/tree/v0.7.1>`__
      - ``host/device-core/package.json`` dependency; loaded only by ``src/browser_rom.js``
-     - Browser Web Serial ROM backend; upstream ``src/stubs/README.md`` identifies esp-flasher-stub v1.4.0
-     - MIT (upstream package manifest); stub binaries dual Apache-2.0/MIT. Installed as a dependency, not copied or patched in this repository.
+     - Official browser Web Serial ROM backend; upstream ``src/targets/stub_flasher/README.md`` identifies esp-flasher-stub v1.2.2 (set 2)
+     - Apache-2.0 (installed package ``LICENSE``); stub binaries dual Apache-2.0/MIT. Installed as a dependency; per-instance adapters do not modify upstream source. Transitive pako retains its MIT/Zlib notices; atob-lite retains MIT.
    * - Device Core host SDK
      - ``host/device-core``
      - EV-MUX v4 host communication, Python, resource files, discovery and images
@@ -40,6 +40,10 @@ The following table lists the direct dependencies most relevant to redistributio
      - ``overlay/micropython/shared/runtime/pyexec.c``, ``overlay/micropython/ports/esp32/mpthreadport.c``
      - Session origin capture and inheritance based on the pinned upstream files; original copyright and license headers retained
      - MIT
+   * - MicroPython composite USB descriptor adaptation
+     - ``overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`` (v1.28.0 baseline)
+     - Built-in CDC/MSC/UVC descriptors and speed variants; original upstream header preserved
+     - MIT
    * - `micropython-ulab <https://github.com/v923z/micropython-ulab>`__ 6.12
      - ``lib/ulab``
      - Array and numerical computing
@@ -51,6 +55,10 @@ The following table lists the direct dependencies most relevant to redistributio
    * - OpenMV Python binding code
      - ``modules/py_image*``, ``modules/py_helper*``
      - OpenMV-style ``image`` API bindings
+     - MIT
+   * - OpenMV software JPEG adaptation
+     - ``components/imlib/upstream/jpege.c``
+     - Initialize the quantizer cache with an invalid sentinel so a first encode at quality 100 initializes its tables; original OpenMV MIT notice retained
      - MIT
    * - OpenMV AprilTag implementation
      - ``components/imlib/upstream/apriltag.c``

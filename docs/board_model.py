@@ -145,6 +145,11 @@ def board_info(board, target):
     port_macros.update(_defined_macros(MP_BOARD_ROOT / board / 'port' / 'mpconfigboard.h'))
     imlib_macros = _defined_macros(BOARD_ROOT / board / 'imlib_config.h')
     modules = TARGET_CAPABILITIES[target]['modules']
+    if any(re.search(r'#define\s+' + name + r'\s+\(?0\)?\s*(?://.*)?$',
+                     (MP_BOARD_ROOT / board / 'port' / 'mpconfigboard.h').read_text(),
+                     re.MULTILINE)
+           for name in ('MICROPY_HW_ENABLE_USBDEV', 'MICROPY_HW_USB_UVC')):
+        modules = tuple(module for module in modules if module != 'uvc')
     if board in TARGET_CAPABILITIES[target]['barcode_boards']:
         modules = modules + ('barcode',)
     image = BOARD_IMAGES[board]

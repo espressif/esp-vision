@@ -25,7 +25,9 @@ typedef enum {
 } ev_transport_id_t;
 
 #define EV_TRANSPORT_PHYSICAL_SLOT (0)
-#define EV_TRANSPORT_TCP_LINKS (2)
+#define EV_TRANSPORT_TCP_LINKS (3)
+// At least one TCP slot remains available for the exclusive control session.
+#define EV_TRANSPORT_PREVIEW_OBSERVERS (2)
 #define EV_TRANSPORT_LINK_SLOTS_MAX (EV_TRANSPORT_TCP_LINKS)
 
 // A link reference is an endpoint identity, not an fd. A ref is valid only
@@ -42,6 +44,12 @@ typedef enum {
     EV_IO_CLOSED,
     EV_IO_ERROR,
 } ev_io_status_t;
+
+#define EV_IO_VECTORS_MAX (4)
+typedef struct {
+    const void *base;
+    size_t length;
+} ev_io_vector_t;
 
 typedef struct {
     ev_io_status_t status;
@@ -95,6 +103,16 @@ bool ev_transport_link_advance_generation(const ev_link_ref_t *link, ev_link_ref
 // no larger than the requested capacity/length.
 ev_io_result_t ev_transport_read(const ev_link_ref_t *link, void *buffer, size_t capacity);
 ev_io_result_t ev_transport_write(const ev_link_ref_t *link, const void *buffer, size_t length);
+
+// Scatter/gather is coalesced by TCP; serial backends may make short progress
+// on only the first vector. Caller retains every unsent suffix.
+ev_io_result_t ev_transport_writev(const ev_link_ref_t *link,
+                                   const ev_io_vector_t *vectors, size_t count);
+// UART only. The setter is serialized with writes and refuses a change until
+// the hardware FIFO and shift register have physically drained. Zero means
+// this build has no UART transport. Control transport owns session policy.
+uint32_t ev_transport_uart_baudrate(void);
+esp_err_t ev_transport_uart_set_baudrate(uint32_t baud);
 
 void ev_transport_endpoint_state(ev_transport_id_t id, uint8_t slot,
                                  ev_transport_endpoint_state_t *out_state);

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { requireObservedCameraCapture } from './device_capture.js'
 
 export const EPHEMERAL_PYTHON_PATH = '/.espvision_agent_run.py'
 
@@ -326,14 +327,14 @@ export function bindSessionDeviceActions(registry, {
     { timeout: input.timeoutMs, channel: input.channel, signal },
   ))
   registry.bind('frame.capture', async (input, { session, signal }) => {
-    session.lastDebugImage = null
-    await session.rpc('debug.capture_frame', {}, {
+    requireObservedCameraCapture(session)
+    const image = await session.rpc('debug.capture_frame', {}, {
       timeout: input.timeoutMs,
       channel: 'debug.rpc',
       signal,
+      binaryResponse: true,
     })
-    if (!session.lastDebugImage) throw new Error('Firmware returned no JPEG frame')
-    return session.lastDebugImage
+    return { base64: bytesToBase64(image.data), metadata: image.metadata }
   })
 
   return { evidence, controllerFor }

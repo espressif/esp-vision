@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "ev_launcher_state.h"
+#include "esp_mac.h"
 
 int ev_test_in_critical;
 static uint32_t test_vm_epoch = 7;
@@ -17,8 +18,9 @@ uint32_t esp_random(void)
     return random_value++;
 }
 
-int esp_efuse_mac_get_default(uint8_t mac[6])
+int esp_read_mac(uint8_t mac[6], esp_mac_type_t type)
 {
+    assert(type == ESP_MAC_EFUSE_FACTORY);
     const uint8_t value[6] = { 0x10, 0x32, 0x54, 0x76, 0x98, 0xab };
     memcpy(mac, value, sizeof(value));
     return 0;

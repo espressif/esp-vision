@@ -6,6 +6,13 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Added read-only TCP `preview.frame` subscriptions for two simultaneous observers alongside an independent control session, bounded shared JPEG fan-out, a Python/ffplay viewer and targeted native/hardware acceptance checks; TCP frame segments use scatter/gather writes without extra application copies.
+- Added native composite CDC/MSC/UVC output on USB-device boards, a default ESP-VISION logo independent of sensor capture, Python fixed/live frame APIs, and shared JPEG fan-out from `Image.flush()` to UVC and EV-MUX.
+- Add a bounded camera/real-AI/LCD/WiFi MJPEG stress example with one shared full-panel RGB565 canvas, per-frame hashes, configurable ESPDet/TFLite models, health/heap/latency counters, slow-client deadlines and cooperative cleanup.
+- Publish independent camera observation frames after successful application captures and advertise `debug.capture_frame.observed.v1`; Core 0.6.0 requires this capability before camera capture, including advanced RPC/binding entry points, so older firmware cannot overwrite an application's live Image through the unsafe legacy operation.
+- Add negotiated runtime UART speeds in EV-MUX v4, testing 2,000,000, 1,500,000, 921,600, 460,800 and 115,200 bps in order with bounded bidirectional checks, physical transmit drain, tentative-switch rollback and session-release recovery.
+- Add shared browser and Node serial retuning in Device Core and reproducible dual-interface runtime acceptance checks for S31 Korvo file transfers, camera preview and soft reset.
+
 - Add a Cursor Plugin export with the shared ESP-VISION Skill, official Knowledge MCP and complete local CLI/license closure, source provenance, deterministic ZIP/checksum output, documented local import and Git-based marketplace submission, and CI candidate artifacts.
 
 - Prepare a separate QoderWork plugin candidate ZIP with host-specific metadata, role instructions, official Knowledge MCP setup, the unchanged local CLI/license closure, and explicit marketplace-validation gaps and linked maintainer build instructions.
@@ -15,6 +22,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Added a repository security policy defining ESP-VISION's development and DIY scope, exclusion from the Espressif Bug Bounty Program, private security reporting, and the trusted-network requirements of unauthenticated EV-MUX TCP debugging, with English and Chinese README notices and communication-guide warnings.
 
 ### Changed
+
+- Use one queued camera buffer on ESP32_S31_KORVO while retaining the DVP controller's independent backup frame, saving 1,843,200 bytes for the SC101IOT 1280×720 YUYV input alongside AI and the RGB LCD.
 
 - Publish new Device Core and CLI versions automatically from protected default-branch pipelines; publish Plugin and Knowledge npm packages on qualified firmware tags with matching Core/CLI minor ranges, reproducible resolved patches and a registry-verified bundled CLI; enforce patch/minor/major version steps.
 
@@ -45,6 +54,40 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Refresh the shared dark/light/adaptive architecture diagrams and bilingual README/architecture guides for Plugin, standalone Device CLI, public Device Core and the official online Knowledge MCP; show all four public npm versions and package responsibilities in the READMEs.
 
 ### Fixed
+
+- Preserve runtime UART negotiation, image ownership and complete-JPEG validation alongside native UVC/TCP preview; reject partial compressed frames before fan-out and retain bounded CPU encoding when composite USB leaves insufficient internal DMA memory for the hardware JPEG engine.
+- Keep TCP observer progress and absolute frame deadlines independent of runtime UART baud changes, avoiding premature disconnection of a progressing observer in the combined transport scheduler.
+
+- Read the stored JPEG length through its const image view, keeping compressed-frame pass-through compatible with strict IDF 6.1 compiler checks.
+
+- Allocate EV-MUX RX parsers only for real endpoint slots to preserve internal RAM as TCP capacity grows; treat temporary TCP send memory exhaustion as bounded backpressure, and close stalled sockets outside the shared I/O lock with a short FIN allocation timeout.
+- Delay the initial UVC isochronous frame until the host has time to queue receive transfers, avoiding a truncated JPEG during stream startup.
+- Reserve sufficient VFS driver slots on ESP32_P4X_EYE for ISP/camera/codec devices alongside storage and consoles, avoiding camera initialization failures at the default eight-slot limit.
+- Fall back to software JPEG encoding when the P4 hardware encoder exhausts DEFAULT-capable internal DMA memory, and pass through already-compressed image frames for UVC and EV-MUX output.
+- Bind Node native USB flashing to the selected device across runtime/ROM re-enumeration, including the UVC composite runtime: verify its EV-MUX identity before one bootloader request, wait for the same USB MAC/location, and verify the actual ROM MAC before allowing writes. Wait for the explicitly selected path to settle instead of guessing another port; allow one read-only initialization recovery only after observing that same device back in its runtime.
+- Read the six-byte factory MAC explicitly for USB serials, runtime identities, launcher state and `machine.unique_id()`. Avoid eight-byte EUI-64 writes into six-byte buffers on ESP32-S31 and preserve factory MAC identity on P4/S3.
+
+- Fix bootloader handoff cleanup so a stale EV-MUX release cannot mask a submitted or uncertain transition; drain the Node serial bridge before closing it, retain genuine pre-submission failures, and expose bounded ROM initialization diagnostics in CLI JSON.
+- Synchronize the Node ROM loader without reset before probing a known UART bridge or USB Serial/JTAG reset fallback; keep native and unknown USB ports free of UART reset pulses, recognize an existing stub, and close failed connections before retrying.
+
+- Reject ESP-DL models whose native tensor arenas did not initialize before constructing image preprocessing or exposing inference, releasing the partial model and VFS model buffer before raising Python `MemoryError`; exercise the shared constructor and NanoTrack cleanup with C++ fault regressions in CI.
+- Give an accepted TCP hard-reset response a bounded graceful-close attempt on its exact detached socket before restarting; retain explicit queue, transmission and local-close failures and require the host's actual RPC ACK for acceptance.
+- Keep framebuffer allocation bookkeeping on the native heap so MicroPython collection and VM heap rebuilding cannot reclaim live buffer-stack nodes during buffered BMP/PNM file writes; retain explicit allocation failures and scoped cleanup.
+- Preserve ImageIO permanent memory-stream buffers during ordinary framebuffer scope cleanup, stopping before unlinking or freeing a permanent data node while retaining explicit stream-close and VM-reset cleanup.
+- Install Pillow in CI host checks so independent full JPEG decoding regressions execute instead of being skipped.
+- Shrink CPU JPEG scratch directly into an independent result cache, avoiding a second allocation while the largest native block is occupied; release the scratch explicitly if shrinking fails and never reuse CPU result memory for hardware DMA.
+- Fall back to bounded CPU JPEG compression when hardware scratch allocation runs out of memory before DMA starts, choosing scratch capacity from the largest native free block with a 1 MiB maximum, explicit overflow failures and allocation-stage diagnostics while retaining exact result caches, source pixels, requested quality and strict validation for live LCD captures alongside AI and HTTP streaming.
+- Initialize imlib software JPEG quantization tables on a fresh first encode at quality 100, preserving the requested quality and rejecting truncated output.
+- Preserve explicit SPI LCD direct-PSRAM DMA settings in Board Manager generated configurations on ESP-IDF 5.5.5+ and 6.0.2+ backports, avoiding unintended internal-DMA bounce allocation on supported P4 builds while retaining older-header compatibility.
+- Recover hardware JPEG input and output buffers after allocation failures instead of caching a positive capacity with a null buffer and rejecting later smaller previews.
+
+- Run the npm release-policy test fixture through Node on Windows and POSIX, retaining publication and integrity assertions without relying on shell scripts or PATH separators.
+- Reject invalid JPEG encoder lengths and malformed image structures before camera, screen or preview transmission; validate received JPEG structure and dimensions in shared Device Core, reject the matching capture with `INVALID_IMAGE`, and discard invalid previews without exposing image callbacks.
+- Record passive-capture hardware check phases and raw JPEG responses before validation, and document the neutral startup fixture needed to test reset invalidation.
+- Correct the Chinese runtime UART section heading width so strict Sphinx HTML and PDF builds accept it.
+- Keep passive camera capture from initializing or acquiring the sensor, changing application pixels, or borrowing external Python buffers; invalidate observed frames on camera reconfiguration and VM reset, report missing frames/allocation failures explicitly, and reject camera mutations from Python worker tasks.
+- Allow source-bound host CI staging to replace Core-only transitive dependencies when its ROM adapter changes, while preserving the registry lock and rejecting changes to unrelated or shared host dependencies.
+- Use the official pinned esptool-js browser adapter with compressed flashing, verified UART speed selection, native USB ROM synchronization, checked streaming readback digests and unchanged full-image SHA-256 verification; normalize 24-bit flash IDs and retain qualified recovery boundaries.
 
 - Verify the Qoder upload ZIP retains Windows device-path shell guidance so native Node receives `/models` unchanged.
 

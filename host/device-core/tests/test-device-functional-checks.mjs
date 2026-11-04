@@ -7,6 +7,7 @@ import { EV_REPL_INPUT_MAX_BYTES, evReplExecInputBytes } from '../src/evrepl.js'
 import { tmpdir } from 'node:os'
 import { parseArgs } from './hardware-check.mjs'
 import { DEVICE_CHECKS, parseCheckResult, runDeviceChecks, saveJpeg } from './device-checks.mjs'
+import { jpegFixture } from './jpeg-fixtures.mjs'
 
 function devicePeer({ results = {}, board = 'TEST', screenFails = false } = {}) {
   const files = new Map(), calls = [], listeners = new Map()
@@ -30,7 +31,7 @@ function devicePeer({ results = {}, board = 'TEST', screenFails = false } = {}) 
     async capture({ source }) {
       calls.push(['capture', source])
       if (source === 'screen' && screenFails) throw Object.assign(new Error('Not supported'), { code: 'UNSUPPORTED_OPERATION' })
-      return { data: new Uint8Array([255, 216, 0, 255, 217]), mimeType: 'image/jpeg', metadata: { width: 240, height: 320 } }
+      return { data: jpegFixture('screen').data, mimeType: 'image/jpeg', metadata: { width: 240, height: 320 } }
     },
   }
 }
@@ -90,12 +91,21 @@ test('screen JPEG is captured while display fixture is alive and saved on host',
   const output = join(directory, 'screen.jpg'), device = devicePeer()
   try {
     await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'display', '--screen-output', output]), { nonce: 'abc123', report() {} })
-    assert.deepEqual(await readFile(output), Buffer.from([255, 216, 0, 255, 217]))
+    assert.deepEqual(await readFile(output), Buffer.from(jpegFixture('screen').data))
     const captureAt = device.calls.findIndex(call => call[0] === 'capture' && call[1] === 'screen')
     const closeAt = device.calls.findIndex(call => call[0] === 'execute' && call[1].includes("['close_display']()"))
     assert.ok(captureAt > 0 && closeAt > captureAt)
     assert.equal(device.files.size, 0)
   } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+test('camera acceptance explicitly publishes an application snapshot before passive observation', async () => {
+  const device = devicePeer()
+  await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'camera']), { nonce: 'abc123', report() {} })
+  const published = device.calls.findIndex(call => call[0] === 'execute' && call[1].includes("['run_check'](\"camera\""))
+  const observed = device.calls.findIndex(call => call[0] === 'capture' && call[1] === 'camera')
+  assert.ok(published > 0 && observed > published)
+  assert.equal(device.files.size, 0)
 })
 
 test('truncated JPEG and missing dimensions are refused before host artifact is written', async () => {

@@ -4,7 +4,59 @@
 import base64
 import contextlib
 import json
+import os
 import sys
+
+
+def _port_key(port):
+    name = str(port)
+    if name.startswith('\\\\.\\'):
+        name = name[4:]
+    if name.upper().startswith('COM') and name[3:].isdigit():
+        return name.upper()
+    return os.path.realpath(name)
+
+
+def _reset_supported(port):
+    # Descriptors permit a reset policy, never establish firmware/board identity.
+    # Unknown/native USB ports must not receive the UART DTR/RTS sequence.
+    try:
+        from serial.tools.list_ports import comports
+        matches = {(item.vid, item.pid) for item in comports()
+                   if _port_key(item.device) == _port_key(port)}
+    except (ImportError, OSError, ValueError):
+        return False
+    if len(matches) != 1:
+        return False
+    vid, pid = next(iter(matches))
+    return vid in {0x10c4, 0x1a86, 0x0403, 0x067b} or (vid, pid) == (0x303a, 0x1001)
+
+
+def _open_rom(esptool, port):
+    import serial
+    modes = ['no-reset', 'default-reset'] if _reset_supported(port) else ['no-reset']
+    first_error = None
+    for mode in modes:
+        if mode == 'default-reset' and not _reset_supported(port):
+            raise RuntimeError(f'Port no longer permits reset after synchronization failed: {first_error}') from first_error
+        connection = serial.serial_for_url(port, baudrate=115200, exclusive=True, do_not_open=True)
+        try:
+            # Set before open on every OS, as esptool does on Windows. Opening
+            # with asserted RTS can otherwise perturb an already-running stub.
+            connection.rts = False
+            connection.dtr = False
+            connection.open()
+            loader = esptool.detect_chip(port=connection, connect_mode=mode,
+                                         connect_attempts=1 if mode == 'no-reset' else 7)
+            return loader, mode
+        except Exception as error:
+            if connection.is_open:
+                connection.close()
+            if mode == modes[-1]:
+                if first_error is not None:
+                    raise RuntimeError(f'No-reset synchronization failed: {first_error}; reset connection failed: {error}') from error
+                raise
+            first_error = error
 
 
 def main():
@@ -22,9 +74,23 @@ def main():
                 with contextlib.redirect_stdout(sys.stderr):
                     method, args = request['method'], request.get('args', [])
                     result = None
+                    if method != 'initialize' and esp is None:
+                        raise RuntimeError('Initialize the ROM adapter before issuing operations')
                     if method == 'initialize':
-                        esp = esptool.detect_chip(port=sys.argv[1])
-                        result = {'chipFamily': families.get(esp.CHIP_NAME), 'chipRevision': esp.get_chip_revision()}
+                        if esp is not None:
+                            raise RuntimeError('ROM adapter is already initialized')
+                        candidate, mode = _open_rom(esptool, sys.argv[1])
+                        try:
+                            mac = bytes(candidate.read_mac())
+                            if len(mac) != 6:
+                                raise RuntimeError('ROM did not return a six-byte factory MAC')
+                            result = {'chipFamily': families.get(candidate.CHIP_NAME), 'chipRevision': candidate.get_chip_revision(),
+                                      'connectionMode': mode, 'stubRunning': bool(candidate.IS_STUB), 'chipMac': mac.hex()}
+                        except Exception:
+                            if candidate._port.is_open:
+                                candidate._port.close()
+                            raise
+                        esp = candidate
                     elif method == 'security':
                         security = esp.get_security_info()
                         result = {'flags': security['flags'], 'flashCryptCnt': security['flash_crypt_cnt']}

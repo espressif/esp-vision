@@ -18,11 +18,11 @@ Device Core 主机 SDK
 
 .. code-block:: console
 
-   npm install '@esp-vision/device-core@~0.5.0'
+   npm install '@esp-vision/device-core@~0.6.0'
    # Optional Node LAN discovery adapter:
    npm install multicast-dns
 
-本页示例面向 SDK ``0.5.1``；依赖锁定到 minor、用 lockfile 记录解析后的 patch，安装前确认 registry 中有所选版本。Node 主机基线为 Node.js 22；浏览器需要打包器/import map，并由宿主提供 Web Serial 或二进制 WebSocket 字节连接。仅支持 EV-MUX v4，v3 设备必须升级固件。包版本、固件版本与 IDE 版本相互独立。
+本页示例面向 SDK ``0.6.0``；依赖锁定到 minor、用 lockfile 记录解析后的 patch，安装前确认 registry 中有所选版本。Node 主机基线为 Node.js 22；浏览器需要打包器/import map，并由宿主提供 Web Serial 或二进制 WebSocket 字节连接。仅支持 EV-MUX v4，v3 设备必须升级固件。包版本、固件版本与 IDE 版本相互独立。源码 0.6.0 是继 0.5.1 之后的 minor 发布；源码变更与 dry run 不代表 npm 已发布，也不会更新既有 CLI/Plugin 内嵌的 Core。相机观测要求固件能力 ``debug.capture_frame.observed.v1``，旧的不安全实现会在本地被拒绝。
 
 架构与使用入口
 --------------------------------

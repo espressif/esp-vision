@@ -22,6 +22,8 @@ esp_err_t ev_mux_init0(void);
 
 #define EV_MUX_TX_CONTEXT_MAX (40)
 #define EV_MUX_LARGE_PAYLOAD_MAX (256 * 1024)
+#define EV_MUX_OBSERVER_FRAME_TIMEOUT_MS (8000)
+#define EV_MUX_OBSERVER_IDLE_TIMEOUT_MS (4000)
 
 typedef uint32_t ev_mux_ticket_t;
 
@@ -49,6 +51,9 @@ typedef struct {
     const char *session_id;   // NULL for discovery frames not tied to a session.
     uint32_t vm_epoch;        // 0 for frames independent of a VM epoch.
     ev_mux_tx_class_t tx_class;
+    // Only the UART negotiation RPC/release response may cross a baud-switch
+    // pause. All other endpoints and already-started frames are unaffected.
+    bool uart_baud_control;
     ev_mux_completion_cb_t completion;
     const void *completion_context;
     size_t completion_context_len;
@@ -78,6 +83,12 @@ esp_err_t ev_mux_submit_preview_link(const ev_mux_submit_options_t *options,
                                      const char *metadata,
                                      const void *payload,
                                      size_t payload_len);
+// TCP observers never acquire a control session. Subscription is scoped to
+// the exact link generation. All observers share bounded immutable JPEG slots.
+esp_err_t ev_mux_preview_subscribe(const ev_link_ref_t *link, bool enable);
+bool ev_mux_preview_subscribed(const ev_link_ref_t *link);
+bool ev_mux_preview_observers_ready(void);
+esp_err_t ev_mux_preview_publish_observers(const char *metadata, const void *payload, size_t payload_len);
 bool ev_mux_large_payload_available(void);
 bool ev_mux_preview_slot_available(void);
 
@@ -88,6 +99,7 @@ void ev_mux_ticket_forget(ev_mux_ticket_t ticket);
 // already in progress is allowed to finish or hit its bounded deadline.
 void ev_mux_cancel_vm_epoch(uint32_t vm_epoch);
 void ev_mux_cancel_session(const ev_link_ref_t *link, const char *session_id);
+void ev_mux_uart_pause(bool paused);
 
 esp_err_t ev_mux_write(ev_stream_t stream,
                        const char *metadata,
@@ -117,6 +129,15 @@ esp_err_t ev_mux_write_sink_if_present(const char *sink_id,
 bool ev_mux_stream_congested(ev_stream_t stream);
 bool ev_mux_preview_available(ev_stream_t stream);
 void ev_mux_record_tx_drop(void);
+typedef struct {
+    uint32_t transport;
+    uint32_t slot;
+    uint32_t offset;
+    uint32_t bytes;
+    uint32_t elapsed_ms;
+    uint32_t idle_ms;
+} ev_mux_timeout_info_t;
+void ev_mux_tx_timeout_snapshot(ev_mux_timeout_info_t *out);
 uint32_t ev_mux_tx_timeout_count(void);
 uint32_t ev_mux_tx_drop_count(void);
 uint32_t ev_mux_tx_queue_full_count(void);

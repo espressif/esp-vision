@@ -25,6 +25,7 @@
 #include "dl_model_base.hpp"
 #include "dl_pose_yolo11_postprocessor.hpp"
 #include "esp_heap_caps.h"
+#include "esp_memory_utils.h"
 #include "ev_memory.h"
 #include "fbs_model.hpp"
 #include "imagenet_cls_postprocessor.hpp"
@@ -302,6 +303,83 @@ static espdl_model_data_t espdl_read_model_from_vfs(mp_obj_t path_obj)
     return model_data;
 }
 
+enum class espdl_model_ready_t {
+    ready,
+    load_failed,
+    tensors_unavailable,
+};
+
+static bool espdl_tensor_data_ready(dl::TensorBase *tensor, bool raw_data)
+{
+    if (tensor == nullptr) {
+        return false;
+    }
+    const int bytes = tensor->get_bytes();
+    void *data = raw_data ? tensor->data : tensor->get_element_ptr();
+    if ((data == nullptr) || (bytes <= 0)) {
+        return false;
+    }
+    const uintptr_t begin = reinterpret_cast<uintptr_t>(data);
+    const uintptr_t tail = static_cast<uintptr_t>(bytes - 1);
+    if (tail > UINTPTR_MAX - begin) {
+        return false;
+    }
+    return esp_ptr_byte_accessible(data) &&
+           esp_ptr_byte_accessible(reinterpret_cast<const void *>(begin + tail));
+}
+
+static espdl_model_ready_t espdl_model_readiness(dl::Model *model, bool image_input)
+{
+    if (model == nullptr) {
+        return espdl_model_ready_t::tensors_unavailable;
+    }
+    if (model->get_fbs_model() == nullptr) {
+        return espdl_model_ready_t::load_failed;
+    }
+    // ESP-DL 3.3.13 keeps the FBS model after arena allocation fails, but only
+    // creates variable tensors when root_alloc succeeds. Inspect the public
+    // maps without copying/allocating containers or assuming NHWC tensor ranks.
+    const auto &inputs = model->get_inputs();
+    const auto &outputs = model->get_outputs();
+    if (inputs.empty() || outputs.empty()) {
+        return espdl_model_ready_t::tensors_unavailable;
+    }
+    for (const auto &entry : inputs) {
+        if (!espdl_tensor_data_ready(entry.second, false)) {
+            return espdl_model_ready_t::tensors_unavailable;
+        }
+    }
+    for (const auto &entry : outputs) {
+        if (!espdl_tensor_data_ready(entry.second, false)) {
+            return espdl_model_ready_t::tensors_unavailable;
+        }
+    }
+    // ImagePreprocessor uses the selected input's raw data, while other model
+    // consumers may legitimately use TensorBase's virtual/cache element view.
+    if (image_input && !espdl_tensor_data_ready(model->get_input(), true)) {
+        return espdl_model_ready_t::tensors_unavailable;
+    }
+    return espdl_model_ready_t::ready;
+}
+
+static dl::Model *espdl_create_model(espdl_model_data_t *model_data, bool image_input)
+{
+    dl::Model *model = new (std::nothrow) dl::Model(reinterpret_cast<const char *>(model_data->data),
+                                                    fbs::MODEL_LOCATION_IN_FLASH_RODATA);
+    const espdl_model_ready_t state = espdl_model_readiness(model, image_input);
+    if (state != espdl_model_ready_t::ready) {
+        // The C++ constructor and readiness helper have returned. Complete all
+        // native destruction before raising through MicroPython's NLR boundary.
+        delete model;
+        espdl_free_model_data(model_data);
+        if (state == espdl_model_ready_t::load_failed) {
+            mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("model load failed"));
+        }
+        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("model tensor memory unavailable"));
+    }
+    return model;
+}
+
 static dl::mem_info_t espdl_get_mem_info_or_zero(const std::map<std::string, dl::mem_info_t> &info, const char *key)
 {
     std::map<std::string, dl::mem_info_t>::const_iterator entry = info.find(key);
@@ -393,17 +471,7 @@ static mp_obj_t espdl_load_model(size_t n_args, const mp_obj_t *pos_args, mp_map
     mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
 
     espdl_model_data_t model_data = espdl_read_model_from_vfs(args[ARG_path].u_obj);
-    dl::Model *model = new (std::nothrow) dl::Model((const char *)model_data.data,
-                                                    fbs::MODEL_LOCATION_IN_FLASH_RODATA);
-    if (model == nullptr) {
-        espdl_free_model_data(&model_data);
-        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate model object"));
-    }
-    if (model->get_fbs_model() == nullptr) {
-        delete model;
-        espdl_free_model_data(&model_data);
-        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("model load failed"));
-    }
+    dl::Model *model = espdl_create_model(&model_data, false);
 
     if (args[ARG_profile].u_bool) {
         espdl_print_profile(model);
@@ -587,16 +655,7 @@ static mp_obj_t espdl_model_make_new(const mp_obj_type_t *type, size_t n_args, s
     self->image_preprocessor = nullptr;
 
     self->model_data = espdl_read_model_from_vfs(args[ARG_path].u_obj);
-    self->model = new (std::nothrow) dl::Model((const char *)self->model_data.data,
-                                               fbs::MODEL_LOCATION_IN_FLASH_RODATA);
-    if (self->model == nullptr) {
-        espdl_model_destroy(self);
-        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate model object"));
-    }
-    if (self->model->get_fbs_model() == nullptr) {
-        espdl_model_destroy(self);
-        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("model load failed"));
-    }
+    self->model = espdl_create_model(&self->model_data, true);
 
     self->model->minimize();
     self->image_preprocessor = new (std::nothrow) dl::image::ImagePreprocessor(
@@ -785,16 +844,7 @@ static mp_obj_t espdl_espdet_make_new(const mp_obj_type_t *type, size_t n_args, 
     self->nms_thr = nms_thr;
 
     self->model_data = espdl_read_model_from_vfs(args[ARG_path].u_obj);
-    self->model = new (std::nothrow) dl::Model((const char *)self->model_data.data,
-                                               fbs::MODEL_LOCATION_IN_FLASH_RODATA);
-    if (self->model == nullptr) {
-        espdl_espdet_destroy(self);
-        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate model object"));
-    }
-    if (self->model->get_fbs_model() == nullptr) {
-        espdl_espdet_destroy(self);
-        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("model load failed"));
-    }
+    self->model = espdl_create_model(&self->model_data, true);
 
     self->model->minimize();
     self->image_preprocessor =
@@ -934,16 +984,7 @@ static mp_obj_t espdl_pedestrian_detect_make_new(
     self->topk = topk;
 
     self->model_data = espdl_read_model_from_vfs(args[ARG_path].u_obj);
-    self->model = new (std::nothrow) dl::Model((const char *)self->model_data.data,
-                                               fbs::MODEL_LOCATION_IN_FLASH_RODATA);
-    if (self->model == nullptr) {
-        espdl_pedestrian_detect_destroy(self);
-        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate model object"));
-    }
-    if (self->model->get_fbs_model() == nullptr) {
-        espdl_pedestrian_detect_destroy(self);
-        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("model load failed"));
-    }
+    self->model = espdl_create_model(&self->model_data, true);
 
     self->model->minimize();
     self->image_preprocessor = new (std::nothrow) dl::image::ImagePreprocessor(
@@ -1094,16 +1135,7 @@ static mp_obj_t espdl_yolo11_make_new(const mp_obj_type_t *type, size_t n_args, 
     self->topk = topk;
 
     self->model_data = espdl_read_model_from_vfs(args[ARG_path].u_obj);
-    self->model = new (std::nothrow) dl::Model((const char *)self->model_data.data,
-                                               fbs::MODEL_LOCATION_IN_FLASH_RODATA);
-    if (self->model == nullptr) {
-        espdl_yolo11_destroy(self);
-        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate model object"));
-    }
-    if (self->model->get_fbs_model() == nullptr) {
-        espdl_yolo11_destroy(self);
-        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("model load failed"));
-    }
+    self->model = espdl_create_model(&self->model_data, true);
 
     self->model->minimize();
     self->image_preprocessor =
@@ -1251,16 +1283,7 @@ static mp_obj_t espdl_yolo11n_pose_make_new(
     self->topk = topk;
 
     self->model_data = espdl_read_model_from_vfs(args[ARG_path].u_obj);
-    self->model = new (std::nothrow) dl::Model((const char *)self->model_data.data,
-                                               fbs::MODEL_LOCATION_IN_FLASH_RODATA);
-    if (self->model == nullptr) {
-        espdl_yolo11n_pose_destroy(self);
-        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate model object"));
-    }
-    if (self->model->get_fbs_model() == nullptr) {
-        espdl_yolo11n_pose_destroy(self);
-        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("model load failed"));
-    }
+    self->model = espdl_create_model(&self->model_data, true);
 
     self->model->minimize();
     self->image_preprocessor =
@@ -1407,16 +1430,7 @@ static mp_obj_t espdl_imagenet_cls_make_new(
     self->score_thr = score_thr;
 
     self->model_data = espdl_read_model_from_vfs(args[ARG_path].u_obj);
-    self->model = new (std::nothrow) dl::Model((const char *)self->model_data.data,
-                                               fbs::MODEL_LOCATION_IN_FLASH_RODATA);
-    if (self->model == nullptr) {
-        espdl_imagenet_cls_destroy(self);
-        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate model object"));
-    }
-    if (self->model->get_fbs_model() == nullptr) {
-        espdl_imagenet_cls_destroy(self);
-        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("model load failed"));
-    }
+    self->model = espdl_create_model(&self->model_data, true);
 
     self->model->minimize();
     self->image_preprocessor =
@@ -1565,14 +1579,7 @@ static void espdl_nanotrack_cleanup(void *ctx)
 static void espdl_nanotrack_load(espdl_nanotrack_obj_t *self, int index, mp_obj_t path)
 {
     self->data[index] = espdl_read_model_from_vfs(path);
-    self->models[index] = new (std::nothrow) dl::Model(
-        reinterpret_cast<const char *>(self->data[index].data), fbs::MODEL_LOCATION_IN_FLASH_RODATA);
-    if (self->models[index] == nullptr) {
-        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("failed to allocate NanoTrack model"));
-    }
-    if (self->models[index]->get_fbs_model() == nullptr) {
-        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("NanoTrack model load failed"));
-    }
+    self->models[index] = espdl_create_model(&self->data[index], false);
     self->models[index]->minimize();
 }
 

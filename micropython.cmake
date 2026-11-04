@@ -27,6 +27,7 @@ set(MICROPY_ESP32_MAIN_SOURCE "${ESP_VISION_ROOT}/platform/main.c")
 
 set(ESP_VISION_MODULE_SOURCES
     ${ESP_VISION_ROOT}/modules/py_esp_vision_launcher.c
+    ${ESP_VISION_ROOT}/modules/py_uvc.c
     ${ESP_VISION_ROOT}/modules/py_display.c
     ${ESP_VISION_ROOT}/modules/py_image.c
     ${ESP_VISION_ROOT}/modules/py_imageio.c
@@ -140,6 +141,26 @@ if(ESP_VISION_USE_BOARD_MANAGER)
         string(REPLACE "const static " "static const " generated_content "${generated_content}")
         file(WRITE "${generated_source}" "${generated_content}")
     endforeach()
+    # Board Manager 0.6.1 only emits psram_dma_direct for IDF >=6.1, missing
+    # the 5.5.5/6.0.2 backports. Patch our generated C, never the dependency.
+    execute_process(
+        COMMAND
+            "${ESP_VISION_PYTHON}"
+            "${ESP_VISION_ROOT}/tools/board_manager_compat.py"
+            --generated "${ESP_VISION_BOARD_MANAGER_GEN_DIR}/gen_board_device_config.c"
+            --board-dir "${ESP_VISION_BOARD_MANAGER_BOARD_DIR}"
+            --board-dir "${ESP_VISION_BOARD_MANAGER_INPUT_DIR}"
+            --idf-path "$ENV{IDF_PATH}"
+        RESULT_VARIABLE ESP_VISION_BOARD_MANAGER_COMPAT_RESULT
+        OUTPUT_VARIABLE ESP_VISION_BOARD_MANAGER_COMPAT_OUTPUT
+        ERROR_VARIABLE ESP_VISION_BOARD_MANAGER_COMPAT_ERROR
+    )
+    if(NOT ESP_VISION_BOARD_MANAGER_COMPAT_RESULT EQUAL 0)
+        message(FATAL_ERROR
+            "ESP Board Manager generated compatibility failed:\n"
+            "${ESP_VISION_BOARD_MANAGER_COMPAT_OUTPUT}\n"
+            "${ESP_VISION_BOARD_MANAGER_COMPAT_ERROR}")
+    endif()
     if(ESP_VISION_BOARD_MANAGER_ESP_BOARDS_SETUP)
         list(APPEND ESP_VISION_BOARD_MANAGER_SOURCES
             "${ESP_VISION_BOARDS_DIR}/${ESP_VISION_BOARD_MANAGER_ESP_BOARDS_SETUP}"
@@ -188,6 +209,7 @@ target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_ROOT}/platform/ev_transport.c
     ${ESP_VISION_ROOT}/platform/ev_vm_output.c
     ${ESP_VISION_ROOT}/platform/jpeg.c
+    ${ESP_VISION_ROOT}/platform/jpeg_validate.c
     ${ESP_VISION_ROOT}/platform/device_identity.c
     ${ESP_VISION_ROOT}/platform/network_discovery.c
     ${ESP_VISION_ROOT}/platform/network_service.c
@@ -197,6 +219,7 @@ target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_ROOT}/platform/storage_vfs.c
     ${ESP_VISION_ROOT}/platform/lcd_touch.c
     ${ESP_VISION_ROOT}/platform/storage_writer_msc.c
+    ${ESP_VISION_ROOT}/platform/uvc.c
     ${ESP_VISION_ROOT}/platform/usb_msc.c
     ${ESP_VISION_BOARD_SOURCES}
 )

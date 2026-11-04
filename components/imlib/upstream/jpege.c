@@ -803,7 +803,7 @@ static int jpeg_processDU(jpeg_buf_t *jpeg_buf, int8_t *CDU, float *fdtbl, int D
 }
 
 static void jpeg_init(int quality) {
-    static int q = 0;
+    static int q = -1;
 
     quality = quality < 50 ? 5000 / quality : 200 - quality * 2;
 

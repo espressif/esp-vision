@@ -4,6 +4,7 @@
 import json
 import os
 import signal
+import struct
 import sys
 import threading
 
@@ -15,6 +16,18 @@ def _configure_serial_exclusive(port, platform=os.name):
     # Windows backend does not support this option, so leave its behavior alone.
     if platform == 'posix':
         port.exclusive = True
+
+
+def _read_exact(stream, size):
+    data = bytearray()
+    while len(data) < size:
+        chunk = stream.read(size - len(data))
+        if not chunk:
+            if data:
+                raise OSError('Truncated serial bridge record')
+            return None
+        data.extend(chunk)
+    return bytes(data)
 
 
 def main():
@@ -55,7 +68,40 @@ def main():
         thread = threading.Thread(target=receive, daemon=True)
         thread.start()
         print('READY', file=sys.stderr, flush=True)
-        while data := sys.stdin.buffer.read1(8192):
+        while header := _read_exact(sys.stdin.buffer, 5):
+            kind, size = struct.unpack('>BI', header)
+            if kind not in (0, 1, 2) or size > 1048576:
+                raise OSError('Invalid serial bridge record')
+            data = _read_exact(sys.stdin.buffer, size)
+            if data is None:
+                raise OSError('Truncated serial bridge record')
+            if kind == 1:
+                request = json.loads(data)
+                try:
+                    baud = request['baudRate']
+                    if not isinstance(baud, int) or isinstance(baud, bool) or baud <= 0:
+                        raise ValueError('Invalid baudrate')
+                    port.flush()
+                    port.baudrate = baud
+                    response = {'id': request['id'], 'ok': True, 'baudRate': baud}
+                except (KeyError, ValueError, OSError, serial.SerialException):
+                    response = {'id': request.get('id'), 'ok': False}
+                print(json.dumps(response), file=sys.stderr, flush=True)
+                continue
+            if kind == 2:
+                request = json.loads(data)
+                try:
+                    request_id = request['id']
+                    if not isinstance(request_id, int) or isinstance(request_id, bool) or request_id <= 0:
+                        raise ValueError('Invalid drain request ID')
+                    # stdin records are processed in order. All preceding byte
+                    # records have completed port.write before this drain ACK.
+                    port.flush()
+                    response = {'id': request_id, 'ok': True, 'drained': True}
+                except (KeyError, ValueError, OSError, serial.SerialException):
+                    response = {'id': request.get('id'), 'ok': False}
+                print(json.dumps(response), file=sys.stderr, flush=True)
+                continue
             offset = 0
             while offset < len(data):
                 written = port.write(data[offset:])

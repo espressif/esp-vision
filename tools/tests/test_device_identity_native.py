@@ -21,14 +21,17 @@ class DeviceIdentityTests(unittest.TestCase):
                 (root / 'boardconfig.h').write_text('#define ESP_VISION_BOARD_TYPE "ESP32_P4X_FUNCTION_EV_BOARD"\n')
                 (root / 'esp_mac.h').write_text('''#include <stdint.h>
 #define ESP_OK 0
-int esp_efuse_mac_get_default(uint8_t *mac);
+typedef enum { ESP_MAC_EFUSE_FACTORY } esp_mac_type_t;
+int esp_read_mac(uint8_t *mac, esp_mac_type_t type);
 ''')
                 (root / 'test.c').write_text('''#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 #include <ctype.h>
+#include "esp_mac.h"
 #include "device_identity.h"
-int esp_efuse_mac_get_default(uint8_t *mac) {
+int esp_read_mac(uint8_t *mac, esp_mac_type_t type) {
+    assert(type == ESP_MAC_EFUSE_FACTORY);
     const uint8_t id[] = {0xaa, 0xbb, 0xcc, 0x12, 0x34, 0x56};
     memcpy(mac, id, 6); return 0;
 }

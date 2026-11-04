@@ -2,8 +2,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createDeviceOperations } from '../src/device_operations.js'
+import { jpegFixture } from './jpeg-fixtures.mjs'
 
-function fixture({ enabled = true, features = ['network.background', 'network.configure', 'debug.capture_frame', 'device.control', 'storage.writer.lease'] } = {}) {
+function fixture({ enabled = true, features = ['network.background', 'network.configure', 'debug.capture_frame', 'debug.capture_frame.observed.v1', 'device.control', 'storage.writer.lease'] } = {}) {
   const calls = []
   let operation = null
   let sequence = 0
@@ -17,7 +18,7 @@ function fixture({ enabled = true, features = ['network.background', 'network.co
     async forgetNetwork(opts) { calls.push(['forget', opts]); enabled = false; operation = { id: String(++sequence), state: 'succeeded' }; return { accepted: true, operationId: operation.id } },
     async rpc(method, payload, opts) { calls.push(['rpc', method, payload, opts]); return { ok: true } },
     async control(command, opts) { calls.push(['control', command, opts]); return { ok: true } },
-    async captureImage(method, payload, opts) { calls.push(['capture', method, payload, opts]); return { data: new Uint8Array([255, 216]), mimeType: 'image/jpeg', metadata: { seq: 1 } } },
+    async captureImage(method, payload, opts) { calls.push(['capture', method, payload, opts]); return { data: jpegFixture().data, mimeType: 'image/jpeg', metadata: { seq: 1, width: 2, height: 1 } } },
   }
   return { session, state, calls, api: createDeviceOperations({ session, state }) }
 }
@@ -107,7 +108,7 @@ test('control maps explicit commands, validates mode and can interrupt Python bu
 test('capture returns binary JPEG, forwards quality and never substitutes camera for unsupported screen', async () => {
   const { api, calls, state } = fixture()
   const image = await api.capture({ source: 'camera', format: 'jpeg', quality: 80 })
-  assert.deepEqual(image.data, new Uint8Array([255, 216]))
+  assert.deepEqual(image.data, jpegFixture().data)
   assert.equal(calls[0][1], 'debug.capture_frame')
   assert.deepEqual(calls[0][2], { quality: 80 })
   await assert.rejects(api.capture({ source: 'screen' }), error => error.code === 'UNSUPPORTED_OPERATION')

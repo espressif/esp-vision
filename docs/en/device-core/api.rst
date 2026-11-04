@@ -93,9 +93,11 @@ The example is illustrative metadata, not a device to connect to. ``deviceId`` i
 device.connect(options)
 ----------------------------------------------
 
-``{ transport?, role = "unknown", expectedDevice = null, timeout = 30000, probeRepl = true, signal? } → Promise<Inspection>``
+``{ transport?, role = "unknown", expectedDevice = null, timeout = 60000, probeRepl = true, autoBaud = true, signal? } → Promise<Inspection>``
 
 ``role`` accepts ``unknown``, ``usj``, ``usb``, ``uart`` or ``tcp``. Core subscribes before opening transport, negotiates v4, checks ``expectedDevice`` when provided, acquires a session and probes the REPL. The result is the default inspection (identity/capabilities/runtime). An already connecting, connected or disconnecting instance rejects with ``DEVICE_BUSY``. Identity matching is not authentication. The default ``probeRepl: true`` sends an interrupt and probes the REPL, which can stop an existing Python program. Set ``probeRepl: false`` to acquire the EV-MUX session without sending REPL input, for observation or native RPC operations while a program continues running. This still acquires the device session and respects ownership; it is not a force-takeover option. Python execution and REPL-backed file operations can subsequently interrupt the program. The option must be a boolean.
+
+``autoBaud`` defaults to ``true``. When the firmware advertises UART negotiation and the actual session owner is ``uart``, Core uses the transport's optional ``setBaudRate(baudRate, { signal })`` to test 2000000, 1500000, 921600, 460800 and 115200 bps, stopping at the first verified result. ``autoBaud: false`` keeps short identity-only probes at 115200 without running speed tests. Native USB and legacy firmware skip this negotiation. The option must be boolean. Runtime and ROM/stub flashing speeds are independent.
 
 device.disconnect()
 --------------------------------------
@@ -246,7 +248,9 @@ device.capture(request)
    console.log(frame.metadata.width, frame.metadata.height, frame.data.length)
    const blob = new Blob([frame.data], { type: frame.mimeType })
 
-Camera capture initializes/uses the camera in the VM. Screen capture requires an initialized LCD and reads its last software-submitted RGB565 frame without starting a camera or redrawing the screen. Unsupported hardware reports NOT_SUPPORTED; uninitialized LCD reports DISPLAY_NOT_READY. Screenshots do not read back the physical panel. See :doc:`preview-debug <../communication/preview-debug>` for lazy frame storage, DMA completion and preview delivery.
+Camera capture requires both ``debug.capture_frame`` and ``debug.capture_frame.observed.v1``. It encodes the independent frame published by the last successful application snapshot in the VM; it never initializes the camera, acquires a new physical frame or overwrites the application's image. The observation contains the original captured pixels, not later application edits. Core rejects unsafe older firmware locally with ``UNSUPPORTED_OPERATION`` and an upgrade message, including direct session RPC/action capture paths. No frame or an invalidated observation after camera reconfiguration, shutdown or VM reset returns ``CAMERA_FRAME_NOT_READY``. Observation-copy allocation failure returns ``NO_MEM`` while preserving the application snapshot success. Timeout and cancellation do not trigger a capture fallback. Use ``connect({ probeRepl: false })`` when observing a running program.
+
+Screen capture requires an initialized LCD and reads its last software-submitted RGB565 frame without starting a camera or redrawing the screen. Unsupported hardware reports NOT_SUPPORTED; uninitialized LCD reports DISPLAY_NOT_READY. Screenshots do not read back the physical panel. See :doc:`preview-debug <../communication/preview-debug>` for lazy frame storage, DMA completion and preview delivery.
 
 device.on(event, handler)
 --------------------------------------------------

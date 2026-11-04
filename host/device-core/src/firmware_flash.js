@@ -85,7 +85,7 @@ export class FirmwareFlashSession {
       await validateFirmwareImage(this.image, bytes, { mode: this.mode })
       onPhase(this.mode === 'install' ? 'Installing complete firmware; existing data in the written range will be replaced' : 'Writing application; bootloader, partition table, NVS and user files are preserved')
       await this.stub.flashData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-        (written, total) => onProgress(total ? Math.min(80, Math.round(written / total * 80)) : 0), this.image.offset, false)
+        (written, total) => onProgress(total ? Math.min(80, Math.round(written / total * 80)) : 0), this.image.offset, true)
       onPhase(this.mode === 'install' ? 'Verifying the complete installation image' : 'Verifying the complete application image')
       // maxInFlight is a packet count: one 1 KiB packet bounds USB-JTAG backlog.
       const readback = new Uint8Array(bytes.byteLength)

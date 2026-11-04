@@ -37,6 +37,8 @@ H/P count UTF-8 or binary **bytes**. A character such as U+4F60 typically occupi
 
 CRC32 covers only payload, not metadata/header. Use standard CRC32, e.g. host Python ``zlib.crc32(payload) & 0xffffffff``, encoded as eight hexadecimal digits. Device frames include payload CRC; incoming ``c=00000000`` skips verification. CRC detects corruption, not identity or final operation completion.
 
+For JPEG responses and previews, a valid EV-MUX frame alone does not establish a valid image. Firmware validates encoder output before queueing it; Core additionally checks the JPEG structure and dimensions before delivery. Invalid capture responses return ``INVALID_IMAGE`` locally and invalid previews are dropped; see :doc:`preview-debug` for the supported image checks and their limits.
+
 Hosts must handle arbitrary fragmentation and coalescing
 --------------------------------------------------------
 
@@ -176,6 +178,10 @@ RPC methods and execution layers
      - transport
      - Renew lease, query ready/epoch, release owner.
    * - user.rpc
+     - ``transport.uart.prepare`` / ``transport.uart.probe`` / ``transport.uart.commit``
+     - transport
+     - UART owner baud negotiation; ordinary UART output pauses until commit or rollback.
+   * - user.rpc
      - ``file.write``
      - transport / native VFS
      - Verified binary upload; session/VM-scoped without interpreter execution.
@@ -198,7 +204,7 @@ RPC methods and execution layers
    * - debug.rpc
      - ``debug.capture_frame``
      - VM
-     - Capture one image and return JPEG in this RPC rsp.
+     - Encode the last independently published application acquisition in this RPC rsp; no sensor initialization or physical acquisition. Requires ``debug.capture_frame.observed.v1``.
    * - debug.rpc
      - ``debug.capture_screen``
      - VM
@@ -262,3 +268,16 @@ This **host CPython** example explains framing. Use the shared client in :doc:`h
 This function only encodes frames. It implements no session, concurrent reader, deadlines, RPC correlation or recovery, and cannot replace a complete client. Do not assume host ``zlib``/thread/socket combinations are available unchanged in device MicroPython.
 
 Authorized file.write requests are the bounded exception: binary payloads can carry 16384 file bytes plus a 20-byte ID/offset prefix, with CRC32. All other control payloads retain the 2048-byte limit. See :doc:`python-files` for begin/data/commit/abort.
+
+Runtime UART baud negotiation
+-----------------------------
+
+A UART-enabled firmware advertises ``capabilities.uartBaud`` with ``baseline:115200``, ``current``, ``candidates:[2000000,1500000,921600,460800,115200]``, ``probeBytes:512``, ``timeoutMs:5000`` and ``switchDelayMs:100``. The field is ``null`` without a UART backend. These values describe application communication; ROM/stub flashing has its own protocol and lifecycle.
+
+The authenticated UART owner sends the following transport-scoped methods on ``user.rpc`` with its current session ID; they remain available during a VM soft reset. USB-OTG, USB-Serial-JTAG and TCP owners cannot change the UART baud rate.
+
+1. ``transport.uart.prepare`` takes ``{baudRate,token}``, where the rate is a listed candidate and token is 1–32 ASCII letters, digits, underscores or hyphens. Its response includes ``{ok:true,baudRate,token,timeoutMs,switchDelayMs}`` at the **old** rate. Firmware pauses ordinary UART output, finishes any already-started frame, drains the hardware FIFO **and shift register**, then switches after the advertised delay. Host transports reopen/update their serial port and wait at least the advertised delay plus a guard before probing.
+2. ``transport.uart.probe`` takes ``{token,data}``, where data is 1–512 printable ASCII bytes. The response returns identical ``token`` and ``data`` plus ``baudRate``. Hosts compare several different lengths and patterns in both directions; the first usable rate wins in the advertised candidate order. Probes use normal EV-MUX CRC32.
+3. ``transport.uart.commit`` takes ``{token}`` after at least one probe and returns ``{ok:true,token,baudRate,...}``. Ordinary output resumes after the commit response is queued to hardware. Probe/commit with the same committed token are idempotent, allowing a host to recover a lost commit acknowledgement.
+
+An unfinished negotiation expires after 5000 ms, releases its owner, restores 115200 and clears UART RX/parser state. After a successful negotiation, session release or lease expiry also restores 115200; a lost final commit response may therefore require recovery through the 15000 ms session lease. Hard reset starts at 115200. VM soft reset preserves the physical rate and session lifecycle. Firmware without this capability stays at the initial rate; no host should send speculative baud commands to it.

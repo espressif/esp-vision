@@ -20,10 +20,10 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - 本地路径
      - 在 ESP-VISION 中的作用
      - 许可证
-   * - tasmota-webserial-esptool 9.4.2
+   * - `esptool-js 0.7.1 <https://github.com/espressif/esptool-js/tree/v0.7.1>`__
      - ``host/device-core/package.json`` 依赖，仅 ``src/browser_rom.js`` 加载
-     - 浏览器 Web Serial ROM 后端；上游 ``src/stubs/README.md`` 标明 stub 来源为 esp-flasher-stub v1.4.0
-     - MIT（上游 package manifest）；stub 二进制双许可 Apache-2.0/MIT。作为依赖安装，本仓库不复制或修改其源文件。
+     - 官方浏览器 Web Serial ROM 后端；上游 ``src/targets/stub_flasher/README.md`` 标明 stub 来源为 esp-flasher-stub v1.2.2（set 2）
+     - Apache-2.0（安装包 ``LICENSE``）；stub 二进制双许可 Apache-2.0/MIT。作为依赖安装，实例级适配不修改上游源文件。间接依赖 pako 保留其 MIT/Zlib 声明，atob-lite 保留 MIT。
    * - Device Core 主机 SDK
      - ``host/device-core``
      - EV-MUX v4 主机通信、Python、资源文件、发现及图像接入
@@ -40,6 +40,10 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - ``overlay/micropython/shared/runtime/pyexec.c``、``overlay/micropython/ports/esp32/mpthreadport.c``
      - 基于固定上游文件捕获和继承会话来源，保留原版权和许可证头
      - MIT
+   * - MicroPython 复合 USB 描述符适配
+     - ``overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`` （v1.28.0 基线）
+     - CDC/MSC/UVC 描述符及速率适配，保留上游许可证头
+     - MIT
    * - `micropython-ulab <https://github.com/v923z/micropython-ulab>`__ 6.12
      - ``lib/ulab``
      - 数组与数值计算
@@ -51,6 +55,10 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
    * - OpenMV Python 绑定代码
      - ``modules/py_image*``、``modules/py_helper*``
      - OpenMV 风格的 ``image`` API 绑定
+     - MIT
+   * - OpenMV 软件 JPEG 适配
+     - ``components/imlib/upstream/jpege.c``
+     - 将量化器缓存初值设为无效哨兵，确保首次以质量 100 编码也会初始化量化表；保留 OpenMV 原始 MIT 声明
      - MIT
    * - OpenMV AprilTag 实现
      - ``components/imlib/upstream/apriltag.c``

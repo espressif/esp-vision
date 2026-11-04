@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-esp_err_t esp_efuse_mac_get_default(uint8_t mac[6]);
+typedef enum { ESP_MAC_EFUSE_FACTORY } esp_mac_type_t;
+esp_err_t esp_read_mac(uint8_t mac[6], esp_mac_type_t type);
 
 #endif

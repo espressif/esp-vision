@@ -25,6 +25,7 @@
 #include "ev_channel.h"
 #include "ev_mux.h"
 #include "jpeg.h"
+#include "uvc.h"
 
 static const char *TAG = "esp_vision_preview";
 static uint32_t s_preview_seq;
@@ -52,7 +53,7 @@ void esp_vision_preview_init0(void)
     s_last_usj_flush_ms = 0;
 }
 
-static esp_err_t esp_vision_preview_write_frame(const image_t *img, const uint8_t *jpeg_buf, size_t jpeg_size)
+static esp_err_t esp_vision_preview_write_frame(const image_t *img, const uint8_t *jpeg_buf, size_t jpeg_size, bool mux_ready, bool observers_ready)
 {
     const char *route = ev_channel_get(EV_STREAM_USER);
     uint32_t seq = s_preview_seq++;
@@ -73,7 +74,10 @@ static esp_err_t esp_vision_preview_write_frame(const image_t *img, const uint8_
         return ESP_ERR_INVALID_SIZE;
     }
 
-    return ev_mux_write_lossy(EV_STREAM_USER, metadata, jpeg_buf, jpeg_size);
+    if (observers_ready) {
+        (void)ev_mux_preview_publish_observers(metadata, jpeg_buf, jpeg_size);
+    }
+    return mux_ready ? ev_mux_write_lossy(EV_STREAM_USER, metadata, jpeg_buf, jpeg_size) : ESP_OK;
 }
 
 esp_err_t esp_vision_preview_flush(const image_t *img)
@@ -82,22 +86,23 @@ esp_err_t esp_vision_preview_flush(const image_t *img)
     size_t jpeg_size = 0;
     esp_err_t ret;
 
-    if (!esp_vision_preview_is_ready()) {
-        return ESP_OK;
-    }
+    bool uvc_ready = esp_vision_uvc_preview_ready(img);
+    bool mux_ready = esp_vision_preview_is_ready();
+    bool observers_ready = ev_mux_preview_observers_ready();
     const char *route = ev_channel_get(EV_STREAM_USER);
-    if (strcmp(route, "usj") == 0) {
+    if (mux_ready && strcmp(route, "usj") == 0) {
         uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
         if ((now_ms - s_last_usj_flush_ms) < ESP_VISION_PREVIEW_USJ_MIN_INTERVAL_MS) {
-            return ESP_OK;
+            mux_ready = false;
+        } else {
+            s_last_usj_flush_ms = now_ms;
         }
-        s_last_usj_flush_ms = now_ms;
     }
-    // No owner, no available bounded pool, or a congested sink means this
-    // frame cannot be queued; avoid spending time encoding a JPEG that would
-    // be dropped before its first byte is sent.
-    if (!ev_mux_preview_available(EV_STREAM_USER)) {
+    if (mux_ready && !ev_mux_preview_available(EV_STREAM_USER)) {
         ev_mux_record_tx_drop();
+        mux_ready = false;
+    }
+    if (!mux_ready && !uvc_ready && !observers_ready) {
         return ESP_OK;
     }
 
@@ -108,7 +113,15 @@ esp_err_t esp_vision_preview_flush(const image_t *img)
                         TAG,
                         "failed to encode jpeg");
 
-    ret = esp_vision_preview_write_frame(img, jpeg_buf, jpeg_size);
+    if (uvc_ready) {
+        bool accepted;
+        // A slow or unavailable UVC subscriber must not affect EV-MUX.
+        (void)esp_vision_uvc_publish(jpeg_buf, jpeg_size, false, &accepted);
+    }
+    if (!mux_ready && !observers_ready) {
+        return ESP_OK;
+    }
+    ret = esp_vision_preview_write_frame(img, jpeg_buf, jpeg_size, mux_ready, observers_ready);
     if ((ret == ESP_ERR_INVALID_STATE) || (ret == ESP_ERR_TIMEOUT) ||
             (ret == ESP_ERR_INVALID_SIZE) || (ret == ESP_ERR_NO_MEM)) {
         return ESP_OK;

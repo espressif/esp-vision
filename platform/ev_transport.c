@@ -36,6 +36,8 @@ extern mp_uint_t mp_usbd_cdc_tx_strn_anytask(const char *str, mp_uint_t len);
 #if MICROPY_HW_ENABLE_UART_REPL
 #include "uart.h"
 extern int uart_stdout_tx_some(const char *str, size_t len);
+extern uint32_t uart_stdout_baudrate(void);
+extern esp_err_t uart_stdout_set_baudrate(uint32_t baud);
 #endif
 
 #if MICROPY_HW_USB_CDC
@@ -54,6 +56,9 @@ extern ev_io_result_t ev_tcp_link_read(const ev_link_ref_t *link,
 extern ev_io_result_t ev_tcp_link_write(const ev_link_ref_t *link,
                                         const void *buffer,
                                         size_t length) __attribute__((weak));
+extern ev_io_result_t ev_tcp_link_writev(const ev_link_ref_t *link,
+                                         const ev_io_vector_t *vectors,
+                                         size_t count) __attribute__((weak));
 extern void ev_tcp_link_close(const ev_link_ref_t *link) __attribute__((weak));
 
 typedef struct {
@@ -180,6 +185,30 @@ static bool ev_transport_serial_supported(ev_transport_id_t id)
     default:
         return false;
     }
+}
+
+uint32_t ev_transport_uart_baudrate(void)
+{
+#if MICROPY_HW_ENABLE_UART_REPL
+    return uart_stdout_baudrate();
+#else
+    return 0;
+#endif
+}
+
+esp_err_t ev_transport_uart_set_baudrate(uint32_t baud)
+{
+#if MICROPY_HW_ENABLE_UART_REPL
+    if (!ev_transport_serial_io_take(EV_TRANSPORT_UART)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    esp_err_t result = uart_stdout_set_baudrate(baud);
+    ev_transport_serial_io_give(EV_TRANSPORT_UART);
+    return result;
+#else
+    (void)baud;
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
 }
 
 esp_err_t ev_transport_init0(void)
@@ -424,6 +453,26 @@ static ev_io_result_t ev_transport_serial_write(ev_transport_id_t id, const void
         return ev_transport_result(EV_IO_WOULD_BLOCK, 0, ESP_OK);
     }
     return ev_transport_result(EV_IO_WOULD_BLOCK, 0, ESP_OK);
+}
+
+ev_io_result_t ev_transport_writev(const ev_link_ref_t *link,
+                                   const ev_io_vector_t *vectors, size_t count)
+{
+    if ((vectors == NULL) || (count == 0) || (count > EV_IO_VECTORS_MAX)) {
+        return ev_transport_result(EV_IO_ERROR, 0, ESP_ERR_INVALID_ARG);
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if ((vectors[i].base == NULL) || (vectors[i].length == 0)) {
+            return ev_transport_result(EV_IO_ERROR, 0, ESP_ERR_INVALID_ARG);
+        }
+    }
+    if ((link != NULL) && (link->transport_id == EV_TRANSPORT_TCP) && (ev_tcp_link_writev != NULL)) {
+        if (!ev_transport_ref_matches(link)) {
+            return ev_transport_result(EV_IO_CLOSED, 0, ESP_ERR_INVALID_STATE);
+        }
+        return ev_tcp_link_writev(link, vectors, count);
+    }
+    return ev_transport_write(link, vectors[0].base, vectors[0].length);
 }
 
 ev_io_result_t ev_transport_write(const ev_link_ref_t *link, const void *buffer, size_t length)

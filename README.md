@@ -137,3 +137,5 @@ The EV-MUX TCP interface provides wireless debugging on trusted local networks a
 - [Examples](example/)
 - [Customize firmware features](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/how-to/customize-firmware.html)
 - [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html)
+
+The native CDC/MSC/UVC descriptor overlay (`overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`) derives from MicroPython v1.28.0 and retains its MIT license and notices.

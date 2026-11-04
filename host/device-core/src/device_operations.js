@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { withDeviceOperation } from './device_python.js'
+import { requireObservedCameraCapture } from './device_capture.js'
 
 function failure(code, message) { return Object.assign(new Error(message), { code }) }
 function record(value, keys, label) {
@@ -163,7 +164,8 @@ export function createDeviceOperations({ session, state = {} }) {
       if (request.format !== undefined && request.format !== 'jpeg') throw new TypeError('Only jpeg capture is supported')
       if (request.quality !== undefined && (!Number.isInteger(request.quality) || request.quality < 1 || request.quality > 100)) throw new RangeError('quality must be an integer from 1 to 100')
       const method = request.source === 'camera' ? 'debug.capture_frame' : 'debug.capture_screen'
-      supported(session, method)
+      if (request.source === 'camera') requireObservedCameraCapture(session)
+      else supported(session, method)
       return withDeviceOperation(state, 'capture', () => session.captureImage(method, request.quality === undefined ? {} : { quality: request.quality }, opts))
     },
   }

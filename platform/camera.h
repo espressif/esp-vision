@@ -62,11 +62,23 @@ bool esp_vision_camera_get_vflip(void);
 
 uint32_t esp_vision_camera_get_sensor_id(void);
 size_t esp_vision_camera_frame_size(void);
-// VM-task-only shared snapshot storage; allocated on first use, borrowed until
-// the next capture/reconfiguration/reset. No memory is reserved at boot.
+// Camera state, capture and observed views belong to the main VM task. Startup
+// binds the task before camera init; Python worker tasks must not mutate it.
+void esp_vision_camera_framebuffer_init0(void);
+bool esp_vision_camera_is_vm_task(void);
+// Application snapshot storage is allocated on first use and borrowed until
+// the next application capture/reconfiguration/reset. No storage is reserved at boot.
 esp_err_t esp_vision_camera_get_snapshot_buffer(size_t size, uint8_t **pixels);
 void esp_vision_camera_release_snapshot_buffer(void);
+// A successful application capture publishes an independent, immutable copy.
+// Observation allocation failure does not fail the application capture.
 esp_err_t esp_vision_camera_capture(uint8_t *pixels, size_t pixels_size);
+// Board backend: fill caller storage without publishing or allocating a view.
+esp_err_t esp_vision_camera_capture_into(uint8_t *pixels, size_t pixels_size);
+// Borrowed observed pixels are valid only in this VM call until reconfiguration
+// or another application capture. The observer never initializes/captures.
+esp_err_t esp_vision_camera_get_observed_frame(image_t *img);
+void esp_vision_camera_invalidate_observed_frame(void);
 esp_err_t esp_vision_camera_snapshot(image_t *img, uint8_t *pixels, size_t pixels_size);
 esp_err_t esp_vision_camera_get_status(esp_vision_camera_status_t *status);
 

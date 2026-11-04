@@ -137,3 +137,5 @@ EV-MUX TCP 接口用于可信本地网络中的无线调试，不提供对端身
 - [示例](example/)
 - [客制化固件功能](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/how-to/customize-firmware.html)
 - [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)
+
+原生 CDC/MSC/UVC 描述符 overlay（`overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`）基于 MicroPython v1.28.0，保留其 MIT 许可证和版权声明。

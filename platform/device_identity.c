@@ -48,7 +48,7 @@ bool esp_vision_identity_init(void)
         return true;
     }
     uint8_t mac[6];
-    if (esp_efuse_mac_get_default(mac) != ESP_OK) {
+    if (esp_read_mac(mac, ESP_MAC_EFUSE_FACTORY) != ESP_OK) {
         return false;
     }
     snprintf(s_device_id, sizeof(s_device_id), "%02x%02x%02x%02x%02x%02x",

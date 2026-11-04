@@ -6,170 +6,123 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import vm from 'node:vm'
-import { webcrypto } from 'node:crypto'
+import { webcrypto, createHash } from 'node:crypto'
 import { build } from 'esbuild'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const temporary = await mkdtemp(join(tmpdir(), 'esp-vision-browser-'))
 try {
-  // Bundle the actual pinned dependency and its dynamic JSON stubs for browsers.
   const result = await build({
-    stdin: { contents: `export { createDevice } from './src/index.js'; export { openBrowserRom } from './src/browser.js'; export { loadReleaseManifest } from './src/firmware.js'; export { ESPLoader as TestLoader } from 'tasmota-webserial-esptool'; export { browserRomCompatibility as testCompatibility } from './src/browser_rom_compat.js';`, resolveDir: root },
-    bundle: true, platform: 'browser', format: 'iife', globalName: 'DeviceCore',
-    write: false, metafile: true,
+    stdin: { contents: `export { createDevice } from './src/index.js'; export { openBrowserRom } from './src/browser.js'; export { loadReleaseManifest } from './src/firmware.js'; export { ESPLoader as TestLoader, Transport as TestTransport } from 'esptool-js'; export { browserTransportCompatibility as testTransport } from './src/browser_rom_compat.js';`, resolveDir: root },
+    bundle: true, platform: 'browser', format: 'iife', globalName: 'DeviceCore', write: false, metafile: true,
   })
-  const code = result.outputFiles[0].text
-  assert.ok(Object.keys(result.metafile.inputs).some(path => path.includes('tasmota-webserial-esptool/dist/esp_loader.js')))
-  assert.ok(Object.keys(result.metafile.inputs).some(path => path.includes('stubs/esp32p4.json')))
-  assert.ok(Object.keys(result.metafile.inputs).some(path => path.includes('stubs/esp32s31.json')))
-  assert.ok(!Object.keys(result.metafile.inputs).some(path => /src\/(node|cli)/.test(path)))
-  const context = vm.createContext({ atob, btoa, EventTarget, URL, TextDecoder, TextEncoder, Uint8Array, AbortController, setTimeout, clearTimeout, console, crypto: webcrypto, structuredClone })
+  const code = result.outputFiles[0].text, inputs = Object.keys(result.metafile.inputs)
+  assert.ok(inputs.some(path => path.includes('esptool-js/lib/esploader.js')))
+  for (const chip of ['esp32p4', 'esp32s31']) assert.ok(inputs.some(path => path.includes(`stub_flasher/${chip}.json`)))
+  assert.ok(!inputs.some(path => /tasmota|src\/(node|cli)/.test(path)))
+  const context = vm.createContext({ atob, btoa, EventTarget, URL, TextDecoder, TextEncoder, Uint8Array, DataView, ArrayBuffer, AbortController, setTimeout, clearTimeout, console, crypto: webcrypto, structuredClone })
   vm.runInContext(code, context)
-  let opens = 0, closes = 0
+  let opens = 0
   const adapter = context.DeviceCore.openBrowserRom({ port: {
-    async open() { opens++; throw new Error('real dependency reached SerialPort.open') },
-    async close() { closes++ },
+    getInfo: () => ({ usbVendorId: 0x10c4, usbProductId: 0xea60 }),
+    async open() { opens++; throw new Error('real dependency reached SerialPort.open') }, async close() {},
   } })
-  assert.equal(opens, 0, 'import and construction must not open/reset the port')
+  assert.equal(opens, 0)
   await assert.rejects(adapter.initialize(), /real dependency reached SerialPort.open/)
   assert.equal(opens, 1)
-  // Run upstream's actual SLIP parser in both CDC and UART modes. A blank board
-  // may emit a boot log before the stub greeting; invalid escapes must still fail.
-  for (const cdc of [false, true]) {
-    const raw = new context.DeviceCore.TestLoader({}, { log() {}, error() {}, debug() {} })
-    context.DeviceCore.testCompatibility(raw)
-    raw._isCDCDevice = cdc
-    raw.__inputBuffer = []
-    raw._inputBuffer.push(71, 97, 114, 0xc0, 79, 72, 65, 73, 0xc0)
-    assert.deepEqual(Array.from(await raw.readPacket(100)), [79, 72, 65, 73])
-    raw._clearInputBuffer()
-    raw._inputBuffer.push(0xc0, 0xdb, 0x47, 0xc0)
-    await assert.rejects(raw.readPacket(100), /Invalid SLIP escape/)
-  }
-  // Exercise real upstream stub status decoding. A ROM reset consumes four
-  // status bytes while the running stub replies with two; route reset to it.
-  {
-    const raw = new context.DeviceCore.TestLoader({ getInfo: () => ({ usbVendorId: 0x303a, usbProductId: 0x1001 }) }, { log() {}, error() {}, debug() {} })
-    raw.chipFamily = 0x3280; raw.chipRevision = 302
-    raw.memBegin = raw.memBlock = raw.memFinish = async () => {}
-    raw.readPacket = async () => new Uint8Array([79, 72, 65, 73])
-    context.DeviceCore.testCompatibility(raw)
-    const stub = await raw.runStub(true)
-    let writes = 0
-    stub.detectUsbConnectionType = async () => true
-    stub.getUsbMode = async () => ({ mode: 'usb-jtag-serial' })
-    stub.sendCommand = async () => { writes++ }
-    stub.getResponse = async () => [0, new Uint8Array([0, 0])]
-    // Confirm the original ROM instance rejects the exact same stub response.
-    raw.detectUsbConnectionType = stub.detectUsbConnectionType
-    raw.getUsbMode = stub.getUsbMode
-    raw.sendCommand = async () => {}
-    raw.getResponse = stub.getResponse
-    await assert.rejects(context.DeviceCore.TestLoader.prototype.hardReset.call(raw), /status|response|enough/i)
-    await raw.hardReset()
-    assert.equal(writes, 4, 'P4 watchdog writes must use the running stub status decoder')
-  }
+  const transport = context.DeviceCore.testTransport(new context.DeviceCore.TestTransport({ getInfo: () => ({}), readable: {}, writable: {} }, false))
+  transport.buffer = new Uint8Array([71, 97, 114, 0xc0, 79, 72, 65, 73, 0xc0])
+  assert.deepEqual(Array.from(await transport.read(100)), [79, 72, 65, 73])
+  transport.buffer = new Uint8Array([0xc0, 0xdb, 0x47, 0xc0])
+  await assert.rejects(transport.read(100), /Invalid SLIP escape/)
+  let released = 0
+  transport.device.writable = { getWriter: () => ({ async write() { throw new Error('USB detached during write') }, releaseLock() { released++ } }) }
+  await assert.rejects(transport.write(new Uint8Array([1])), /detached/)
+  assert.equal(released, 1, 'failed writes release the real WebSerial writer lock')
   const prototype = context.DeviceCore.TestLoader.prototype
-  const originals = Object.fromEntries(['initialize', 'disconnect', 'getSecurityInfo', 'runStub', 'hardReset'].map(key => [key, prototype[key]]))
-  let initializeCalls = 0, disconnectCalls = 0
-  prototype.disconnect = async function () { disconnectCalls++; await this.port.close() }
+  const keys = ['detectChip', 'getSecurityInfo', 'runStub', 'writeFlash', 'readReg', 'writeReg', 'checkCommand']
+  const originals = Object.fromEntries(keys.map(key => [key, prototype[key]]))
+  let detects = 0, closes = 0, stubs = 0, writes = 0, resets = 0
   const fakePort = () => ({
+    getInfo: () => ({ usbVendorId: 0x303a, usbProductId: 32 }),
     async open() { this.readable = {}; this.writable = {} },
-    async close() { this.readable = null; this.writable = null },
+    async close() { closes++; this.readable = null; this.writable = null },
+    async setSignals() { throw new Error('OTG must not require UART control signals') },
   })
   try {
-    prototype.initialize = async () => { initializeCalls++ }
-    const controller = new AbortController()
-    const loader = context.DeviceCore.openBrowserRom({ port: fakePort(), signal: controller.signal })
+    prototype.detectChip = async function () { detects++; await this.transport.connect(115200); this.chip = { CHIP_NAME: 'ESP32-S31', getChipRevision: async () => 0 } }
+    prototype.getSecurityInfo = async () => ({ flags: 0, flashCryptCnt: 0 })
+    const controller = new AbortController(), loader = context.DeviceCore.openBrowserRom({ port: fakePort(), signal: controller.signal })
     const first = loader.initialize()
-    assert.equal(loader.initialize(), first, 'initialize must share one ROM connection')
-    await first
-    controller.abort()
-    assert.equal(disconnectCalls, 0, 'abort after initialization must not interrupt flash/readback')
+    assert.equal(loader.initialize(), first)
+    await first; controller.abort()
+    assert.equal(closes, 0, 'abort after initialization preserves ongoing flash')
     await loader.disconnect(); await loader.disconnect()
-    assert.equal(disconnectCalls, 1)
-    assert.equal(initializeCalls, 1)
-    prototype.initialize = async () => { throw new Error('sync failed') }
-    await assert.rejects(context.DeviceCore.openBrowserRom({ port: fakePort() }).initialize(), /sync failed/)
-    assert.equal(disconnectCalls, 2, 'failed ROM sync must release the acquired port')
+    assert.equal(closes, 1); assert.equal(detects, 1)
+    const detect = prototype.detectChip
+    prototype.detectChip = async function () { await this.transport.connect(115200); throw new Error('sync failed') }
+    await assert.rejects(context.DeviceCore.openBrowserRom({ port: fakePort() }).initialize(), /USB-OTG ROM is not ready/)
+    assert.equal(closes, 2)
+    prototype.detectChip = detect
     let finishOpen
-    const waitingPort = fakePort()
-    const open = waitingPort.open
-    waitingPort.open = async function () {
-      await new Promise(resolve => { finishOpen = resolve })
-      await open.call(this)
-    }
-    const cancelled = new AbortController()
-    const late = context.DeviceCore.openBrowserRom({ port: waitingPort, signal: cancelled.signal })
+    const waitingPort = fakePort(), open = waitingPort.open
+    waitingPort.open = async function () { await new Promise(resolve => { finishOpen = resolve }); await open.call(this) }
+    const cancelled = new AbortController(), late = context.DeviceCore.openBrowserRom({ port: waitingPort, signal: cancelled.signal })
     const starting = late.initialize()
     while (!finishOpen) await new Promise(resolve => setTimeout(resolve, 1))
-    cancelled.abort()
-    await assert.rejects(starting, { name: 'AbortError' })
-    finishOpen()
-    await new Promise(resolve => setTimeout(resolve, 5))
-    assert.equal(disconnectCalls, 3, 'an open completing after cancellation must close')
-    assert.equal(waitingPort.readable, null)
+    cancelled.abort(); await assert.rejects(starting, { name: 'AbortError' })
+    finishOpen(); await new Promise(resolve => setTimeout(resolve, 5))
+    assert.equal(closes, 3); assert.equal(waitingPort.readable, null)
     const data = new Uint8Array([0xe9, 1, 2, 3]), table = new Uint8Array([4, 5])
     const hash = async bytes => Array.from(new Uint8Array(await webcrypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('')
     const release = { board: 'BOARD', version: 'browser-test', image: {
-      evMuxVersion: 4, chipFamily: 0x3280, chipRevision: 302,
-      offset: 65536, bytes: data.byteLength, partitionSize: 4096,
+      evMuxVersion: 4, chipFamily: 0x3231, chipRevision: 0, offset: 65536, bytes: data.byteLength, partitionSize: 4096,
       sha256: await hash(data), partitionTable: { offset: 32768, bytes: table.byteLength, sha256: await hash(table) },
     } }
-    let stubs = 0, writes = 0, resets = 0
-    prototype.initialize = async function () { this.chipFamily = 0x3280; this.chipRevision = 302 }
-    prototype.getSecurityInfo = async () => ({ flags: 1, flashCryptCnt: 0 })
-    prototype.runStub = async () => { stubs++; throw new Error('must not launch') }
-    const device = context.DeviceCore.createDevice()
-    const request = {
-      release, board: 'BOARD', data,
+    const device = context.DeviceCore.createDevice(), request = { release, board: 'BOARD', data,
       openLoader: ({ signal }) => context.DeviceCore.openBrowserRom({ port: fakePort(), signal }),
     }
+    prototype.getSecurityInfo = async () => ({ flags: 1, flashCryptCnt: 0 })
+    prototype.runStub = async () => { stubs++; throw new Error('must not launch') }
     await assert.rejects(device.firmware.update(request), /Secure boot/)
-    assert.equal(stubs, 0, 'ROM security must be checked before the browser launches a stub')
+    assert.equal(stubs, 0)
     await assert.rejects(device.firmware.update({ ...request, data: new Uint8Array(4) }), /SHA-256/)
     assert.equal(stubs, 0)
     prototype.getSecurityInfo = async () => ({ flags: 0, flashCryptCnt: 0 })
+    prototype.runStub = async function () { stubs++; this.IS_STUB = true }
     const writing = new AbortController()
-    prototype.runStub = async () => {
-      stubs++
-      return {
-        IS_STUB: true,
-        async flashData() { writes++; writing.abort() },
-        async readFlash(offset) { return offset === 32768 ? table : data },
-        async readRegister() { return 0 },
-        async hardReset() { resets++ },
-      }
+    prototype.writeFlash = async function (options) { assert.equal(options.compress, true); assert.equal(options.eraseAll, false); writes++; writing.abort(); options.reportProgress(0, 4, 4) }
+    prototype.readReg = async () => 0
+    prototype.writeReg = async () => { resets++ }
+    prototype.checkCommand = async function (description, _opcode, packet) {
+      assert.equal(description, 'read flash')
+      const address = new DataView(packet.buffer).getUint32(0, true), bytes = address === 32768 ? table : data
+      const digest = createHash('md5').update(bytes).digest()
+      const frame = chunk => [0xc0, ...Array.from(chunk).flatMap(byte => byte === 0xc0 ? [0xdb, 0xdc] : byte === 0xdb ? [0xdb, 0xdd] : [byte]), 0xc0]
+      this.transport.buffer = new Uint8Array([...frame(bytes), ...frame(digest)])
+      return 0
     }
-    prototype.hardReset = async () => { resets++ }
-    const beforeUpdateCloses = disconnectCalls
-    const updated = await device.firmware.update({ ...request, signal: writing.signal })
-    assert.equal(updated.verified, true)
-    assert.equal(updated.needsReset, false)
-    assert.equal(stubs, 1); assert.equal(writes, 1); assert.equal(resets, 1)
-    assert.equal(disconnectCalls, beforeUpdateCloses + 1, 'write-time abort must preserve complete readback, reset and one cleanup')
+    const updatePort = fakePort(), openUpdate = updatePort.open
+    updatePort.open = async function (...args) { await openUpdate.apply(this, args); this.writable = { getWriter: () => ({ async write() {}, releaseLock() {} }) } }
+    const beforeCloses = closes
+    const updated = await device.firmware.update({ ...request, signal: writing.signal, openLoader: ({ signal }) => context.DeviceCore.openBrowserRom({ port: updatePort, signal }) })
+    assert.equal(updated.verified, true); assert.equal(updated.needsReset, false)
+    assert.equal(stubs, 1); assert.equal(writes, 1); assert.equal(resets, 4)
+    assert.equal(closes, beforeCloses + 1)
     const manifest = { schemaVersion: 1, version: 'browser-test', sourceCommit: 'a'.repeat(40), pipelineId: 1, layout: 'legacy',
       releases: [{ ...release, image: { ...release.image, url: 'https://dl.espressif.com/AE/esp-vision/bin/app.bin' } }],
-      website: { schemaVersion: '1.0.0', release: 'browser-test', releases: ['browser-test'], binaryNameTemplate: '{board}-{tag}.bin',
-        boards: [{ board: 'BOARD', name: 'Board', slug: 'board', flashable: true }], models: [] }, mcp: null }
+      website: { schemaVersion: '1.0.0', release: 'browser-test', releases: ['browser-test'], binaryNameTemplate: '{board}-{tag}.bin', boards: [{ board: 'BOARD', name: 'Board', slug: 'board', flashable: true }], models: [] }, mcp: null }
     const rawManifest = new TextEncoder().encode(JSON.stringify(manifest)), caches = []
     const snapshot = await context.DeviceCore.loadReleaseManifest({ url: 'https://dl.espressif.com/AE/esp-vision/releases/browser-test/manifest.json', sha256: await hash(rawManifest),
-      async fetch(_url, options) {
-        caches.push(options.cache)
-        if (caches.length === 1) throw new TypeError('Cached response CORS failure from the host realm')
-        return new Response(rawManifest)
-      } })
-    assert.equal(snapshot.version, 'browser-test')
-    assert.deepEqual(caches, ['default', 'no-store'], 'real browser bundle must recover a fetch TypeError from host-provided fetch')
-
+      async fetch(_url, options) { caches.push(options.cache); if (caches.length === 1) throw new TypeError('Cached CORS failure from host realm'); return new Response(rawManifest) },
+    })
+    assert.equal(snapshot.version, 'browser-test'); assert.deepEqual(caches, ['default', 'no-store'])
   } finally { Object.assign(prototype, originals) }
-  // Node import must not eagerly resolve tasmota's browser-only, extensionless ESM.
   const { openBrowserRom } = await import(pathToFileURL(join(root, 'src/browser.js')))
   assert.equal(typeof openBrowserRom, 'function')
-  const dependency = JSON.parse(await readFile(join(root, 'node_modules/tasmota-webserial-esptool/package.json'), 'utf8'))
-  assert.equal(dependency.version, '9.4.2')
-  const stubsLicense = await readFile(join(root, 'node_modules/tasmota-webserial-esptool/src/stubs/README.md'), 'utf8')
-  assert.match(stubsLicense, /dual licensed.*Apache License Version 2.0 or the MIT license/s)
+  const dependency = JSON.parse(await readFile(join(root, 'node_modules/esptool-js/package.json'), 'utf8'))
+  assert.equal(dependency.version, '0.7.1'); assert.equal(dependency.license, 'Apache-2.0')
+  assert.match(await readFile(join(root, 'node_modules/esptool-js/LICENSE'), 'utf8'), /Apache License/)
   await writeFile(join(temporary, 'browser.js'), code)
-  console.log(JSON.stringify({ browserBundle: true, dependency: dependency.version, bytes: code.length, passiveImports: true, p4AndS31Stubs: true, cleanupAndCancellation: true, coreSafetyChecks: true }))
+  console.log(JSON.stringify({ browserBundle: true, dependency: dependency.version, bytes: code.length, passiveImports: true, p4AndS31Stubs: true, cleanupAndCancellation: true, coreSafetyChecks: true, compressedWrite: true, fullReadbackAndMd5: true }))
 } finally { await rm(temporary, { recursive: true, force: true }) }

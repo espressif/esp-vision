@@ -83,6 +83,7 @@
 #include "fb_alloc.h"
 #include "preview.h"
 #include "lcd_touch.h"
+#include "uvc.h"
 #include "storage.h"
 #include "usb_auto_download.h"
 
@@ -197,6 +198,7 @@ soft_reset:
     // and boot.py. The transport task below keeps it serviced while the VM is
     // busy; no second USB driver or descriptor owner is involved.
     mp_usbd_init();
+    ESP_ERROR_CHECK(esp_vision_uvc_init());
     #endif
     ev_mux_init_err = ev_stdio_init0();
     if (ev_mux_init_err == ESP_OK) {
@@ -211,6 +213,7 @@ soft_reset:
                  esp_err_to_name(ev_mux_init_err));
     }
     esp_vision_storage_mount_micropython();
+    esp_vision_camera_framebuffer_init0();
     esp_vision_camera_init0();
     esp_vision_lcd_touch_deinit();
     esp_vision_display_init0();
@@ -267,6 +270,7 @@ soft_reset_exit:
     ev_stdio_vm_reset_begin();
     esp_vision_lcd_touch_deinit();
     esp_vision_display_deinit();
+    esp_vision_uvc_reset();
     esp_vision_preview_deinit();
     esp_vision_camera_release_snapshot_buffer();
     esp_vision_camera_deinit();

@@ -6,3 +6,7 @@ CONFIG_MDNS_MAX_INTERFACES=1
 
 # Reserve DHCP option space for a full 63-byte hostname plus other options.
 CONFIG_LWIP_DHCP_OPTIONS_LEN=255
+
+# Reset-only TCP close enables positive linger on its detached socket; all
+# ordinary sockets retain lwIP's disabled-by-default linger setting.
+CONFIG_LWIP_SO_LINGER=y

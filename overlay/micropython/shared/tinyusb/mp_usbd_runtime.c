@@ -123,7 +123,7 @@ const uint8_t *tud_descriptor_configuration_cb(uint8_t index) {
     if (usbd) {
         result = usbd_get_buffer_in_cb(usbd->desc_cfg, MP_BUFFER_READ);
     }
-    return result ? result : &mp_usbd_builtin_desc_cfg;
+    return result ? result : mp_usbd_builtin_configuration(false);
 }
 
 const char *mp_usbd_runtime_string_cb(uint8_t index) {

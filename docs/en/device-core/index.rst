@@ -18,11 +18,11 @@ Installation and compatibility
 
 .. code-block:: console
 
-   npm install '@esp-vision/device-core@~0.5.0'
+   npm install '@esp-vision/device-core@~0.6.0'
    # Optional Node LAN discovery adapter:
    npm install multicast-dns
 
-These examples target SDK ``0.5.1``; declare a minor-locked range, record the resolved patch in a lockfile, and verify registry availability before installation. Node.js 22 is the host baseline. Browsers require a bundler/import map and a host-provided Web Serial or binary WebSocket transport. Only EV-MUX v4 is supported; a v3 device must update firmware. Package, firmware and IDE versions are independent.
+These examples target SDK ``0.6.0``; declare a minor-locked range, record the resolved patch in a lockfile, and verify registry availability before installation. Node.js 22 is the host baseline. Browsers require a bundler/import map and a host-provided Web Serial or binary WebSocket transport. Only EV-MUX v4 is supported; a v3 device must update firmware. Package, firmware and IDE versions are independent. Source 0.6.0 is a minor release after 0.5.1; source changes and dry runs do not establish npm availability or update the Core bytes embedded in existing CLI/Plugin releases. Camera observation requires firmware feature ``debug.capture_frame.observed.v1`` and rejects older unsafe implementations locally.
 
 Architecture and starting point
 --------------------------------------------------------------

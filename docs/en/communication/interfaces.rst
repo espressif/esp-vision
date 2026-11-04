@@ -58,7 +58,7 @@ The host/Core/protocol relationship follows :doc:`../architecture/index`. This f
    * - ``tcp``
      - STA IPv4 TCP server on a configured device.
      - Accept allocates a slot; FIN/RST, socket errors and timeouts reclaim links.
-     - Default port 3232; two accepted slots do not mean two owners. Browsers require a WebSocket-to-TCP byte bridge.
+     - Default port 3232; three accepted slots support up to two read-only preview observers and one controller. Browsers require a WebSocket-to-TCP byte bridge.
 
 Board backend enablement
 ------------------------
@@ -149,7 +149,9 @@ The backend registry is compile-time defined, with no runtime plugin-registratio
 Why UART cannot assume USB preview sizes
 ----------------------------------------
 
-UART estimates its transmission budget for the entire frame:
+UART application communication starts at 115200 bps. With ``capabilities.uartBaud`` support, Device Core tests 2000000, 1500000, 921600, 460800 and 115200 in that order and keeps the first verified rate. Both the device and host port must switch; USB-OTG, USB-Serial-JTAG and TCP do not run this UART negotiation. See :doc:`wire-protocol` for prepare/probe/commit and rollback. ROM/stub download speed is negotiated separately during flashing.
+
+UART estimates its transmission budget for the entire frame using the current runtime baud rate:
 
 .. code-block:: text
 
@@ -165,7 +167,7 @@ Three distinct TCP time budgets
 2. **Session lease**: 15000 ms by default; absence of authorized activity releases the owner. This reclaims ownership.
 3. **Idle reclamation after ownership**: a socket that lost ownership has approximately 30000 ms to reacquire before its exact-generation slot is reclaimed. This reclaims connection capacity.
 
-Two slots allow brief coexistence of discovery/competing connections, not two independent applications controlling the VM. A TCP contender closes after its acquisition error is sent. The same link can reacquire within the allowed window after normal release.
+Three slots support two read-only preview observers alongside one controller; see :doc:`preview-debug`. A TCP contender closes after its acquisition error is sent. The same link can reacquire within the allowed window after normal release.
 
 DTR/RTS, RESET and ROM download
 -------------------------------

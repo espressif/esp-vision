@@ -83,6 +83,14 @@
 #define CFG_TUD_MSC             (0)
 #endif
 
+// UVC is a native built-in class on USB device boards.
+#ifndef MICROPY_HW_USB_UVC
+#define MICROPY_HW_USB_UVC (1)
+#endif
+#define CFG_TUD_VIDEO (MICROPY_HW_USB_UVC)
+#define CFG_TUD_VIDEO_STREAMING (MICROPY_HW_USB_UVC)
+#define CFG_TUD_VIDEO_STREAMING_EP_BUFSIZE (512)
+
 // CDC Configuration
 #if CFG_TUD_CDC
 #ifndef CFG_TUD_CDC_RX_BUFSIZE
@@ -110,6 +118,7 @@
 #define USBD_STR_SERIAL (0x03)
 #define USBD_STR_CDC (0x04)
 #define USBD_STR_MSC (0x05)
+#define USBD_STR_UVC (0x06)
 
 #define USBD_MAX_POWER_MA (250)
 
@@ -137,8 +146,15 @@
 #endif // CFG_TUD_CDC
 #endif // CFG_TUD_MSC
 
+#define USBD_ITF_UVC (CFG_TUD_CDC * 2 + CFG_TUD_MSC)
+#define USBD_UVC_EP_IN (0x80 | (CFG_TUD_CDC * 2 + CFG_TUD_MSC + 1))
+
 /* Limits of builtin USB interfaces, endpoints, strings */
-#if CFG_TUD_MSC
+#if CFG_TUD_VIDEO
+#define USBD_ITF_BUILTIN_MAX (USBD_ITF_UVC + 2)
+#define USBD_STR_BUILTIN_MAX (USBD_STR_UVC + 1)
+#define USBD_EP_BUILTIN_MAX ((USBD_UVC_EP_IN & 0x7f) + 1)
+#elif CFG_TUD_MSC
 #define USBD_ITF_BUILTIN_MAX (USBD_ITF_MSC + 1)
 #define USBD_STR_BUILTIN_MAX (USBD_STR_MSC + 1)
 #define USBD_EP_BUILTIN_MAX (EPNUM_MSC_OUT + 1)

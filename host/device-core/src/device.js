@@ -135,11 +135,12 @@ class Device {
   }
 
   async connect(options = {}) {
-    object(options, ['transport', 'role', 'expectedDevice', 'timeout', 'signal', 'probeRepl'], 'connect')
-    const { role = 'unknown', expectedDevice = null, timeout = 30000, signal, probeRepl = true } = options
+    object(options, ['transport', 'role', 'expectedDevice', 'timeout', 'signal', 'probeRepl', 'autoBaud'], 'connect')
+    const { role = 'unknown', expectedDevice = null, timeout = 60000, signal, probeRepl = true, autoBaud = true } = options
     if (!['unknown', 'usj', 'usb', 'uart', 'tcp'].includes(role)) throw new TypeError('role must be usj, usb, uart or tcp')
     if (!Number.isFinite(timeout) || timeout <= 0) throw new RangeError('timeout must be positive')
     if (typeof probeRepl !== 'boolean') throw new TypeError('probeRepl must be a boolean')
+    if (typeof autoBaud !== 'boolean') throw new TypeError('autoBaud must be a boolean')
     if (signal !== undefined && (!signal || typeof signal.addEventListener !== 'function' || typeof signal.aborted !== 'boolean')) throw new TypeError('signal must be an AbortSignal')
     if (signal?.aborted) throw cancellation(signal)
     if (this.#updating || this.#connecting || this.#disconnecting || this.#session) throw failure('DEVICE_BUSY', 'Disconnect before opening another connection')
@@ -184,7 +185,7 @@ class Device {
       this.#unsubscribe = transport.subscribe({ data: bytes => { if (this.#session === session) session.feedBytes(bytes) }, error: lost, close: () => lost() })
       if (typeof this.#unsubscribe !== 'function') throw new TypeError('Transport subscribe must synchronously return an unsubscribe function')
       if (transport.connect) await abortable(transport.connect({ signal: lifecycle.signal }), lifecycle.signal)
-      await abortable(session.negotiate({ role, expectedDevice, probeRepl, signal: lifecycle.signal }), lifecycle.signal)
+      await abortable(session.negotiate({ role, expectedDevice, probeRepl, autoBaud, signal: lifecycle.signal }), lifecycle.signal)
       if (lifecycle.signal.aborted || this.#session !== session) throw cancellation(lifecycle.signal)
       this.#api = {
         python: createPythonApi({ session, state: this.#state }),
@@ -210,7 +211,7 @@ class Device {
     ++this.#generation
     this.#lifecycle?.abort(reason)
     let error
-    try { if (session?.sessionId) await session.release() } catch (caught) { error = caught }
+    try { if (session && (session.sessionId || session.resetPromise)) await session.release() } catch (caught) { error = caught }
     finally {
       session?.close(reason)
       this.#session = null

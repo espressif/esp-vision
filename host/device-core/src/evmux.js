@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { validateJpegImage } from './jpeg_validate.js'
+
 const SOF = 0x1e
 const EOF_GUARD = 0x1f
 const HEADER_RE = /^EVMUX\/1 h=(\d+) p=(\d+) c=([0-9A-Fa-f]{8})\r\n$/
@@ -98,6 +100,7 @@ export class EvMuxParser {
         this.rxChunks = 0
         this.frames = 0
         this.droppedFrames = 0
+        this.invalidImageFrames = 0
         this.lastChannel = null
         this.maxMetadataLength = 65535
         this.maxPayloadLength = MAX_BUFFER
@@ -175,6 +178,7 @@ export class EvMuxParser {
         this.rxChunks = 0
         this.frames = 0
         this.droppedFrames = 0
+        this.invalidImageFrames = 0
         this.lastChannel = null
     }
 
@@ -186,6 +190,7 @@ export class EvMuxParser {
             bufferedBytes: this.buffer.length,
             frames: this.frames,
             droppedFrames: this.droppedFrames,
+            invalidImageFrames: this.invalidImageFrames,
             lastChannel: this.lastChannel,
         }
     }
@@ -319,9 +324,29 @@ export class EvMuxParser {
                 this.handlers.frameRejected?.(metadata)
                 continue
             }
-            this.frames += 1
-            this.lastChannel = metadata.channel || 'unknown'
-            this.dispatch(metadata, payload)
+            if (this.dispatch(metadata, payload) !== false) {
+                this.frames += 1
+                this.lastChannel = metadata.channel || 'unknown'
+            }
+        }
+    }
+
+    _dropInvalidImage(metadata, error, payload) {
+        this.droppedFrames += 1
+        this.invalidImageFrames += 1
+        this.handlers.invalidImage?.(metadata, error, payload)
+        return false
+    }
+
+    _validateImage(metadata, payload) {
+        try {
+            if (metadata.encoding !== 'binary' || metadata.contentType !== 'image/jpeg') {
+                throw Object.assign(new Error('Invalid JPEG image: response must use binary image/jpeg'), { code: 'INVALID_IMAGE', reason: 'response must use binary image/jpeg' })
+            }
+            validateJpegImage(payload, metadata)
+            return true
+        } catch (error) {
+            return this._dropInvalidImage(metadata, error, payload)
         }
     }
 
@@ -338,9 +363,19 @@ export class EvMuxParser {
             return
         }
         if (channel === 'user.rpc' || channel === 'debug.rpc') {
+            const capture = channel === 'debug.rpc' && metadata.type === 'rsp'
+                && (metadata.method === 'debug.capture_frame' || metadata.method === 'debug.capture_screen')
+            if (capture && metadata.contentType !== 'image/jpeg') {
+                let response
+                try { response = metadata.encoding === 'json' ? JSON.parse(decodePayloadText(payload)) : null } catch { /* The correlated capture is rejected below. */ }
+                if (response?.ok !== false || typeof response.error?.code !== 'string' || !response.error.code) {
+                    return this._dropInvalidImage(metadata, Object.assign(new Error('Invalid JPEG image: capture response contains no binary JPEG'), { code: 'INVALID_IMAGE', reason: 'capture response contains no binary JPEG' }), payload)
+                }
+            }
             // EV-MUX v4: debug.capture_frame answers with the rsp frame itself
             // carrying the binary JPEG payload (no separate data channel).
             if (channel === 'debug.rpc' && metadata.type === 'rsp' && metadata.contentType === 'image/jpeg') {
+                if (!this._validateImage(metadata, payload)) return false
                 this.handlers.debugImage?.(bytesToBase64(payload), {
                     width: Number(metadata.width) || 0,
                     height: Number(metadata.height) || 0,
@@ -373,7 +408,11 @@ export class EvMuxParser {
             this.handlers.command?.(appendLine(`${channel} ${line}`))
             return
         }
-        if (channel === 'preview.frame' && metadata.contentType === 'image/jpeg') {
+        if (channel === 'preview.frame') {
+            if (metadata.type !== 'data') {
+                return this._dropInvalidImage(metadata, Object.assign(new Error('Invalid JPEG image: preview must be a data frame'), { code: 'INVALID_IMAGE', reason: 'preview must be a data frame' }), payload)
+            }
+            if (!this._validateImage(metadata, payload)) return false
             this.handlers.preview?.(bytesToBase64(payload), {
                 width: Number(metadata.width) || 0,
                 height: Number(metadata.height) || 0,

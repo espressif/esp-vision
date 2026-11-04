@@ -5,11 +5,15 @@
  */
 
 #include "camera_isp.h"
+#include "camera.h"
 
 #include <math.h>
 
 __attribute__((weak)) esp_err_t esp_vision_camera_set_ipa(bool enable)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
     (void)enable;
     return ESP_ERR_NOT_SUPPORTED;
 }
@@ -48,6 +52,9 @@ esp_err_t esp_vision_camera_get_ipa_stats(esp_vision_ipa_stats_t *stats, uint32_
 
 __attribute__((weak)) esp_err_t esp_vision_camera_set_isp(esp_vision_isp_block_t block, const esp_vision_isp_config_t *config)
 {
+    if (!esp_vision_camera_is_vm_task()) {
+        return ESP_ERR_INVALID_STATE;
+    }
     (void)block;
     (void)config;
     return ESP_ERR_NOT_SUPPORTED;

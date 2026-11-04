@@ -22,6 +22,27 @@ function npm(args, cwd) {
   if (result.status !== 0) throw new Error(`npm ${args[0]} failed: ${result.stderr || result.error?.message || result.status}`)
   return result.stdout
 }
+function dependencyClosure(packages, starts) {
+  const reached = new Set()
+  const pending = [...starts]
+  while (pending.length) {
+    const path = pending.pop()
+    if (reached.has(path) || !packages[path]) continue
+    reached.add(path)
+    const entry = packages[path]
+    for (const name of Object.keys({ ...entry.dependencies, ...entry.optionalDependencies, ...entry.peerDependencies })) {
+      let parent = path
+      while (true) {
+        const candidate = parent ? `${parent}/node_modules/${name}` : `node_modules/${name}`
+        if (packages[candidate]) { pending.push(candidate); break }
+        if (!parent) break
+        const index = parent.lastIndexOf('/node_modules/')
+        parent = index < 0 ? '' : parent.slice(0, index)
+      }
+    }
+  }
+  return reached
+}
 try {
   const core = join(root, 'host/device-core')
   npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false'], core)
@@ -77,11 +98,22 @@ try {
       lock.version = manifest.version
       lock.packages[''].version = manifest.version
       lock.packages[''].devDependencies = manifest.devDependencies
-      // Only the explicit staged Core source is substituted. npm retains the
-      // other existing locked versions when resolving this ephemeral lock.
+      // Core can replace its own transitive dependencies (for example its ROM
+      // adapter). Keep every unrelated lock entry, including packages shared
+      // with another host dependency, protected against resolver changes.
+      const corePath = 'node_modules/@esp-vision/device-core'
+      const corePackages = dependencyClosure(lock.packages, [corePath])
+      const rootEntry = lock.packages['']
+      const hostStarts = Object.keys({ ...rootEntry.dependencies, ...rootEntry.devDependencies,
+        ...rootEntry.optionalDependencies, ...rootEntry.peerDependencies })
+        .filter(name => name !== '@esp-vision/device-core').map(name => `node_modules/${name}`)
+      const hostPackages = dependencyClosure(lock.packages, hostStarts)
       delete lock.packages['node_modules/@esp-vision/device-core']
       lockedPackages = structuredClone(lock.packages)
       delete lockedPackages['']
+      for (const path of corePackages) {
+        if (!hostPackages.has(path)) delete lockedPackages[path]
+      }
       await writeFile(join(consumer, 'package-lock.json'), JSON.stringify(lock, null, 2) + '\n')
     } catch (error) {
       if (error.code === 'ENOENT') throw new Error(`${name} requires a tracked registry package-lock.json`)

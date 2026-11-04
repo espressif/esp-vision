@@ -62,7 +62,7 @@ try {
   api.createDevice({ transport: serialTransport({ python: 'python3', serial: 'not-opened' }) });
   if (typeof DeviceSession !== 'function' || typeof FirmwareFlashSession !== 'function') throw new Error('Missing host adapter APIs');`
   execFileSync(process.execPath, ['--input-type=module', '-e', script], { cwd: consumer, stdio: 'pipe' })
-  for (const required of ['src/node_serial.py', 'scripts/run-tests.mjs', 'tests/hardware-check.mjs', 'tests/device-checks.mjs', 'tests/fixtures/device-checks.py']) {
+  for (const required of ['src/node_serial.py', 'src/jpeg_validate.js', 'scripts/run-tests.mjs', 'tests/hardware-check.mjs', 'tests/device-checks.mjs', 'tests/jpeg-fixtures.mjs', 'tests/test-jpeg-validation.mjs', 'tests/fixtures/device-checks.py']) {
     assert.ok(packed.files.some(({ path }) => path === required), `Missing installed check asset: ${required}`)
   }
   const unitOutput = execFileSync('npm', ['test'], { cwd: installed, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })

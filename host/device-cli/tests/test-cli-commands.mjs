@@ -5,6 +5,40 @@ import assert from 'node:assert/strict'
 import { resolve } from 'node:path'
 import { cliCapabilities, failureEnvelope, parseCli, runCli, successEnvelope } from '../src/cli.js'
 
+test('ROM initialization errors retain bounded operation diagnostics in JSON', () => {
+  const failure = Object.assign(new Error('ROM operation failed'), {
+    code: 'ROM_OPERATION_FAILED', operation: 'initialize', cause: 'Failed to connect: no serial data received',
+  })
+  assert.deepEqual(failureEnvelope('firmware', failure).error, {
+    code: 'ROM_OPERATION_FAILED', message: 'ROM operation failed', operation: 'initialize',
+    detail: 'Failed to connect: no serial data received',
+  })
+  failure.cause = 'x'.repeat(2000)
+  assert.equal(failureEnvelope('firmware', failure).error.detail.length, 1024)
+  failure.cause = new Error('Private nested error')
+  assert.equal(failureEnvelope('firmware', failure).error.detail, undefined)
+})
+
+test('uncertain reset errors retain their outcome without serializing unrelated fields', () => {
+  assert.deepEqual(failureEnvelope('control', Object.assign(new Error('USB gone'), {
+    code: 'USB_GONE', reset: { acknowledged: false, outcome: 'unknown', private: 'excluded' },
+  })).error, {
+    code: 'USB_GONE', message: 'USB gone', reset: { acknowledged: false, outcome: 'unknown' },
+  })
+})
+
+test('ROM handoff errors distinguish command uncertainty, observed state and cleanup', () => {
+  const failure = Object.assign(new Error('ROM did not re-enumerate'), {
+    code: 'ROM_PORT_REBIND_TIMEOUT', transition: {
+      command: { attempted: true, acknowledged: false, outcome: 'unknown', private: 'excluded' },
+      observed: null, cleanup: { ok: false, private: 'excluded' }, private: 'excluded',
+    },
+  })
+  assert.deepEqual(failureEnvelope('firmware', failure).error.transition, {
+    command: { attempted: true, acknowledged: false, outcome: 'unknown' }, observed: null, cleanup: { ok: false },
+  })
+})
+
 function harness(overrides = {}) {
   const calls = [], events = []
   const listeners = new Map()
