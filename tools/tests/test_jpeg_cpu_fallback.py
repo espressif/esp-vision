@@ -32,6 +32,8 @@ typedef int esp_err_t;
 #define ESP_ERR_NO_MEM 6
 #define ESP_ERR_TIMEOUT 7
 #define MALLOC_CAP_8BIT 1
+#define ESP_CACHE_MSYNC_FLAG_INVALIDATE 1
+#define ESP_CACHE_MSYNC_FLAG_DIR_C2M 4
 #define JPEG_ENC_ALLOC_INPUT_BUFFER 0
 #define JPEG_ENC_ALLOC_OUTPUT_BUFFER 1
 #define ESP_VISION_HAS_NEW_JPEG_ENCODER 0
@@ -45,6 +47,8 @@ typedef struct {uint32_t width,height;int src_type,sub_sample,image_quality;} jp
 static struct {void *encoder;uint8_t *input_buf,*jpeg_buf,*cpu_buf;size_t input_buf_size,jpeg_buf_size,cpu_buf_size;} s_jpeg;
 static size_t idf_calls,scratch_calls,cpu_calls,hardware_calls,live_bytes,peak_bytes,shrink_calls,engine_calls;
 static int engine_result;
+static size_t cache_calls;
+static int cache_result,output_dirty,inject_eviction;
 static bool s_jpeg_hw_unavailable;
 static size_t native_largest=2u<<20,scratch_capacity;
 static size_t requested[64];
@@ -93,7 +97,14 @@ static void *jpeg_alloc_encoder_mem(size_t size,const jpeg_encode_memory_alloc_c
     assert(cfg->buffer_direction==0 || cfg->buffer_direction==1);
     idf_calls++;assert(idf_calls<64);requested[idf_calls]=size;
     *actual=(size+63)&~(size_t)63;
-    return (fail_mask & ((uint64_t)1<<idf_calls)) ? NULL : tracked_alloc(*actual);
+    if(fail_mask & ((uint64_t)1<<idf_calls))return NULL;
+    uint8_t *result=tracked_alloc(*actual);
+    if(cfg->buffer_direction==JPEG_ENC_ALLOC_OUTPUT_BUFFER) {
+        // The actual IDF allocator is aligned_calloc: output cache lines start
+        // dirty even though DMA will replace their backing memory.
+        memset(result,0,*actual);output_dirty=1;
+    }
+    return result;
 }
 static void *esp_vision_memory_malloc(size_t size,uint32_t caps) {
     assert(size>=1024 && size<=JPEG_MAX_ALLOC_SIZE && size<=native_largest-64 && caps==MALLOC_CAP_8BIT);
@@ -129,6 +140,15 @@ static void *esp_vision_memory_realloc(void *data,size_t size,uint32_t caps) {
     }
     abort();
 }
+static int esp_cache_msync(void *address,size_t size,int flags) {
+    assert(address==s_jpeg.jpeg_buf && size==s_jpeg.jpeg_buf_size);
+    assert(((uintptr_t)address%64)==0 && size%64==0);
+    assert(flags==(ESP_CACHE_MSYNC_FLAG_DIR_C2M|ESP_CACHE_MSYNC_FLAG_INVALIDATE));
+    assert(!s_jpeg.cpu_buf && !s_jpeg.cpu_buf_size);
+    cache_calls++;
+    if(cache_result!=ESP_OK)return cache_result;
+    output_dirty=0;return ESP_OK;
+}
 static bool esp_vision_camera_is_vm_task(void) {return vm_task;}
 static int esp_vision_jpeg_ensure_encoder(void) {engine_calls++;s_jpeg.encoder=(void *)(uintptr_t)1;return engine_result;}
 static int jpeg_del_encoder_engine(void *engine) {assert(engine);return ESP_OK;}
@@ -147,6 +167,17 @@ static int jpeg_encoder_process(void *engine,const jpeg_encode_cfg_t *cfg,const 
         image_t dst={.w=src.w,.h=src.h,.pixfmt=PIXFORMAT_JPEG,.size=capacity,.pixels=output};
         assert(!imlib_jpeg_compress(&src,&dst,cfg->image_quality,false,JPEG_SUBSAMPLING_AUTO));
         *length=dst.size;
+        if(inject_eviction && output_dirty) {
+            // Model dirty calloc cache lines evicting after the payload DMA
+            // write and before the driver's M2C. CPU header lines are separate.
+            size_t entropy=0;
+            for(size_t i=2;i+4<dst.size;i++) if(output[i]==0xff && output[i+1]==0xda) {
+                entropy=i+2+((size_t)output[i+2]<<8)+output[i+3];break;
+            }
+            size_t start=(entropy+191)&~(size_t)63;
+            assert(entropy && start+128<dst.size-2);
+            memset(output+start,0,128);
+        }
     }
     return hardware_result;
 }
@@ -173,8 +204,11 @@ void fallback_reset(void) {
     hardware_result=ESP_ERR_TIMEOUT;result_pixels=NULL;result_size=0;
     native_largest=2u<<20;scratch_capacity=0;
     shrink_mode=single_block=0;old_scratch=new_cache=0;
+    cache_calls=0;cache_result=ESP_OK;output_dirty=inject_eviction=0;
 }
 void fallback_engine(int result) {engine_result=result;}
+void fallback_cache(int result,int evict) {cache_result=result;inject_eviction=evict;}
+void fallback_dirty(void) {assert(s_jpeg.jpeg_buf);output_dirty=1;}
 void fallback_shrink(int mode,int only_one_block) {shrink_mode=mode;single_block=only_one_block;}
 void fallback_largest(size_t value) {native_largest=value;}
 void fallback_config(uint64_t failures,int scratch,int fault,int hardware,int vm) {
@@ -196,6 +230,7 @@ size_t fallback_value(int field) {
       case 9:return scratch_capacity;
       case 10:return s_jpeg.cpu_buf_size;case 11:return shrink_calls;
       case 12:return old_scratch;case 13:return new_cache;case 14:return engine_calls;
+      case 15:return cache_calls;
       default:abort();
     }
 }
@@ -257,6 +292,7 @@ class JpegCpuFallbackTests(unittest.TestCase):
         self.lib.fallback_requested.restype = ctypes.c_size_t
         self.lib.fallback_largest.argtypes = [ctypes.c_size_t]
         self.lib.fallback_engine.argtypes = [ctypes.c_int]
+        self.lib.fallback_cache.argtypes = [ctypes.c_int, ctypes.c_int]
         self.lib.fallback_shrink.argtypes = [ctypes.c_int, ctypes.c_int]
         self.lib.fallback_reset()
         self.addCleanup(self.lib.fallback_reset)
@@ -443,6 +479,55 @@ class JpegCpuFallbackTests(unittest.TestCase):
         self.assert_empty()
         self.assertEqual(self.lib.fallback_value(2), 0)
         self.assertEqual(self.lib.fallback_value(3), 0)
+
+    def test_output_handoff_prevents_dirty_calloc_eviction_corrupting_entropy(self):
+        ffmpeg = shutil.which('ffmpeg')
+        if not ffmpeg:
+            self.skipTest('FFmpeg required for independent strict entropy decoding')
+        # Detailed source pattern ensures a real multi-cache-line entropy scan.
+        raw = bytes((i * 37 + (i // 320) * 13) & 255 for i in range(320 * 240))
+        self.lib.fallback_config(0, 0, 0, 0, 1)
+        self.lib.fallback_cache(0, 0)
+        result, reference = self.encode(320, 240, color=False, data=raw)
+        self.assertEqual(result, 0)
+        self.lib.fallback_cache(0, 1)
+        for _ in range(3):
+            self.lib.fallback_dirty()
+            result, jpeg = self.encode(320, 240, color=False, data=raw)
+            self.assertEqual(result, 0)
+            self.assertEqual(jpeg, reference, 'Dirty-line eviction must not change even decodable entropy bytes')
+            decoded = subprocess.run([ffmpeg, '-v', 'error', '-xerror', '-err_detect', 'explode',
+                                      '-f', 'mjpeg', '-i', 'pipe:0', '-f', 'null', '-'],
+                                     input=jpeg, capture_output=True)
+            self.assertEqual(decoded.returncode, 0, decoded.stderr.decode())
+            self.assertEqual(decoded.stderr, b'')
+        self.assertEqual(self.lib.fallback_value(15), 4)
+        self.assertEqual(self.lib.fallback_value(4), 4)
+        self.assertEqual(self.lib.fallback_value(1), 2, 'Hot-path output reuses its owned aligned allocation')
+
+    def test_output_handoff_failure_stops_before_dma_and_does_not_fall_back(self):
+        self.lib.fallback_config(0, 0, 0, 0, 1)
+        self.lib.fallback_cache(5, 1)
+        self.assertEqual(self.encode(320, 240)[0], 5)
+        self.assert_empty()
+        self.assertEqual(self.lib.fallback_value(15), 1)
+        self.assertEqual(self.lib.fallback_value(4), 0)
+        self.assertEqual(self.lib.fallback_value(3), 0)
+        self.lib.fallback_cache(0, 0)
+        self.assertEqual(self.encode(320, 240)[0], 0)
+        self.assertEqual(self.lib.fallback_value(15), 2)
+        self.assertEqual(self.lib.fallback_value(4), 1)
+        self.assertEqual(self.lib.fallback_value(1), 2)
+
+    def test_cpu_fallback_never_synchronizes_the_hardware_output(self):
+        self.lib.fallback_config(1 << 2, 0, 0, 0, 1)
+        self.lib.fallback_cache(5, 1)
+        result, jpeg = self.encode(320, 240)
+        self.assertEqual(result, 0)
+        self.check_decoded(jpeg, (320, 240), True)
+        self.assertEqual(self.lib.fallback_value(15), 0)
+        self.assertEqual(self.lib.fallback_value(4), 0)
+        self.assertEqual(self.lib.fallback_value(3), 1)
 
     def test_hardware_process_failure_never_falls_back(self):
         self.lib.fallback_config(0, 0, 0, 7, 1)

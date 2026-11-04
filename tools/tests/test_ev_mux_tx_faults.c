@@ -25,6 +25,11 @@ static unsigned int s_heap_free_calls;
 static unsigned int s_heap_fail_next;
 static unsigned int s_heap_last_caps;
 static size_t s_heap_last_size;
+static size_t s_heap_live_bytes;
+static struct {
+    void *pointer;
+    size_t bytes;
+} s_heap_blocks[64];
 
 void *heap_caps_malloc(size_t size, unsigned int caps)
 {
@@ -35,12 +40,40 @@ void *heap_caps_malloc(size_t size, unsigned int caps)
         --s_heap_fail_next;
         return NULL;
     }
-    return malloc(size);
+    void *pointer = malloc(size);
+    assert(pointer != NULL);
+    for (size_t i = 0; i < 64; ++i) {
+        if (s_heap_blocks[i].pointer == NULL) {
+            s_heap_blocks[i].pointer = pointer;
+            s_heap_blocks[i].bytes = size;
+            s_heap_live_bytes += size;
+            return pointer;
+        }
+    }
+    assert(false);
+    return NULL;
 }
 
 void heap_caps_free(void *pointer)
 {
     if (pointer != NULL) {
+        // Actual production calls must never free storage still referenced by
+        // an active, pending or shared observer frame.
+        assert(!s_large_frame.used || s_large_frame.payload != pointer);
+        for (size_t i = 0; i < EV_MUX_PREVIEW_FRAMES; ++i) {
+            assert(!s_preview_frames[i].used || s_preview_frames[i].payload != pointer);
+        }
+        bool found = false;
+        for (size_t i = 0; i < 64; ++i) {
+            if (s_heap_blocks[i].pointer == pointer) {
+                s_heap_live_bytes -= s_heap_blocks[i].bytes;
+                s_heap_blocks[i].pointer = NULL;
+                s_heap_blocks[i].bytes = 0;
+                found = true;
+                break;
+            }
+        }
+        assert(found);
         ++s_heap_free_calls;
         free(pointer);
     }
@@ -190,6 +223,24 @@ static void mock_reset_mux(void)
     __atomic_store_n(&s_tx_stale_count, 0, __ATOMIC_RELAXED);
     ev_vm_output_reset();
     mock_reset_io();
+}
+
+static void mock_clear_special_cache(void)
+{
+    // Explicit cold-cache fixture after mock_reset_mux detached all frames.
+    heap_caps_free(s_large_buffer);
+    s_large_buffer = NULL;
+    s_large_capacity = 0;
+    for (size_t i = 0; i < 2; ++i) {
+        heap_caps_free(s_preview_buffers[i]);
+        s_preview_buffers[i] = NULL;
+        s_preview_capacities[i] = 0;
+    }
+    for (size_t i = 0; i < EV_MUX_OBSERVER_BUFFERS; ++i) {
+        heap_caps_free(s_observer_buffers[i]);
+        s_observer_buffers[i] = NULL;
+        s_observer_capacities[i] = 0;
+    }
 }
 
 static void assert_mux_init_unpublished(void)
@@ -459,7 +510,7 @@ static size_t mock_drain_worker(void)
         for (size_t target = 0; target < EV_MUX_TARGET_COUNT; ++target) {
             queued |= s_targets[target].frames_used != 0;
         }
-        queued |= s_preview_pending >= 0 || s_preview_active >= 0;
+        queued |= s_preview_pending >= 0 || s_preview_active >= 0 || s_large_frame.used;
         for (size_t i = 2; i < EV_MUX_PREVIEW_FRAMES; ++i) {
             queued |= s_preview_frames[i].used;
         }
@@ -1000,6 +1051,7 @@ static void test_partial_old_generation_is_not_sent_to_new_owner(void)
 static void test_lazy_pools_latest_preview_and_large_copy(void)
 {
     mock_reset_mux();
+    mock_clear_special_cache();
     assert(!ev_mux_preview_slot_available());
     assert(!ev_mux_large_payload_available());
     assert(s_preview_buffers[0] == NULL);
@@ -1016,7 +1068,7 @@ static void test_lazy_pools_latest_preview_and_large_copy(void)
         .tx_class = EV_MUX_TX_PREVIEW,
     };
     assert(ev_mux_preview_available(EV_STREAM_USER));
-    assert((s_preview_buffers[0] != NULL) || (s_preview_buffers[1] != NULL));
+    assert(s_preview_buffers[0] == NULL && s_preview_buffers[1] == NULL);
     assert(ev_mux_submit_preview_link(&preview_options, "{\"p\":1}", "old", 3) == ESP_OK);
     assert(ev_mux_submit_preview_link(&preview_options, "{\"p\":2}", "latest", 6) == ESP_OK);
     assert(ev_mux_tx_drop_count() == 1);
@@ -1043,7 +1095,7 @@ static void test_lazy_pools_latest_preview_and_large_copy(void)
         .tx_class = EV_MUX_TX_CONTROL,
     };
     assert(ev_mux_large_payload_available());
-    assert(s_large_buffer != NULL);
+    assert(s_large_buffer == NULL);
 
     static uint8_t large_payload[20000];
     static uint8_t expected_large[21000];
@@ -2074,6 +2126,258 @@ static void test_uart_pause_keeps_observer_fanout_and_revocation_independent(voi
     assert(s_targets[EV_TRANSPORT_UART].frames_used == 0);
 }
 
+#ifdef EV_MUX_SPECIAL_BUFFER_MIN
+static void test_availability_queries_never_allocate_payload_storage(void)
+{
+    mock_reset_mux();
+    mock_clear_special_cache();
+    ev_link_ref_t owner = mock_tcp_link(2);
+    static const char session[] = "0123456789abcdef0123456789abcdef";
+    mock_set_owner(&owner, session);
+    unsigned int allocations = s_heap_alloc_calls;
+    s_heap_fail_next = 1;
+    for (size_t i = 0; i < 32; ++i) {
+        assert(ev_mux_large_payload_available());
+        assert(ev_mux_preview_slot_available());
+        assert(ev_mux_preview_available(EV_STREAM_USER));
+    }
+    assert(s_heap_alloc_calls == allocations && s_heap_fail_next == 1);
+    assert(s_large_buffer == NULL && s_preview_buffers[0] == NULL && s_preview_buffers[1] == NULL);
+    s_large_frame.used = true;
+    assert(!ev_mux_large_payload_available());
+    s_large_frame.used = false;
+    s_heap_fail_next = 0;
+}
+
+static void test_owner_pending_growth_oom_keeps_original_frame_and_partial_storage(void)
+{
+    mock_reset_mux();
+    mock_clear_special_cache();
+    ev_link_ref_t owner = mock_tcp_link(0);
+    static const char session[] = "0123456789abcdef0123456789abcdef";
+    mock_set_owner(&owner, session);
+    ev_mux_submit_options_t options = {.link = &owner, .session_id = session,
+                                       .vm_epoch = 23, .tx_class = EV_MUX_TX_PREVIEW
+                                      };
+    uint8_t payload[3000];
+    memset(payload, 'G', sizeof(payload));
+    size_t baseline = s_heap_live_bytes;
+    assert(ev_mux_submit_preview_link(&options, observer_metadata, "first", 5) == ESP_OK);
+    int8_t active_pool = s_preview_pending;
+    assert(s_preview_capacities[active_pool] == 1024);
+    s_max_write = 7;
+    ev_mux_tx_worker_step();
+    assert(s_preview_active == active_pool);
+    uint8_t *active_bytes = s_preview_buffers[active_pool];
+    assert(s_preview_frames[active_pool].frame.tx_offset == 7);
+    assert(ev_mux_submit_preview_link(&options, observer_metadata, "old", 3) == ESP_OK);
+    int8_t pending_pool = s_preview_pending;
+    assert(active_pool != pending_pool);
+    ev_mux_special_frame_t pending = s_preview_frames[pending_pool];
+    unsigned int frees = s_heap_free_calls;
+    uint32_t drops = ev_mux_tx_drop_count();
+    s_heap_fail_next = 1;
+    assert(ev_mux_submit_preview_link(&options, observer_metadata, payload, sizeof(payload)) == ESP_ERR_NO_MEM);
+    assert(s_heap_fail_next == 0 && s_heap_free_calls == frees);
+    // Only the rejected new submission is counted; the old pending survives.
+    assert(ev_mux_tx_drop_count() == drops + 1);
+    assert(memcmp(&pending, &s_preview_frames[pending_pool], sizeof(pending)) == 0);
+    assert(memcmp(pending.payload, "old", 3) == 0);
+    assert(s_preview_capacities[pending_pool] == 1024);
+    assert(ev_mux_submit_preview_link(&options, observer_metadata, payload, sizeof(payload)) == ESP_OK);
+    assert(s_preview_capacities[pending_pool] == 4096);
+    assert(s_preview_buffers[active_pool] == active_bytes);
+    assert(s_preview_frames[active_pool].frame.tx_offset == 7);
+    assert(memcmp(active_bytes, "first", 5) == 0);
+    assert(s_heap_free_calls == frees + 1);
+    assert(s_heap_live_bytes - baseline == 1024 + 4096);
+    unsigned int allocations = s_heap_alloc_calls;
+    assert(ev_mux_submit_preview_link(&options, observer_metadata, "reuse", 5) == ESP_OK);
+    assert(s_heap_alloc_calls == allocations);
+    s_max_write = SIZE_MAX;
+    mock_drain_worker();
+    mock_parsed_frame_t first, last;
+    assert(mock_parse_frame(s_mock_links[0].output, s_mock_links[0].output_len, 0, &first));
+    assert(first.payload_len == 5 && memcmp(first.payload, "first", 5) == 0);
+    assert(mock_parse_frame(s_mock_links[0].output, s_mock_links[0].output_len, first.total_len, &last));
+    assert(last.payload_len == 5 && memcmp(last.payload, "reuse", 5) == 0);
+}
+
+static void test_large_capacity_zero_max_oversize_and_failed_growth(void)
+{
+    mock_reset_mux();
+    mock_clear_special_cache();
+    ev_link_ref_t owner = mock_tcp_link(0);
+    static const char session[] = "0123456789abcdef0123456789abcdef";
+    mock_set_owner(&owner, session);
+    ev_mux_submit_options_t options = {.link = &owner, .session_id = session,
+                                       .vm_epoch = 23, .tx_class = EV_MUX_TX_CONTROL
+                                      };
+    size_t baseline = s_heap_live_bytes;
+    assert(ev_mux_submit_large_link(&options, "{}", NULL, 0, NULL) == ESP_OK);
+    assert(s_large_capacity == 1024 && s_heap_live_bytes - baseline == 1024);
+    assert(!ev_mux_large_payload_available());
+    mock_drain_worker();
+    assert(ev_mux_large_payload_available());
+    uint8_t *old = s_large_buffer;
+    uint8_t larger[1025];
+    memset(larger, 'N', sizeof(larger));
+    s_heap_fail_next = 1;
+    assert(ev_mux_submit_large_link(&options, "{\"grow\":1}", larger, sizeof(larger), NULL) == ESP_ERR_NO_MEM);
+    assert(!s_large_frame.used && s_large_buffer == old && s_large_capacity == 1024);
+    assert(ev_mux_submit_large_link(&options, "{\"grow\":2}", larger, sizeof(larger), NULL) == ESP_OK);
+    assert(s_large_capacity == 2048 && s_heap_live_bytes - baseline == 2048);
+    ev_mux_special_frame_t queued = s_large_frame;
+    unsigned int allocations = s_heap_alloc_calls;
+    assert(ev_mux_submit_large_link(&options, "{}", larger, sizeof(larger), NULL) == ESP_ERR_TIMEOUT);
+    assert(s_heap_alloc_calls == allocations && memcmp(&queued, &s_large_frame, sizeof(queued)) == 0);
+    mock_drain_worker();
+    static uint8_t maximum[EV_MUX_LARGE_PAYLOAD_MAX + 1];
+    memset(maximum, 'M', sizeof(maximum));
+    assert(ev_mux_submit_large_link(&options, "{\"max\":1}", maximum, EV_MUX_LARGE_PAYLOAD_MAX, NULL) == ESP_OK);
+    assert(s_large_capacity == EV_MUX_LARGE_PAYLOAD_MAX);
+    assert(s_heap_live_bytes - baseline == EV_MUX_LARGE_PAYLOAD_MAX);
+    queued = s_large_frame;
+    allocations = s_heap_alloc_calls;
+    assert(ev_mux_submit_large_link(&options, "{}", maximum, sizeof(maximum), NULL) == ESP_ERR_INVALID_SIZE);
+    assert(s_heap_alloc_calls == allocations && memcmp(&queued, &s_large_frame, sizeof(queued)) == 0);
+    ev_mux_cancel_session(&owner, session);
+    assert(!s_large_frame.used);
+}
+
+static void test_observer_transaction_keeps_shared_pending_on_oom(void)
+{
+    mock_reset_mux();
+    mock_clear_special_cache();
+    ev_link_ref_t a = mock_tcp_link(0), b = mock_tcp_link(1);
+    assert(ev_mux_preview_subscribe(&a, true) == ESP_OK);
+    assert(ev_mux_preview_subscribe(&b, true) == ESP_OK);
+    size_t baseline = s_heap_live_bytes;
+    assert(ev_mux_preview_publish_observers(observer_metadata, "old", 3) == ESP_OK);
+    assert(s_observer_capacities[0] == 1024 && s_heap_live_bytes - baseline == 1024);
+    ev_mux_special_frame_t first = s_preview_frames[2], second = s_preview_frames[3];
+    assert(first.payload == second.payload);
+    // A previously attempted but still zero-byte frame retains its send budget.
+    s_preview_frames[2].frame.attempted = true;
+    s_preview_frames[2].frame.start_ms = 12;
+    s_preview_frames[2].frame.last_progress_ms = 34;
+    first = s_preview_frames[2];
+    uint8_t payload[3000];
+    memset(payload, 'B', sizeof(payload));
+    unsigned int frees = s_heap_free_calls;
+    uint32_t drops = ev_mux_tx_drop_count();
+    s_heap_fail_next = 1;
+    assert(ev_mux_preview_publish_observers(observer_metadata, payload, sizeof(payload)) == ESP_ERR_NO_MEM);
+    assert(s_heap_free_calls == frees && ev_mux_tx_drop_count() == drops);
+    assert(memcmp(&first, &s_preview_frames[2], sizeof(first)) == 0);
+    assert(memcmp(&second, &s_preview_frames[3], sizeof(second)) == 0);
+    assert(s_observer_buffers[0] == first.payload && s_observer_capacities[0] == 1024);
+    assert(memcmp(first.payload, "old", 3) == 0);
+    assert(ev_mux_preview_publish_observers(observer_metadata, payload, sizeof(payload)) == ESP_OK);
+    assert(s_observer_capacities[0] == 4096 && s_heap_live_bytes - baseline == 4096);
+    assert(s_preview_frames[2].payload == s_preview_frames[3].payload);
+    assert(s_preview_frames[2].frame.attempted && s_preview_frames[2].frame.start_ms == 12 &&
+           s_preview_frames[2].frame.last_progress_ms == 34);
+    assert(s_heap_free_calls == frees + 1);
+    unsigned int allocations = s_heap_alloc_calls;
+    assert(ev_mux_preview_publish_observers(observer_metadata, "reuse", 5) == ESP_OK);
+    assert(s_heap_alloc_calls == allocations);
+    frees = s_heap_free_calls;
+    assert(ev_mux_preview_subscribe(&a, false) == ESP_OK);
+    assert(s_heap_free_calls == frees);
+    assert(ev_mux_preview_subscribe(&b, false) == ESP_OK);
+    assert(s_heap_free_calls == frees && s_observer_capacities[0] == 4096);
+}
+
+static void test_observer_growth_never_moves_any_partial_shared_buffer(void)
+{
+    mock_reset_mux();
+    mock_clear_special_cache();
+    ev_link_ref_t slow = mock_tcp_link(0), fast = mock_tcp_link(1);
+    assert(ev_mux_preview_subscribe(&slow, true) == ESP_OK);
+    assert(ev_mux_preview_subscribe(&fast, true) == ESP_OK);
+    uint8_t first[200];
+    memset(first, 'A', sizeof(first));
+    assert(ev_mux_preview_publish_observers(observer_metadata, first, sizeof(first)) == ESP_OK);
+    s_max_write = 7;
+    ev_mux_tx_worker_step();
+    uint8_t *shared = s_observer_buffers[0];
+    assert(s_preview_frames[2].frame.tx_offset == 7 && s_preview_frames[3].frame.tx_offset == 7);
+    s_block_slot[0] = true;
+    uint8_t next[1300];
+    memset(next, 'B', sizeof(next));
+    assert(ev_mux_preview_publish_observers(observer_metadata, next, sizeof(next)) == ESP_OK);
+    assert(s_observer_capacities[1] == 2048);
+    // Let only the fast observer finish frame A and begin frame B.
+    bool second_started = false;
+    for (unsigned step = 0; step < 200 && !second_started; ++step) {
+        ev_mux_tx_worker_step();
+        for (size_t i = 2; i < EV_MUX_PREVIEW_FRAMES; ++i) {
+            if (s_preview_frames[i].used && s_preview_frames[i].frame.link.slot == 1 &&
+                    s_preview_frames[i].payload == s_observer_buffers[1] &&
+                    s_preview_frames[i].frame.tx_offset != 0) {
+                second_started = true;
+            }
+        }
+    }
+    assert(second_started);
+    uint8_t *second = s_observer_buffers[1];
+    uint8_t larger[3000];
+    memset(larger, 'C', sizeof(larger));
+    assert(ev_mux_preview_publish_observers(observer_metadata, larger, sizeof(larger)) == ESP_OK);
+    assert(s_observer_capacities[2] == 4096);
+    assert(s_observer_buffers[0] == shared && memcmp(shared, first, sizeof(first)) == 0);
+    assert(s_observer_buffers[1] == second && memcmp(second, next, sizeof(next)) == 0);
+    unsigned int frees = s_heap_free_calls;
+    assert(ev_mux_preview_subscribe(&slow, false) == ESP_OK);
+    assert(ev_mux_preview_subscribe(&fast, false) == ESP_OK);
+    assert(s_heap_free_calls == frees);
+    s_block_slot[0] = false;
+    s_max_write = SIZE_MAX;
+    mock_drain_worker();
+    assert(s_observer_buffers[0] == shared && s_observer_buffers[1] == second);
+}
+static void test_preview_and_observer_payload_bounds(void)
+{
+    static uint8_t payload[EV_MUX_LARGE_PAYLOAD_MAX + 1];
+    memset(payload, 'P', sizeof(payload));
+    mock_reset_mux();
+    mock_clear_special_cache();
+    ev_link_ref_t owner = mock_tcp_link(2);
+    static const char session[] = "0123456789abcdef0123456789abcdef";
+    mock_set_owner(&owner, session);
+    ev_mux_submit_options_t options = {.link = &owner, .session_id = session,
+                                       .vm_epoch = 23, .tx_class = EV_MUX_TX_PREVIEW
+                                      };
+    assert(ev_mux_submit_preview_link(&options, observer_metadata, NULL, 0) == ESP_OK);
+    int8_t pool = s_preview_pending;
+    assert(s_preview_capacities[pool] == 1024 && s_preview_frames[pool].frame.payload_len == 0);
+    assert(ev_mux_submit_preview_link(&options, observer_metadata, payload, EV_MUX_LARGE_PAYLOAD_MAX) == ESP_OK);
+    assert(s_preview_capacities[pool] == EV_MUX_LARGE_PAYLOAD_MAX);
+    ev_mux_special_frame_t saved = s_preview_frames[pool];
+    unsigned int allocations = s_heap_alloc_calls;
+    assert(ev_mux_submit_preview_link(&options, observer_metadata, payload, sizeof(payload)) == ESP_ERR_INVALID_SIZE);
+    assert(s_heap_alloc_calls == allocations && memcmp(&saved, &s_preview_frames[pool], sizeof(saved)) == 0);
+    mock_reset_mux();
+    mock_clear_special_cache();
+    ev_link_ref_t a = mock_tcp_link(0), b = mock_tcp_link(1);
+    assert(ev_mux_preview_subscribe(&a, true) == ESP_OK);
+    assert(ev_mux_preview_subscribe(&b, true) == ESP_OK);
+    assert(ev_mux_preview_publish_observers(observer_metadata, payload, 0) == ESP_OK);
+    assert(s_observer_capacities[0] == 1024 && s_preview_frames[2].frame.payload_len == 0);
+    assert(ev_mux_preview_publish_observers(observer_metadata, payload, EV_MUX_LARGE_PAYLOAD_MAX) == ESP_OK);
+    assert(s_observer_capacities[0] == EV_MUX_LARGE_PAYLOAD_MAX);
+    saved = s_preview_frames[2];
+    ev_mux_special_frame_t shared = s_preview_frames[3];
+    assert(saved.payload == shared.payload && memcmp(saved.payload, payload, EV_MUX_LARGE_PAYLOAD_MAX) == 0);
+    allocations = s_heap_alloc_calls;
+    assert(ev_mux_preview_publish_observers(observer_metadata, payload, sizeof(payload)) == ESP_ERR_INVALID_SIZE);
+    assert(s_heap_alloc_calls == allocations && memcmp(&saved, &s_preview_frames[2], sizeof(saved)) == 0);
+    assert(memcmp(&shared, &s_preview_frames[3], sizeof(shared)) == 0);
+}
+
+#endif
+
 int main(void)
 {
     ev_mux_test_time_us = 0;
@@ -2113,6 +2417,14 @@ int main(void)
     test_slow_observer_does_not_block_fast_observer_or_control();
     test_uart_pause_and_dynamic_deadline();
     test_uart_pause_keeps_observer_fanout_and_revocation_independent();
+#ifdef EV_MUX_SPECIAL_BUFFER_MIN
+    test_availability_queries_never_allocate_payload_storage();
+    test_owner_pending_growth_oom_keeps_original_frame_and_partial_storage();
+    test_large_capacity_zero_max_oversize_and_failed_growth();
+    test_observer_transaction_keeps_shared_pending_on_oom();
+    test_observer_growth_never_moves_any_partial_shared_buffer();
+    test_preview_and_observer_payload_bounds();
+#endif
     puts("EV-MUX TX fault-injection tests passed");
     return 0;
 }

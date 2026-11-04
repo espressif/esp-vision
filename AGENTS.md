@@ -45,6 +45,7 @@ Prefer CI for the final firmware matrix after the feature is complete. SDK-only 
 - SDK changes: use Node.js 22+, install dependencies in `host/device-core` with `npm install --ignore-scripts --no-audit --no-fund --package-lock=false`, then run `npm run release:check` (tests, schema, package and publish dry run).
 - Firmware host checks: `python -m unittest discover -s tools/tests -p 'test_*.py' -v`.
 - Hardware checks: from `host/device-core`, start with `npm run test:hardware -- --help`; reuse this public-SDK entry point. CI flashing delegates to it through `tools/ci/flash_and_test.py`.
+- Development boards may be reflashed directly. Do not automatically back up or restore installed firmware, or add whole-flash/protected-region preservation reads before or after flashing; these operations are too slow for routine development. Keep normal programming verification appropriate to the task. Back up or restore firmware only when the user explicitly requests it.
 - Run applicable `pre-commit` hooks. Respect the upstream/generated exclusions in `.pre-commit-config.yaml`; never rewrite upstream license headers. Syntax-check changed stubs and validate bilingual documentation/MCP references when relevant.
 - Report tested boards, interfaces and commit/pipeline coverage accurately. Historical success does not validate a newer commit; canceled jobs are neither passing nor failing tests. Never format device storage to hide a test failure.
 

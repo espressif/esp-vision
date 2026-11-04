@@ -1,11 +1,14 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import base64
+from collections import deque
+import hashlib
 import importlib.util
 import io
 import json
 from pathlib import Path
 import sys
+import struct
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -14,6 +17,11 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location('node_rom', ROOT / 'host/device-core/src/node_rom.py')
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+try:
+    import esptool as REAL_ESPTOOL
+    from esptool.loader import ESPLoader
+except ImportError:
+    REAL_ESPTOOL = ESPLoader = None
 
 
 class HostRomAdapterTests(unittest.TestCase):
@@ -25,6 +33,16 @@ class HostRomAdapterTests(unittest.TestCase):
                               get_security_info=lambda: {'flags': 0, 'flash_crypt_cnt': 0},
                               change_baud=lambda value: calls.append(('baud', value)),
                               read_flash=lambda *_: b'AB', hard_reset=lambda: calls.append('reset'))
+
+        esp.FLASH_SECTOR_SIZE = 4096
+        esp.ESP_CMDS = {'READ_FLASH': 0xd2}
+        esp.check_command = Mock(return_value=0)
+
+        def read_flash(offset, length):
+            esp.check_command('read flash', esp.ESP_CMDS['READ_FLASH'],
+                              struct.pack('<IIII', offset, length, esp.FLASH_SECTOR_SIZE, 64))
+            return b'AB'
+        esp.read_flash = read_flash
 
         class Port:
             is_open = False
@@ -69,6 +87,7 @@ class HostRomAdapterTests(unittest.TestCase):
         def run_stub(loader):
             self.assertIs(loader, esp)
             calls.append(('stub', loader.IS_STUB))
+            loader.IS_STUB = True
             return loader
 
         def write_flash(loader, files, **options):
@@ -78,7 +97,7 @@ class HostRomAdapterTests(unittest.TestCase):
             self.assertEqual(options, {'flash_mode': 'keep', 'flash_freq': 'keep', 'flash_size': 'keep', 'compress': True})
             calls.append('write')
 
-        tool = SimpleNamespace(__version__='5.4.0', detect_chip=Mock(side_effect=detect_chip),
+        tool = SimpleNamespace(__version__='5.6.0', detect_chip=Mock(side_effect=detect_chip),
                                run_stub=run_stub, attach_flash=lambda _: calls.append('attach'),
                                write_flash=write_flash)
         comports = Mock(return_value=list(descriptors), side_effect=enumeration_error)
@@ -198,7 +217,7 @@ class HostRomAdapterTests(unittest.TestCase):
         self.assertFalse(fixture.ports[0].is_open)
 
     def test_repeated_initialization_is_rejected_without_replacing_or_leaking_port(self):
-        fixture = self.fixture()
+        fixture = self.fixture(stub=True)
         responses = self.run_process(fixture, [('initialize', []), ('initialize', []), ('read', [65536, 2])])
         self.assertEqual(responses[1]['error'], 'ROM_OPERATION_FAILED')
         self.assertIn('already initialized', responses[1]['detail'])
@@ -231,6 +250,179 @@ class HostRomAdapterTests(unittest.TestCase):
         self.assertIn('Initialize the ROM adapter', responses[1]['detail'])
         self.assertNotIn('write', fixture.calls)
         self.assertEqual(fixture.calls[-1], ('close', 1))
+
+
+    def test_read_rpc_forwards_default_and_explicit_packet_budgets(self):
+        fixture = self.fixture(stub=True)
+        original_check = fixture.esp.check_command
+        responses = self.run_process(fixture, [('initialize', []), ('read', [65536, 2]),
+            ('read', [65536, 2, {'blockSize': 4096, 'maxInFlight': 2}])])
+        self.assertTrue(all('error' not in reply for reply in responses))
+        self.assertEqual(responses[1]['result'], 'QUI=')
+        self.assertEqual([struct.unpack('<IIII', call.args[2]) for call in original_check.call_args_list],
+                         [(65536, 2, 1024, 1), (65536, 2, 4096, 2)])
+        self.assertIs(fixture.esp.check_command, original_check)
+        self.assertEqual(fixture.esp.FLASH_SECTOR_SIZE, 4096)
+
+    def test_unsupported_esptool_version_is_rejected_before_opening_a_port(self):
+        for version in ['5.3.1', '5.5.0', '5.6.1', '6.0.0']:
+            fixture = self.fixture()
+            fixture.tool.__version__ = version
+            with self.assertRaisesRegex(RuntimeError, 'esptool==5.6.0'):
+                self.run_process(fixture, [('initialize', [])])
+            self.assertEqual(fixture.calls, [])
+            self.assertEqual(fixture.ports, [])
+
+    def test_non_stub_or_invalid_budget_never_issues_read_flash(self):
+        fixture = self.fixture()
+        with self.assertRaisesRegex(RuntimeError, 'flasher stub'):
+            MODULE._read_flash(fixture.esp, 0, 2)
+        fixture.esp.IS_STUB = True
+        for options in [[], {'blockSize': True}, {'blockSize': None}, {'blockSize': 512}, {'maxInFlight': 0},
+                        {'maxInFlight': 65}, {'maxInFlight': None}, {'maxInFlight': False}, {'unknown': 1}]:
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                MODULE._read_flash(fixture.esp, 0, 2, options)
+        for offset, length in [(True, 2), (-1, 2), (0, 0), (0, 0x100000000), (0xffffffff, 2)]:
+            with self.subTest(offset=offset, length=length), self.assertRaises(ValueError):
+                MODULE._read_flash(fixture.esp, offset, length)
+        fixture.esp.check_command.assert_not_called()
+
+
+@unittest.skipUnless(ESPLoader is not None, 'Install external esptool==5.6.0 for real upstream reader regressions')
+class UpstreamBoundedReadTests(unittest.TestCase):
+    def fixture(self, mode=None):
+        self.assertEqual(REAL_ESPTOOL.__version__, '5.6.0', 'Use the exact external reader qualified by production')
+        payload = bytes(range(256)) * 20 + b'END!!'
+
+        class Stub:
+            IS_STUB = True
+            FLASH_SECTOR_SIZE = 4096
+            ESP_CMDS = ESPLoader.ESP_CMDS
+            read_flash = ESPLoader.read_flash
+
+            def __init__(inner):
+                inner._port = SimpleNamespace(timeout=0)
+                inner.commands, inner.acks, inner.frames = [], [], deque()
+
+            def check_command(inner, description, opcode=None, data=b'', *args, **kwargs):
+                inner.commands.append((description, opcode, data, args, kwargs))
+                offset, length, block, window = struct.unpack('<IIII', data)
+                for start in range(0, len(payload), block):
+                    inner.frames.append(payload[start:start + block])
+                inner.frames.append(hashlib.md5(payload).digest())
+                if mode == 'short_packet':
+                    inner.frames[0] = inner.frames[0][:512]
+                if mode == 'wrong_digest':
+                    inner.frames[-1] = b'\0' * 16
+                if mode == 'missing_digest':
+                    inner.frames[-1] = b''
+                return 0
+
+            def read(inner):
+                if mode == 'timeout' and len(inner.acks) == 1:
+                    raise TimeoutError('injected real-reader packet timeout')
+                return inner.frames.popleft()
+
+            def write(inner, data):
+                inner.acks.append(struct.unpack('<I', data)[0])
+
+        return Stub(), payload
+
+    def assert_restored(self, stub):
+        self.assertNotIn('check_command', vars(stub))
+        self.assertNotIn('FLASH_SECTOR_SIZE', vars(stub))
+        self.assertIs(stub.check_command.__func__, type(stub).check_command)
+        self.assertEqual(stub.FLASH_SECTOR_SIZE, 4096)
+
+    def test_real_upstream_method_receives_1024_one_window_and_validates_all_acks_and_md5(self):
+        stub, expected = self.fixture()
+        actual = MODULE._read_flash(stub, 0x10000, len(expected))
+        self.assertEqual(actual, expected)
+        self.assertEqual(len(stub.commands), 1)
+        self.assertEqual(struct.unpack('<IIII', stub.commands[0][2]), (0x10000, len(expected), 1024, 1))
+        self.assertEqual(stub.acks, [1024, 2048, 3072, 4096, 5120, len(expected)])
+        self.assertEqual(len(stub.frames), 0, 'The original reader must consume its final digest')
+        self.assert_restored(stub)
+
+    def test_real_upstream_alternate_budget_keeps_the_original_4096_packet_parser(self):
+        stub, expected = self.fixture()
+        self.assertEqual(MODULE._read_flash(stub, 0, len(expected), {'blockSize': 4096, 'maxInFlight': 2}), expected)
+        self.assertEqual(struct.unpack('<IIII', stub.commands[0][2]), (0, len(expected), 4096, 2))
+        self.assertEqual(stub.acks, [4096, len(expected)])
+        self.assert_restored(stub)
+
+    def test_real_upstream_md5_short_packet_missing_digest_and_timeout_still_fail_without_retry(self):
+        for mode, message in [('wrong_digest', 'Digest mismatch'), ('short_packet', 'Corrupt data'),
+                              ('missing_digest', 'Expected digest'), ('timeout', 'injected real-reader packet timeout')]:
+            with self.subTest(mode=mode):
+                stub, expected = self.fixture(mode)
+                with self.assertRaisesRegex(Exception, message):
+                    MODULE._read_flash(stub, 0, len(expected))
+                self.assertEqual(len(stub.commands), 1)
+                self.assert_restored(stub)
+
+    def test_existing_instance_overrides_are_restored_exactly_after_failure(self):
+        stub, expected = self.fixture('wrong_digest')
+        original = stub.check_command
+        stub.check_command = original
+        stub.FLASH_SECTOR_SIZE = 4096
+        with self.assertRaisesRegex(Exception, 'Digest mismatch'):
+            MODULE._read_flash(stub, 0, len(expected))
+        self.assertIs(vars(stub)['check_command'], original)
+        self.assertEqual(vars(stub)['FLASH_SECTOR_SIZE'], 4096)
+
+    def test_different_range_or_unrecognized_layout_is_rejected_before_read_flash_is_sent(self):
+        for alter in ['offset', 'length', 'window', 'short']:
+            with self.subTest(alter=alter):
+                stub, expected = self.fixture()
+                def wrong_reader(offset, length):
+                    fields = [offset, length, stub.FLASH_SECTOR_SIZE, 64]
+                    if alter == 'offset':
+                        fields[0] += 1
+                    elif alter == 'length':
+                        fields[1] += 1
+                    elif alter == 'window':
+                        fields[3] = 63
+                    data = struct.pack('<IIII', *fields)
+                    stub.check_command('read flash', stub.ESP_CMDS['READ_FLASH'], data[:8] if alter == 'short' else data)
+                    return expected
+                stub.read_flash = wrong_reader
+                with self.assertRaisesRegex(RuntimeError, 'layout'):
+                    MODULE._read_flash(stub, 0, len(expected))
+                self.assertEqual(stub.commands, [])
+                self.assert_restored(stub)
+
+    def test_partial_compatibility_setup_failure_restores_the_packet_size(self):
+        stub, expected = self.fixture()
+        parent = type(stub)
+
+        class RejectCheckOverride(parent):
+            def __setattr__(inner, name, value):
+                if name == 'check_command':
+                    raise RuntimeError('injected check override failure')
+                super().__setattr__(name, value)
+
+        stub = RejectCheckOverride()
+        with self.assertRaisesRegex(RuntimeError, 'injected check override failure'):
+            MODULE._read_flash(stub, 0, len(expected))
+        self.assertEqual(stub.commands, [])
+        self.assert_restored(stub)
+
+    def test_missing_or_duplicate_command_does_not_complete_a_claimed_bounded_read(self):
+        for duplicate in [False, True]:
+            with self.subTest(duplicate=duplicate):
+                stub, expected = self.fixture()
+                def unusual_reader(offset, length):
+                    if duplicate:
+                        for _ in range(2):
+                            stub.check_command('read flash', stub.ESP_CMDS['READ_FLASH'],
+                                struct.pack('<IIII', offset, length, stub.FLASH_SECTOR_SIZE, 64))
+                    return expected
+                stub.read_flash = unusual_reader
+                with self.assertRaises(RuntimeError):
+                    MODULE._read_flash(stub, 0, len(expected))
+                self.assertEqual(len(stub.commands), 1 if duplicate else 0)
+                self.assert_restored(stub)
 
 
 if __name__ == '__main__':

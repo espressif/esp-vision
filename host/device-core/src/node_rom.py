@@ -5,6 +5,7 @@ import base64
 import contextlib
 import json
 import os
+import struct
 import sys
 
 
@@ -59,12 +60,73 @@ def _open_rom(esptool, port):
             first_error = error
 
 
+
+def _read_flash(esp, offset, length, options=None):
+    """Bound the upstream stub reader without replacing its ACK/MD5 parser."""
+    if type(offset) is not int or offset < 0 or type(length) is not int or length <= 0 or length > 0xffffffff or offset + length > 0x100000000:
+        raise ValueError('ROM read requires a positive 32-bit address range')
+    if options is None:
+        options = {}
+    if not isinstance(options, dict) or set(options) - {'blockSize', 'maxInFlight'}:
+        raise ValueError('Unsupported ROM read options')
+    block_size, max_in_flight = options.get('blockSize', 1024), options.get('maxInFlight', 1)
+    if type(block_size) is not int or block_size not in (1024, 4096) or type(max_in_flight) is not int or not 1 <= max_in_flight <= 64:
+        raise ValueError('ROM read requires 1024 or 4096 byte blocks and 1..64 outstanding packets')
+    if not getattr(esp, 'IS_STUB', False):
+        raise RuntimeError('Bounded Flash read requires an initialized flasher stub')
+    if getattr(esp, 'FLASH_SECTOR_SIZE', None) != 4096 or not callable(getattr(esp, 'check_command', None)):
+        raise RuntimeError('Unsupported esptool stub read layout; use esptool==5.6.0')
+    command = esp.ESP_CMDS['READ_FLASH']
+    original_check = esp.check_command
+    missing = object()
+    old_check = vars(esp).get('check_command', missing)
+    old_block = vars(esp).get('FLASH_SECTOR_SIZE', missing)
+    commands = 0
+    block_changed = check_changed = False
+
+    def bounded_check(op_description, op=None, data=b'', *args, **kwargs):
+        nonlocal commands
+        if op == command:
+            commands += 1
+            if commands != 1 or not isinstance(data, bytes) or len(data) != 16:
+                raise RuntimeError('Unsupported esptool READ_FLASH command layout')
+            wire_offset, wire_length, wire_block, wire_window = struct.unpack('<IIII', data)
+            if (wire_offset, wire_length, wire_block, wire_window) != (offset, length, block_size, 64):
+                raise RuntimeError('Unexpected esptool READ_FLASH range or packet layout')
+            data = struct.pack('<IIII', offset, length, block_size, max_in_flight)
+        return original_check(op_description, op, data, *args, **kwargs)
+
+    try:
+        # Upstream 5.6.0 uses this instance field for both its request and its
+        # short-packet validation. Changing only the wire request is invalid.
+        esp.FLASH_SECTOR_SIZE = block_size
+        block_changed = True
+        esp.check_command = bounded_check
+        check_changed = True
+        result = esp.read_flash(offset, length)
+        if commands != 1 or not isinstance(result, bytes) or len(result) != length:
+            raise RuntimeError('Upstream Flash read did not complete the bounded request')
+        return result
+    finally:
+        try:
+            if check_changed:
+                if old_check is missing:
+                    del esp.check_command
+                else:
+                    esp.check_command = old_check
+        finally:
+            if block_changed:
+                if old_block is missing:
+                    del esp.FLASH_SECTOR_SIZE
+                else:
+                    esp.FLASH_SECTOR_SIZE = old_block
+
+
 def main():
     with contextlib.redirect_stdout(sys.stderr):
         import esptool
-    major, minor = map(int, esptool.__version__.split('.')[:2])
-    if major != 5 or minor < 3:
-        raise RuntimeError('Install esptool>=5.3,<6')
+    if esptool.__version__ != '5.6.0':
+        raise RuntimeError('Install esptool==5.6.0 for the verified bounded Flash reader')
     esp = None
     families = {'ESP32-P4': 0x3280, 'ESP32-S3': 0x3253, 'ESP32-S31': 0x3231}
     try:
@@ -101,7 +163,7 @@ def main():
                     elif method == 'flashId':
                         result = esp.flash_id()
                     elif method == 'read':
-                        result = base64.b64encode(esp.read_flash(*args)).decode('ascii')
+                        result = base64.b64encode(_read_flash(esp, *args)).decode('ascii')
                     elif method == 'write':
                         offset, encoded = args
                         data = base64.b64decode(encoded, validate=True)

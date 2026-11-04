@@ -27,3 +27,10 @@ API 导航和芯片相关的符号条件会根据这些构建文件生成。因�
 这些条件并非只由芯片决定，因此芯片选择器会过滤 ESP-VISION API 参考，但不代表标准 MicroPython 模块的完整清单。构建环境兼容性说明统一维护在项目 README 中。
 
 芯片文档描述当前开发板配置共同采用的默认能力。自定义开发板或修改编译选项后的固件可能与已发布芯片页面不同；发生差异时应以固件配置为准。
+
+WebREPL 与 EV-MUX 网络控制
+--------------------------
+
+当前 ESP-VISION EV-MUX 运行态不支持传统 MicroPython WebREPL，ESP-IDF v5.5.6 构建也不例外。部分构建启用了 WebSocket 与内部 ``_webrepl`` 组件。ESP32_P4X_EYE 等部分板型未包含上游 ``webrepl`` Python 服务，ESP32_S3_EYE 的 manifest 则包含该服务；服务是否存在以及这些编译选项均不代表与 EV-MUX 的终端或文件传输兼容。
+
+EV-MUX 的 Python 输入、输出与文件操作受唯一 owner 的连接、租约和 VM 代次校验约束。传统 WebREPL 的 ``dupterm`` 服务未实现此会话约定，因此不支持通过补装 Python 包或转发裸终端字节来绕过它。网络控制请使用 :doc:`../device-core/api` 的 TCP 传输。保留的 ``example/07-Network/00-WebREPL/webrepl.py`` 入口会在改变 Wi-Fi 或打开监听端口前退出，并说明这一限制。

@@ -27,7 +27,8 @@ const document = {
 const serialized = `${JSON.stringify(document, null, 2)}\n`
 
 if (process.argv.includes('--check')) {
-  assert.equal(await readFile(outputPath, 'utf8'), serialized, 'Device Action schema artifact is stale; regenerate it')
+  const checkedIn = (await readFile(outputPath, 'utf8')).replaceAll('\r\n', '\n')
+  assert.equal(checkedIn, serialized, 'Device Action schema artifact is stale; regenerate it')
   console.log(`Device Action Schema ${DEVICE_ACTION_SCHEMA_VERSION} is current`)
 } else {
   await mkdir(dirname(outputPath), { recursive: true })

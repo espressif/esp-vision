@@ -77,7 +77,7 @@ Networking APIs
 
 The inherited `network <https://docs.micropython.org/en/v1.28.0/library/network.html>`_, `socket <https://docs.micropython.org/en/v1.28.0/library/socket.html>`_, and `select <https://docs.micropython.org/en/v1.28.0/library/select.html>`_ modules provide network-interface management and TCP/UDP communication. ``network.WLAN`` is enabled in the current product board configurations, but successful use still requires compatible networking hardware and firmware configuration.
 
-The current board profiles disable `bluetooth <https://docs.micropython.org/en/v1.28.0/library/bluetooth.html>`_ and `espnow <https://docs.micropython.org/en/v1.28.0/library/espnow.html>`_. SSL/TLS, ``cryptolib``, WebSocket, WebREPL, and socket-event support depend on the ESP-IDF version used to build the firmware; see :doc:`../target-support/index` for the maintained support summary.
+The current board profiles disable `bluetooth <https://docs.micropython.org/en/v1.28.0/library/bluetooth.html>`_ and `espnow <https://docs.micropython.org/en/v1.28.0/library/espnow.html>`_. SSL/TLS, ``cryptolib``, WebSocket and socket-event support depend on the ESP-IDF version used to build the firmware. Traditional MicroPython WebREPL is not supported by the ESP-VISION EV-MUX runtime, even when ``_webrepl`` is compiled; its terminal and file operations do not use the EV-MUX owner authorization. Use :doc:`../device-core/api` over TCP for network control, and see :doc:`../target-support/index` for the maintained support summary.
 
 Connect to Wi-Fi
 ----------------
@@ -250,4 +250,4 @@ Use ``hasattr()`` or a guarded import when an application must run across multip
 
 .. seealso::
 
-   Runnable examples that use only standard MicroPython APIs: ``example/00-HelloWorld/helloworld.py`` (first script), ``example/06-Peripherals/00-Storage/sdcard.py`` (filesystem), and ``example/06-Peripherals/02-WiFi/webrepl.py`` (Wi-Fi and WebREPL).
+   Runnable examples that use standard MicroPython APIs include ``example/00-HelloWorld/helloworld.py`` (first script) and ``example/06-Peripherals/00-Storage/sdcard.py`` (requires SD media). ``example/07-Network/00-WebREPL/webrepl.py`` documents the unsupported traditional WebREPL boundary and exits before network changes; it is not a runnable network terminal on ESP-VISION.

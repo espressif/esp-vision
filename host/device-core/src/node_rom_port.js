@@ -179,33 +179,41 @@ export async function recoverNodeRomPort(previous, { python = defaultPython, sig
   if (mac(previous.transition.serial) !== expectedMac) return null
   const enumerate = dependencies.listSerial ?? listSerial
   const now = dependencies.now ?? (() => performance.now())
+  const sleep = dependencies.sleep ?? ((ms, abortSignal) => delay(ms, undefined, { signal: abortSignal }))
   const deadline = now() + timeout
-  let ports
-  try { ports = await enumerate({ python, signal, timeout }) }
-  catch (error) {
-    checkAbort(signal)
-    throw fail('ROM_PORT_ENUMERATION_FAILED', 'Cannot verify the selected device for read-only initialization recovery', error)
-  }
-  checkAbort(signal)
-  if (now() >= deadline) throw fail('ROM_PORT_REBIND_TIMEOUT', 'Read-only initialization recovery enumeration exceeded its deadline')
-  if (!Array.isArray(ports)) throw fail('ROM_PORT_ENUMERATION_FAILED', 'Serial enumeration returned invalid descriptors')
   const sameDevice = item => mac(item.serialNumber) === expectedMac && physicalLocation(item.location) === location
-  const existingRom = ports.filter(item => nativeRom(item) && sameDevice(item))
-  if (existingRom.length > 1) throw fail('ROM_PORT_AMBIGUOUS', 'Multiple ROM ports match the selected device')
-  if (existingRom.length) return null
-  const runtimes = ports.filter(nativeRuntime)
-  const conflicting = runtimes.filter(item => (mac(item.serialNumber) === expectedMac || physicalLocation(item.location) === location) && !sameDevice(item))
-  if (conflicting.length) throw fail('ROM_RUNTIME_IDENTITY_MISMATCH', 'Runtime descriptors do not match the previously selected ROM device')
-  const matches = runtimes.filter(sameDevice)
-  if (matches.length > 1) throw fail('ROM_PORT_AMBIGUOUS', 'Multiple runtime ports match the selected device')
-  if (!matches.length) return null
+  let runtime
+  // A closed native stub may still enumerate as ROM, then disappear before
+  // the same device's runtime reappears. Only observe during this window;
+  // never re-SYNC the stale ROM or issue a second handoff while it settles.
+  while (now() < deadline) {
+    checkAbort(signal)
+    let ports
+    try { ports = await enumerate({ python, signal, timeout: Math.max(1, Math.ceil(deadline - now())) }) }
+    catch (error) {
+      checkAbort(signal)
+      throw fail('ROM_PORT_ENUMERATION_FAILED', 'Cannot verify the selected device for read-only initialization recovery', error)
+    }
+    checkAbort(signal)
+    if (now() >= deadline) throw fail('ROM_PORT_REBIND_TIMEOUT', 'Read-only initialization recovery enumeration exceeded its deadline')
+    if (!Array.isArray(ports)) throw fail('ROM_PORT_ENUMERATION_FAILED', 'Serial enumeration returned invalid descriptors')
+    const candidates = ports.filter(item => nativeRom(item) || nativeRuntime(item))
+    const conflicting = candidates.filter(item => (mac(item.serialNumber) === expectedMac || physicalLocation(item.location) === location) && !sameDevice(item))
+    if (conflicting.length) throw fail('ROM_RUNTIME_IDENTITY_MISMATCH', 'Runtime descriptors do not match the previously selected ROM device')
+    const matches = candidates.filter(sameDevice)
+    if (matches.length > 1) throw fail('ROM_PORT_AMBIGUOUS', 'Multiple native USB ports match the selected device')
+    if (matches.length && nativeRuntime(matches[0])) { runtime = matches[0]; break }
+    await sleep(Math.min(50, Math.max(1, deadline - now())), signal)
+  }
+  // Returning null preserves the caller's original initialize failure.
+  if (!runtime) return null
   // Revalidate at prepare's fresh enumeration, before opening EV-MUX. An OS port
   // may have been reused for a different board since the recovery snapshot.
-  const result = await prepareNodeRomPort({ port: matches[0].path, python, signal, timeout,
+  const result = await prepareNodeRomPort({ port: runtime.path, python, signal, timeout,
     expectedIdentity: { mac: expectedMac, location } }, dependencies)
   if (result.expectedMac !== expectedMac || result.transition?.observed !== 'rom' || physicalLocation(result.transition.location) !== location) {
     throw fail('ROM_RUNTIME_IDENTITY_MISMATCH', 'Recovery did not preserve the selected physical device identity')
   }
-  result.transition.recovery = { previousPort: previous.port, runtimePid: matches[0].productId }
+  result.transition.recovery = { previousPort: previous.port, runtimePid: runtime.productId }
   return result
 }

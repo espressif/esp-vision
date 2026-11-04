@@ -328,6 +328,14 @@ typedef int jpeg_enc_input_format_t,jpeg_down_sampling_type_t;
 #define JPEG_DOWN_SAMPLING_GRAY 1
 typedef struct {uint32_t width,height;int src_type,sub_sample,image_quality;} jpeg_encode_cfg_t;
 #define SOC_JPEG_ENCODE_SUPPORTED 1
+#define ESP_CACHE_MSYNC_FLAG_INVALIDATE 1
+#define ESP_CACHE_MSYNC_FLAG_DIR_C2M 4
+#define ESP_LOGW(...) ((void)0)
+static int esp_cache_msync(void *data,size_t size,int flags) {
+    assert(data==encoded && size==sizeof(encoded));
+    assert(flags==(ESP_CACHE_MSYNC_FLAG_DIR_C2M|ESP_CACHE_MSYNC_FLAG_INVALIDATE));
+    return ESP_OK;
+}
 static bool s_jpeg_hw_unavailable;
 static struct {void *encoder;uint8_t *input_buf,*jpeg_buf;size_t jpeg_buf_size;} s_jpeg={
     .encoder=(void *)(uintptr_t)1,.input_buf=encoder_input_pixels,.jpeg_buf=encoded,.jpeg_buf_size=sizeof(encoded)};

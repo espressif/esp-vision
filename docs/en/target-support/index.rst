@@ -27,3 +27,10 @@ The current board headers disable Bluetooth and ESP-NOW; the S31 board additiona
 Because these conditions are not determined solely by the chip, the chip selector filters the ESP-VISION API reference but does not represent a complete standard MicroPython module manifest. Build-environment compatibility details are maintained in the project README.
 
 The chip documentation describes the defaults shared by the current board profiles. A custom board or modified build option can therefore differ from the published chip page. When that happens, the firmware configuration is authoritative.
+
+WebREPL and EV-MUX Network Control
+----------------------------------
+
+Traditional MicroPython WebREPL is not supported by the current ESP-VISION EV-MUX runtime, including ESP-IDF v5.5.6 builds. Some builds enable WebSocket and the internal ``_webrepl`` component. The upstream ``webrepl`` Python service is absent from some board profiles, including ESP32_P4X_EYE; ESP32_S3_EYE includes it in its manifest. Neither its presence nor the compile flags establish terminal or file-transfer compatibility with EV-MUX.
+
+EV-MUX routes Python input, output and files through one authorized owner, with link, lease and VM-epoch checks. A traditional WebREPL ``dupterm`` service does not implement this ownership contract. Adding its Python package or mirroring raw terminal bytes is not a supported workaround. Use :doc:`../device-core/api` with a TCP transport for network control. The retained ``example/07-Network/00-WebREPL/webrepl.py`` entry exits with this explanation before changing Wi-Fi or opening a listener.

@@ -9,6 +9,7 @@
 # This is a browser-friendly JPEG stream, not RTSP. It is suitable for boards
 # without H.264 support.
 
+import errno
 import network
 import socket
 import time
@@ -31,35 +32,33 @@ def connect_wifi():
 
     for attempt in range(1, CONNECT_RETRY + 1):
         print("connecting:", SSID, "attempt:", attempt)
-
-        try:
-            wlan.active(False)
-            time.sleep_ms(300)
-        except OSError:
-            pass
-
-        wlan.active(True)
-
-        try:
-            wlan.connect(SSID, PASSWORD)
-        except OSError as exc:
-            print("connect failed:", exc)
-            time.sleep_ms(500)
-            continue
-
         deadline = time.ticks_add(time.ticks_ms(), CONNECT_TIMEOUT_S * 1000)
-        while not wlan.isconnected():
-            if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
-                break
+        connect_requested = False
+        while time.ticks_diff(deadline, time.ticks_ms()) > 0:
+            if wlan.isconnected():
+                if wlan.config("ssid") != SSID:
+                    raise OSError("another WiFi SSID is connected; configure the target with Device Core")
+                print("wifi connected:", wlan.ifconfig()[0])
+                return wlan
+
+            try:
+                # Do not disconnect a managed STA. Change saved WiFi with Device Core.
+                if not wlan.active():
+                    wlan.active(True)
+                if not connect_requested and wlan.status() != network.STAT_CONNECTING:
+                    wlan.connect(SSID, PASSWORD)
+                    connect_requested = True
+            except OSError as exc:
+                # The background network service may still own a connection attempt.
+                if not exc.args or exc.args[0] != errno.EBUSY:
+                    print("connect failed:", exc)
+                    time.sleep_ms(500)
+                    break
             time.sleep_ms(200)
+        else:
+            print("connect timed out")
 
-        if wlan.isconnected():
-            print("wifi connected:", wlan.ifconfig()[0])
-            return wlan
-
-        print("connect timed out")
-
-    raise OSError("wifi connect failed")
+    raise OSError("wifi connect failed; check the target WiFi with Device Core")
 
 
 def send_all(sock, data):

@@ -8,6 +8,8 @@ Applications explicitly publish preview frames
 
 After application ``img.flush()``, the preview producer encodes JPEG when delivery is needed and sends ``preview.frame`` data to the current user-stream owner. Read-only TCP observers may subscribe independently as described below. Bound USB webcam output is another independent consumer; see :doc:`../api-reference/uvc`. It does not acquire an EV-MUX control session or initialize the camera.
 
+UVC uses isochronous USB transfers. A failed or short payload aborts that frame: firmware does not append later JPEG payloads to its incomplete prefix. It attempts one header-only UVC ``ERR|EOF`` terminator, reports failure separately from complete-frame transmission, and releases the source slot. The next frame starts with a new FID and clear error flags. Bus reset or alternate-setting cancellation also releases the old source. This cannot guarantee lossless USB delivery; acceptance must decode every retained UVC frame, including concurrent CDC/TCP operation, rather than check only that the output file is nonempty.
+
 .. code-block:: python
 
    import sensor

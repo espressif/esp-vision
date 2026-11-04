@@ -73,6 +73,46 @@ idf_build_set_property(DEPENDENCIES_LOCK ${LOCKFILE_PATH})
 # Define the project and the public name embedded in the ESP-IDF app descriptor.
 project(esp-vision)
 
+# Keep the managed MIT TinyUSB source pristine. Compile a checked scoped copy
+# whose video transfer callback aborts failed/short ISO frames rather than
+# silently advancing to the next JPEG payload.
+if(TARGET idf::espressif__tinyusb)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    idf_component_get_property(esp_vision_tinyusb_lib espressif__tinyusb COMPONENT_LIB)
+    idf_component_get_property(esp_vision_tinyusb_dir espressif__tinyusb COMPONENT_DIR)
+    get_filename_component(esp_vision_video_root "${USER_C_MODULES}" DIRECTORY)
+    set(esp_vision_video_original "${esp_vision_tinyusb_dir}/src/class/video/video_device.c")
+    set(esp_vision_video_adapter "${esp_vision_video_root}/tools/prepare_tinyusb_video.py")
+    set(esp_vision_video_include "${esp_vision_video_root}/overlay/micropython/shared/tinyusb")
+    set(esp_vision_video_copy "${CMAKE_BINARY_DIR}/esp_vision_video_device.c")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${esp_vision_video_original}" "${esp_vision_video_adapter}"
+        "${esp_vision_video_include}/esp_vision_video_transfer.inc")
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "${esp_vision_video_adapter}"
+        "${esp_vision_video_original}" "${esp_vision_video_copy}"
+        RESULT_VARIABLE esp_vision_video_result ERROR_VARIABLE esp_vision_video_error)
+    if(NOT esp_vision_video_result EQUAL 0)
+        message(FATAL_ERROR "TinyUSB video adaptation failed: ${esp_vision_video_error}")
+    endif()
+    get_target_property(esp_vision_video_sources ${esp_vision_tinyusb_lib} SOURCES)
+    set(esp_vision_video_scoped_sources)
+    set(esp_vision_video_replaced FALSE)
+    foreach(esp_vision_video_file IN LISTS esp_vision_video_sources)
+        if(esp_vision_video_file STREQUAL esp_vision_video_original)
+            list(APPEND esp_vision_video_scoped_sources "${esp_vision_video_copy}")
+            set(esp_vision_video_replaced TRUE)
+        else()
+            list(APPEND esp_vision_video_scoped_sources "${esp_vision_video_file}")
+        endif()
+    endforeach()
+    if(NOT esp_vision_video_replaced)
+        message(FATAL_ERROR "TinyUSB video source was not present in its component target")
+    endif()
+    set_property(TARGET ${esp_vision_tinyusb_lib} PROPERTY SOURCES "${esp_vision_video_scoped_sources}")
+    target_include_directories(${esp_vision_tinyusb_lib} PRIVATE
+        "${esp_vision_tinyusb_dir}/src/class/video" "${esp_vision_video_include}")
+endif()
+
 # mDNS 1.1 includes Ethernet headers only for its predefined Ethernet netif,
 # but some event branches test CONFIG_ETH_ENABLED alone. Build a scoped copy
 # with matching guards when ESP-VISION advertises only its STA TCP listener.

@@ -14,7 +14,7 @@
    esp-vision-device --help
    esp-vision-device inspect
 
-串口访问需要安装带 ``pyserial`` 的 Python。Windows 默认使用 ``python``，macOS/Linux 默认使用 ``python3``；可通过 ``--python`` 选择其它解释器。固件烧录还需要在该解释器中安装 ``esptool>=5.3,<6``。局域网发现使用 CLI 内置的 multicast-DNS 客户端。
+串口访问需要安装带 ``pyserial`` 的 Python。Windows 默认使用 ``python``，macOS/Linux 默认使用 ``python3``；可通过 ``--python`` 选择其它解释器。固件烧录还需要在该解释器中安装 ``esptool==5.6.0``。局域网发现使用 CLI 内置的 multicast-DNS 客户端。
 
 发现与检查
 ----------------------------------------
@@ -52,7 +52,7 @@ Runtime 中的 ``scriptRunning`` 和 ``run`` 表示当前 SDK 会话跟踪的工
 
 配置 Wi-Fi 时会隐藏密码提示输入；非交互环境可用 ``--password-stdin`` 从标准输入读取。没有命令行密码参数，配置结果也不会包含凭据。reset 必须指定 ``--mode soft`` 或 ``--mode hard``；收到确认不代表设备已重新连接。
 
-固件检查默认使用官方版本源；``--catalog`` 可指定本地目录文件或 HTTPS URL。离线检查需要 ``--board``，也可用 ``--current-version`` 指定当前版本。更新必须指定本地 ``--port`` 和明确的 ``--version``；内置串口烧录器使用 ``esptool>=5.3,<6``。TCP 不是 OTA。默认 ``--mode update`` 只写应用并保留现有分区布局和用户数据。``--mode install`` 需要 ``--board``，会写入完整镜像并替换写入范围内的数据；空白设备应使用可进入 ROM 下载模式的 USJ/UART 串口。``--image`` 提供本地固件字节，但不会绕过版本完整性校验。
+固件检查默认使用官方版本源；``--catalog`` 可指定本地目录文件或 HTTPS URL。离线检查需要 ``--board``，也可用 ``--current-version`` 指定当前版本。更新必须指定本地 ``--port`` 和明确的 ``--version``；内置串口烧录器使用 ``esptool==5.6.0``。TCP 不是 OTA。默认 ``--mode update`` 只写应用并保留现有分区布局和用户数据。``--mode install`` 需要 ``--board``，会写入完整镜像并替换写入范围内的数据；空白设备应使用可进入 ROM 下载模式的 USJ/UART 串口。``--image`` 提供本地固件字节，但不会绕过版本完整性校验。
 
 Python 执行
 ----------------------------------------

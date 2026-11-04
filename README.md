@@ -95,7 +95,7 @@ CI builds and published firmware use the following board/IDF combinations:
 
 Use the matching ESP-IDF checkout and source its `export.sh` before invoking `idf.py`. v5.5.6 is pinned to a patch release; `release/v6.1` follows the maintained 6.1 branch required by S31. Other ESP-IDF versions, including newer patches, release/v6.0 and master, are outside this CI qualification matrix. ESP-IDF or managed-component API changes can cause configuration/build failures, change runtime behavior or alter the Python APIs exposed by MicroPython. Such builds may need source, overlay or dependency adjustments and require their own hardware verification.
 
-With the current overlay, v5.5.6 provides SSL/TLS, `cryptolib`, WebSocket, WebREPL, socket events and, where the chip supports them, `machine.I2S`, PCNT and I2C target mode. These optional features remain disabled on the 6.1 build; inspect the actual firmware before relying on them.
+With the current overlay, v5.5.6 enables SSL/TLS, `cryptolib`, WebSocket and socket events and, where the chip supports them, `machine.I2S`, PCNT and I2C target mode. These optional features remain disabled on the 6.1 build; inspect the actual firmware before relying on them. Traditional MicroPython WebREPL is not supported by the ESP-VISION EV-MUX runtime on either build: its terminal and file protocol do not participate in the single-owner session, lease or VM-epoch checks. Use Device Core over TCP for network control. The WebSocket or `_webrepl` compile flags alone do not imply a usable WebREPL service.
 
 ## Demos
 
@@ -139,3 +139,5 @@ The EV-MUX TCP interface provides wireless debugging on trusted local networks a
 - [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html)
 
 The native CDC/MSC/UVC descriptor overlay (`overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`) derives from MicroPython v1.28.0 and retains its MIT license and notices.
+
+The TinyUSB UVC transfer adaptation (`overlay/micropython/shared/tinyusb/esp_vision_video_transfer.inc`) and its verbatim test fixture (`tools/tests/tinyusb_video_stubs/upstream_transfer.c`) derive from the MIT-licensed `video_device.c` in espressif/tinyusb 0.19.0~3 (commit `ab4a1817907ed865b10a712b5e03e5e0a9902df5`). They retain its original copyright and license header. The build prepares a checked source copy without modifying the managed component; the [license inventory](docs/en/license/index.rst) records this adaptation.

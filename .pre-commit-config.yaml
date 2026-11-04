@@ -10,6 +10,7 @@ exclude: |
     lib/micropython/|
     lib/ulab/|
     overlay/micropython/|
+    tools/tests/tinyusb_video_stubs/upstream_transfer\.c$|
     boards/[^/]+/port/|
     modules/py_assert\.h$|
     modules/py_helper\.[ch]$|

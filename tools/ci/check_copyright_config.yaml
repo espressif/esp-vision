@@ -23,6 +23,7 @@ ignore:
     - 'lib/micropython/**/*'
     - 'lib/ulab/**/*'
     - 'overlay/micropython/**/*'
+    - 'tools/tests/tinyusb_video_stubs/upstream_transfer.c'
     - 'vscode-extension/node_modules/**/*'
     - 'vscode-extension/out/**/*'
     - 'vscode-extension/package-lock.json'

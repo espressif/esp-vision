@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.1
+
+### Fixed
+
+- Accept native Windows CRLF startup lines in the direct Python serial-failure regression so its diagnostic and payload-redaction assertions run on Windows.
+
+- Preserve bounded serial read/write OS diagnostics and unexpected Python bridge exit codes/signals instead of reducing them to CONNECTION_CLOSED; omit arbitrary exception text and all transferred bytes, and keep intentional disconnect/cancellation quiet.
+
+- Run package and release checks through npm's JavaScript entry point on Windows, preserving paths and arguments without a command shell; accept checkout CRLF in the generated action-schema check while still rejecting changed schema content.
+- Observe native USB re-enumeration for up to five seconds after read-only ROM initialization failure, requiring the same MAC and physical location before one verified runtime handoff; cancellation, ambiguous descriptors and failed reads/writes cannot replay operations.
+- Forward Node readback packet budgets to the external esptool 5.6.0 reader, using one outstanding 1 KiB packet by default and preserving its ACK/MD5 verification. Reject incompatible versions before initialization or writing and restore temporary instance settings after success or failure.
+
 ## 0.6.0
 
 ### Added
