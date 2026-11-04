@@ -11,7 +11,7 @@ export function openNodeRom({ port, python = defaultPython, signal } = {}, depen
   const lifecycle = new AbortController()
   signal = signal ? AbortSignal.any([signal, lifecycle.signal]) : lifecycle.signal
   let child, input, pending, sequence = 0, closed = false, initializing = false, romReady = false
-  const fail = code => Object.assign(new Error(code === 'ESPTOOL_UNAVAILABLE' ? 'Install Python esptool>=5.3,<6 for the built-in flasher' : 'ROM operation failed'), { code })
+  const fail = code => Object.assign(new Error(code === 'ESPTOOL_UNAVAILABLE' ? 'Install Python esptool==5.6.0 for the built-in flasher' : 'ROM operation failed'), { code })
   const reject = code => { if (pending) { clearTimeout(pending.timer); pending.reject(fail(code)); pending = null } }
   function rpc(method, args = []) {
     if (closed) return Promise.reject(fail('ROM_CLOSED'))
@@ -98,7 +98,21 @@ export function openNodeRom({ port, python = defaultPython, signal } = {}, depen
     flashId: () => rpc('flashId'),
     getSecurityInfo: () => rpc('security'),
     async runStub() { await rpc('stub'); return loader },
-    async readFlash(offset, bytes) { return new Uint8Array(Buffer.from(await rpc('read', [offset, bytes]), 'base64')) },
+    async readFlash(offset, bytes, progress, options) {
+      if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(bytes) || bytes <= 0 || bytes > 0xffffffff
+          || offset + bytes > 0x100000000) throw new RangeError('ROM read requires a positive 32-bit address range')
+      if (progress !== undefined && typeof progress !== 'function') throw new TypeError('ROM read progress must be a function')
+      if (options !== undefined && (!options || typeof options !== 'object' || Array.isArray(options))) throw new TypeError('ROM read options must be an object')
+      if (options && Object.keys(options).some(key => !['blockSize', 'maxInFlight', 'chunkSize'].includes(key))) throw new TypeError('Unsupported ROM read option')
+      const blockSize = options?.blockSize === undefined ? 1024 : options.blockSize
+      const maxInFlight = options?.maxInFlight === undefined ? 1 : options.maxInFlight
+      if (![1024, 4096].includes(blockSize) || !Number.isSafeInteger(maxInFlight) || maxInFlight < 1 || maxInFlight > 64) throw new RangeError('ROM read requires 1024 or 4096 byte blocks and 1..64 outstanding packets')
+      if (options?.chunkSize !== undefined && (!Number.isSafeInteger(options.chunkSize) || options.chunkSize <= 0 || bytes > options.chunkSize)) throw new RangeError('ROM read exceeds the requested chunk size')
+      const data = new Uint8Array(Buffer.from(await rpc('read', [offset, bytes, { blockSize, maxInFlight }]), 'base64'))
+      if (data.length !== bytes) throw Object.assign(fail('ROM_READ_LENGTH'), { operation: 'read' })
+      progress?.(data, data.length, bytes)
+      return data
+    },
     async flashData(bytes, progress, offset) { await rpc('write', [offset, Buffer.from(bytes).toString('base64')]); progress(bytes.byteLength, bytes.byteLength) },
     readRegister: address => rpc('readRegister', [address]),
     writeRegister: (address, value, mask) => rpc('writeRegister', [address, value, mask]),

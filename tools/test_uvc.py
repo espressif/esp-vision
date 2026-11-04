@@ -14,14 +14,77 @@ import argparse
 import json
 import os
 from pathlib import Path
-import io
 import subprocess
 import sys
 import time
+import zlib
 
-from preview_tcp import FrameParser
+from preview_tcp import FrameParser, HEADER
+from uvc_frames import decode_mjpeg_frames
 
 from PIL import Image, ImageStat
+
+
+
+# Lower bound of platform/preview.c's fixed metadata, before optional session
+# fields are appended. One-digit numbers and an empty route are conservative.
+_PREVIEW_METADATA_MIN = len(
+    '{"sid":"preview","seq":0,"channel":"preview.frame",'
+    '"type":"data","encoding":"binary","route":"",'
+    '"contentType":"image/jpeg","ts_ms":0,"width":1,"height":1}')
+
+
+def validate_evmux_preview(recording, *, allow_collector_tail=False, tail_report=None):
+    """Strictly validate every complete preview; default to rejecting any tail."""
+    parser = FrameParser()
+    wire = recording.read_bytes()
+    frames = parser.feed(wire)
+    assert parser.bad_frames == 0, parser.bad_frames
+    tail = {'bytes': 0, 'allowed': False}
+    if parser.has_partial_frame():
+        raw_tail = bytes(parser.buffer)
+        header = HEADER.fullmatch(raw_tail)
+        last = frames[-1].metadata if frames else {}
+        # This tool closes its recorder after the camera command releases its
+        # session. Only a header with *zero* body bytes, following that release
+        # ACK, and too short to describe a production preview can be exempted.
+        # No unknown preview metadata, JPEG payload or MJPEG tail is discarded.
+        assert allow_collector_tail, 'Incomplete EV-MUX recording'
+        assert header is not None, 'Collector tail contains metadata or payload bytes'
+        metadata_len, payload_len = int(header[1]), int(header[2])
+        assert 0 < metadata_len < _PREVIEW_METADATA_MIN, 'Collector tail may describe a preview'
+        assert 0 <= payload_len <= 1024, 'Collector tail exceeds bounded control data'
+        assert (last.get('channel'), last.get('type'), last.get('method')) == (
+            'user.rpc', 'rsp', 'session.release'), 'Collector tail is not after release ACK'
+        tail = {'bytes': len(raw_tail), 'allowed': True, 'headerHex': raw_tail.hex(),
+                'metadataBytesAdvertised': metadata_len, 'payloadBytesAdvertised': payload_len,
+                'retainedBodyBytes': 0, 'productionPreviewMetadataMinimum': _PREVIEW_METADATA_MIN,
+                'reason': 'Explicit recorder close after release ACK; header-only fragment is shorter than production preview metadata; no JPEG bytes discarded'}
+    previews = [frame for frame in frames if frame.metadata.get('channel') == 'preview.frame']
+    assert len(previews) >= 3, len(previews)
+    # FrameParser rejects mismatched nonzero CRCs; additionally disallow its
+    # legacy CRC=0 exemption for every complete preview in this diagnostic.
+    position = 0
+    while match := HEADER.search(wire, position):
+        h, p = int(match[1]), int(match[2])
+        body = match.end()
+        end = body + h + p + 1
+        if end > len(wire):
+            break
+        metadata = json.loads(wire[body:body + h])
+        if metadata.get('channel') == 'preview.frame':
+            crc = int(match[3], 16)
+            assert crc != 0 and crc == zlib.crc32(wire[body + h:end - 1]), 'Preview CRC must be nonzero and exact'
+        position = end
+    for frame in previews:
+        assert frame.metadata.get('contentType') == 'image/jpeg'
+        assert frame.metadata.get('width') == 320 and frame.metadata.get('height') == 240
+    payloads = [frame.payload for frame in previews]
+    decoded = decode_mjpeg_frames(b''.join(payloads), len(payloads))
+    assert decoded == payloads, 'Strict decoder changed original preview bytes'
+    if tail_report is not None:
+        tail_report.update(tail)
+    return previews
 
 
 def main():
@@ -104,21 +167,8 @@ sys.exit(child.returncode)
             raise
         finally:
             log.close()
-        data = path.read_bytes()
         # Decode every frame, including frames sent while the source changes.
-        cursor = 0
-        frames = []
-        while cursor < len(data):
-            start = data.find(b'\xff\xd8', cursor)
-            end = data.find(b'\xff\xd9', start)
-            assert start >= 0 and end > start, path
-            frame = data[start:end + 2]
-            with Image.open(io.BytesIO(frame)) as image:
-                image.load()
-                assert image.size == (320, 240), image.size
-            frames.append(frame)
-            cursor = end + 2
-        assert len(frames) == expected_frames, (path, len(frames), expected_frames)
+        frames = decode_mjpeg_frames(path.read_bytes(), expected_frames)
         jpg = path.with_suffix('.jpg')
         jpg.write_bytes(frames[-1])
         with Image.open(jpg) as image:
@@ -239,21 +289,13 @@ print("UVC_EVMUX_CAMERA_OK", count)''')
         assert rgb[0] > 180 and rgb[1] < 80 and rgb[2] < 80, rgb
         passed('processed_camera_and_evmux_preview', rgb)
 
-        parser = FrameParser()
-        previews = []
-        with (out / 'evmux-rx.bin').open('rb') as recording:
-            while chunk := recording.read(16384):
-                previews.extend(frame for frame in parser.feed(chunk)
-                                if frame.metadata.get('channel') == 'preview.frame')
-        assert parser.bad_frames == 0, parser.bad_frames
-        assert len(previews) >= 3, len(previews)
-        for frame in previews:
-            assert frame.metadata.get('width') == 320 and frame.metadata.get('height') == 240
-            with Image.open(io.BytesIO(frame.payload)) as image:
-                image.load()
-                assert image.size == (320, 240)
+        collector_tail = {}
+        previews = validate_evmux_preview(
+            out / 'evmux-rx.bin', allow_collector_tail=True, tail_report=collector_tail)
         (out / 'evmux-preview.jpg').write_bytes(previews[-1].payload)
-        passed('evmux_preview_received_during_uvc', {'frames': len(previews), 'crc_errors': 0})
+        passed('evmux_preview_received_during_uvc', {
+            'frames': len(previews), 'crc_errors': 0, 'strict_entropy_decoded': True,
+            'collector_tail': collector_tail})
         # Repeated host reopen must continue delivering frames.
         for cycle in range(3):
             active = capture(f'reopen-{cycle}')

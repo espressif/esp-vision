@@ -17,23 +17,17 @@ async function fixture(t, published, version = '1.2.3', type = 'patch') {
   await copyFile(join(source, 'release-npm.mjs'), join(scripts, 'release-npm.mjs'))
   await copyFile(join(source, 'verify-registry.mjs'), join(scripts, 'verify-registry.mjs'))
   await copyFile(join(source, 'version-policy.mjs'), join(scripts, 'version-policy.mjs'))
+  await copyFile(join(source, 'npm-command.mjs'), join(scripts, 'npm-command.mjs'))
   await writeFile(join(root, 'package.json'), JSON.stringify({ name: '@esp-vision/device-core', version, espVisionReleaseType: type, license: 'Apache-2.0', publishConfig: { access: 'public', registry: 'https://registry.npmjs.org/' } }))
   const loader = join(root, 'registry.mjs'), npm = join(root, 'npm.cjs')
   // Invoke the fixture with Node on every platform, without shell/PATH resolution.
-  await writeFile(loader, `import childProcess from 'node:child_process';
-import { syncBuiltinESMExports } from 'node:module';
-const spawnSync = childProcess.spawnSync;
-childProcess.spawnSync = (command, ...args) => command === 'npm'
-  ? spawnSync(process.execPath, [${JSON.stringify(npm)}, ...args[0]], args[1])
-  : spawnSync(command, ...args);
-syncBuiltinESMExports();
-let reads = 0; globalThis.fetch = async () => { reads++; const found = ${published} || reads === 2 || reads >= 4; return {ok:found,status:found?200:404,json:async()=>reads===2?({versions:{'1.2.2':{}}}):({dist:{integrity:'sha512-fixture'}})} }`)
+  await writeFile(loader, `let reads = 0; globalThis.fetch = async () => { reads++; const found = ${published} || reads === 2 || reads >= 4; return {ok:found,status:found?200:404,json:async()=>reads===2?({versions:{'1.2.2':{}}}):({dist:{integrity:'sha512-fixture'}})} }`)
   await writeFile(npm, `const fs = require('node:fs'); const args = process.argv.slice(2); fs.appendFileSync(process.env.CALL_LOG, args[0] + '\\n');
 if (args[0] === 'whoami') process.stdout.write('esp-vision');
 else if (args[0] === 'pack') process.stdout.write(JSON.stringify([{name:'@esp-vision/device-core',version:'1.2.3',filename:'core.tgz',integrity:'sha512-fixture',files:[{path:'LICENSE'},{path:'NOTICE'}]}]));
 else if (args[0] !== 'publish') process.exit(2);
 `)
-  const env = { ...process.env, TMPDIR: root, TMP: root, TEMP: root, CALL_LOG: log,
+  const env = { ...process.env, TMPDIR: root, TMP: root, TEMP: root, CALL_LOG: log, npm_execpath: npm,
     NODE_OPTIONS: `--import ${pathToFileURL(loader).href}`, NPM_PUBLISH_TOKEN: 'fixture', CI_PIPELINE_SOURCE: 'push',
     CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true' }
   const result = spawnSync(process.execPath, [resolve(scripts, 'release-npm.mjs')], { cwd: root, env, encoding: 'utf8' })

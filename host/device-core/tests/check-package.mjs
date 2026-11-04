@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
+import { npmCommand } from '../scripts/npm-command.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
@@ -14,7 +15,7 @@ assert.equal(manifest.license, 'Apache-2.0')
 assert.match(await readFile(join(root, 'LICENSE'), 'utf8'), /Apache License[\s\S]*Version 2\.0/)
 const temporary = await mkdtemp(join(tmpdir(), 'esp-vision-device-core-package-'))
 try {
-  const [packed] = JSON.parse(execFileSync('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', temporary], { cwd: root, encoding: 'utf8' }))
+  const [packed] = JSON.parse(execFileSync(...npmCommand(['pack', '--json', '--ignore-scripts', '--pack-destination', temporary]), { cwd: root, encoding: 'utf8' }))
   assert.ok(packed.files.some(({ path }) => path === 'LICENSE'))
   assert.ok(packed.files.some(({ path }) => path === 'NOTICE'))
   assert.ok(packed.files.some(({ path }) => path === 'schemas/device-actions-v1.json'))
@@ -25,7 +26,7 @@ try {
   assert.ok(!packed.files.some(({ path }) => path.includes('__pycache__') || path.endsWith('.pyc')), 'Never ship host Python bytecode')
   const consumer = join(temporary, 'consumer')
   await mkdir(consumer)
-  execFileSync('npm', ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', join(temporary, packed.filename)], { cwd: consumer, stdio: 'pipe' })
+  execFileSync(...npmCommand(['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', join(temporary, packed.filename)]), { cwd: consumer, stdio: 'pipe' })
   const installed = join(consumer, 'node_modules/@esp-vision/device-core')
   assert.equal(await readFile(join(installed, 'LICENSE'), 'utf8'), await readFile(join(root, 'LICENSE'), 'utf8'))
   const notice = await readFile(join(installed, 'NOTICE'), 'utf8')
@@ -65,19 +66,19 @@ try {
   for (const required of ['src/node_serial.py', 'src/jpeg_validate.js', 'scripts/run-tests.mjs', 'tests/hardware-check.mjs', 'tests/device-checks.mjs', 'tests/jpeg-fixtures.mjs', 'tests/test-jpeg-validation.mjs', 'tests/fixtures/device-checks.py']) {
     assert.ok(packed.files.some(({ path }) => path === required), `Missing installed check asset: ${required}`)
   }
-  const unitOutput = execFileSync('npm', ['test'], { cwd: installed, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })
+  const unitOutput = execFileSync(...npmCommand(['test']), { cwd: installed, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })
   const unitCount = Number(/^(?:# tests|ℹ tests) (\d+)$/m.exec(unitOutput)?.[1] ?? 0)
   assert.ok(unitCount > 0, 'Installed npm test must execute a nonempty suite')
-  const hardwareHelp = execFileSync('npm', ['run', 'test:hardware', '--', '--help'], { cwd: installed, encoding: 'utf8' })
+  const hardwareHelp = execFileSync(...npmCommand(['run', 'test:hardware', '--', '--help']), { cwd: installed, encoding: 'utf8' })
   assert.ok(hardwareHelp.includes('--serial PATH'), 'Installed hardware runner must load and show its help')
   // A damaged tarball must fail instead of reporting a successful zero-test run.
   await rm(join(installed, 'tests'), { recursive: true })
   await mkdir(join(installed, 'tests'))
-  const empty = spawnSync('npm', ['test'], { cwd: installed, encoding: 'utf8' })
+  const empty = spawnSync(...npmCommand(['test']), { cwd: installed, encoding: 'utf8' })
   assert.equal(empty.status, 1, 'An empty suite must fail closed')
   assert.match(empty.stderr, /No Device Core unit tests found/)
   await rm(join(installed, 'tests'), { recursive: true })
-  const missing = spawnSync('npm', ['test'], { cwd: installed, encoding: 'utf8' })
+  const missing = spawnSync(...npmCommand(['test']), { cwd: installed, encoding: 'utf8' })
   assert.equal(missing.status, 1, 'Missing tests must fail closed')
   console.log(JSON.stringify({ package: packed.name, version: packed.version, entryPoints, unitCount, standalone: true }))
 } finally {

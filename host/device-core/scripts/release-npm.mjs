@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { highestStableVersion, validateVersionStep } from './version-policy.mjs'
 import { verifyPublishedIntegrity } from './verify-registry.mjs'
+import { npmCommand } from './npm-command.mjs'
 import { spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -48,7 +49,7 @@ try {
   await writeFile(config, `registry=${registry}\n//registry.npmjs.org/:_authToken=\${NPM_PUBLISH_TOKEN}\n`, { mode: 0o600 })
   const env = dryRun ? { ...process.env } : { ...process.env, NPM_CONFIG_USERCONFIG: config }
   function npm(args) {
-    const result = spawnSync('npm', args, { cwd: root, env, encoding: 'utf8' })
+    const result = spawnSync(...npmCommand(args, env), { cwd: root, env, encoding: 'utf8' })
     if (result.status !== 0) throw new Error(`npm ${args[0]} failed: ${result.stderr || result.error?.message}`)
     return result.stdout
   }

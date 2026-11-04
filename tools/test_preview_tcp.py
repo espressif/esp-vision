@@ -21,6 +21,7 @@ import time
 
 from PIL import Image
 from preview_tcp import PreviewObserver
+from uvc_frames import decode_mjpeg_frames
 
 
 class Reader:
@@ -214,7 +215,9 @@ print("PREVIEW_CAMERA_OK",count)''')
             fast = check_frames(ra, 'camera-fast', minimum=80)
             if video:
                 assert video.wait(timeout=12) == 0
-                passed('simultaneous_uvc_and_tcp', {'uvcBytes': (out / 'simultaneous-uvc.mjpeg').stat().st_size})
+                data = (out / 'simultaneous-uvc.mjpeg').read_bytes()
+                frames = decode_mjpeg_frames(data, expected_frames=50)
+                passed('simultaneous_uvc_and_tcp', {'uvcBytes': len(data), 'completeDecodedFrames': len(frames)})
         finally:
             if video and video.poll() is None:
                 video.kill()

@@ -14,7 +14,7 @@ Installation and host requirements
    esp-vision-device --help
    esp-vision-device inspect
 
-Serial access requires Python with ``pyserial``. Windows defaults to ``python`` and macOS/Linux to ``python3``; use ``--python`` to select another interpreter. Firmware flashing also requires ``esptool>=5.3,<6`` in that interpreter. LAN discovery uses the CLI's bundled multicast-DNS client.
+Serial access requires Python with ``pyserial``. Windows defaults to ``python`` and macOS/Linux to ``python3``; use ``--python`` to select another interpreter. Firmware flashing also requires ``esptool==5.6.0`` in that interpreter. LAN discovery uses the CLI's bundled multicast-DNS client.
 
 Discovery and inspection
 ----------------------------------------
@@ -52,7 +52,7 @@ Configuration, control, and firmware
 
 Configuration prompts for a hidden Wi-Fi password; ``--password-stdin`` reads it from standard input. There is no command-line password option. Configuration output does not include credentials. Reset requires ``--mode soft`` or ``--mode hard``; an acknowledgement does not mean the device has reconnected.
 
-Firmware checks use the official feed by default; ``--catalog`` accepts a local catalog file or HTTPS URL. An offline check needs ``--board`` and optionally accepts ``--current-version``. Update requires a local ``--port`` and explicit ``--version``; the built-in serial flasher uses ``esptool>=5.3,<6``. TCP is not OTA. The default ``--mode update`` writes the application and preserves the existing layout and user data. ``--mode install`` requires ``--board`` and writes a complete image, replacing data in its written range; use a ROM-capable USJ/UART port for blank-board installation. ``--image`` supplies local firmware bytes and does not bypass release integrity checks.
+Firmware checks use the official feed by default; ``--catalog`` accepts a local catalog file or HTTPS URL. An offline check needs ``--board`` and optionally accepts ``--current-version``. Update requires a local ``--port`` and explicit ``--version``; the built-in serial flasher uses ``esptool==5.6.0``. TCP is not OTA. The default ``--mode update`` writes the application and preserves the existing layout and user data. ``--mode install`` requires ``--board`` and writes a complete image, replacing data in its written range; use a ROM-capable USJ/UART port for blank-board installation. ``--image`` supplies local firmware bytes and does not bypass release integrity checks.
 
 Python execution
 ----------------------------------------

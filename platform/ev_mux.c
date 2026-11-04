@@ -34,6 +34,7 @@
 #define EV_MUX_OWNER_PREVIEW_FRAMES (2)
 #define EV_MUX_PREVIEW_FRAMES (EV_MUX_OWNER_PREVIEW_FRAMES + 2 * EV_TRANSPORT_PREVIEW_OBSERVERS)
 #define EV_MUX_OBSERVER_BUFFERS (EV_TRANSPORT_PREVIEW_OBSERVERS + 1)
+#define EV_MUX_SPECIAL_BUFFER_MIN (1024)
 #define EV_MUX_TARGET_COUNT (EV_MUX_SERIAL_TARGETS + EV_TRANSPORT_TCP_LINKS)
 #define EV_MUX_QUEUE_BYTES (16 * 1024)
 #define EV_MUX_QUEUE_RESERVED_BYTES (4 * 1024)
@@ -185,10 +186,13 @@ static ev_mux_ticket_state_t s_tickets[EV_MUX_TICKET_COUNT];
 static ev_mux_special_frame_t s_preview_frames[EV_MUX_PREVIEW_FRAMES];
 static uint32_t s_observer_generations[EV_TRANSPORT_TCP_LINKS];
 static uint8_t *s_observer_buffers[EV_MUX_OBSERVER_BUFFERS];
+static size_t s_observer_capacities[EV_MUX_OBSERVER_BUFFERS];
 static ev_mux_special_frame_t s_large_frame;
 static uintptr_t s_special_partial_frame[EV_MUX_TARGET_COUNT];
 static uint8_t *s_preview_buffers[2];
+static size_t s_preview_capacities[2];
 static uint8_t *s_large_buffer;
+static size_t s_large_capacity;
 static int8_t s_preview_pending = -1;
 static int8_t s_preview_active = -1;
 static SemaphoreHandle_t s_special_mutex;
@@ -1025,13 +1029,56 @@ static esp_err_t ev_mux_enqueue_normal(const ev_mux_submit_options_t *options,
     return ESP_OK;
 }
 
-static bool ev_mux_special_buffer_alloc(uint8_t **buffer)
+// Prepare growth without changing the existing buffer or any frame references.
+// The caller holds s_special_mutex and commits only after all replaceable
+// references have been removed. Started frames must retain their old storage.
+static uint8_t *ev_mux_special_buffer_prepare(uint8_t *buffer,
+                                              size_t capacity,
+                                              size_t payload_len,
+                                              size_t *prepared_capacity)
 {
-    if (*buffer == NULL) {
-        *buffer = (uint8_t *)esp_vision_memory_malloc_caps(EV_MUX_LARGE_PAYLOAD_MAX,
-                                                           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (payload_len > EV_MUX_LARGE_PAYLOAD_MAX) {
+        return NULL;
     }
-    return *buffer != NULL;
+    if ((buffer != NULL) && (capacity >= payload_len)) {
+        *prepared_capacity = capacity;
+        return buffer;
+    }
+    size_t needed = EV_MUX_SPECIAL_BUFFER_MIN;
+    while (needed < payload_len) {
+        needed = (needed > EV_MUX_LARGE_PAYLOAD_MAX / 2) ?
+                 EV_MUX_LARGE_PAYLOAD_MAX : needed * 2;
+    }
+    uint8_t *fresh = esp_vision_memory_malloc_caps(needed, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (fresh != NULL) {
+        *prepared_capacity = needed;
+    }
+    return fresh;
+}
+
+static void ev_mux_special_buffer_commit(uint8_t **buffer,
+                                         size_t *capacity,
+                                         uint8_t *prepared,
+                                         size_t prepared_capacity)
+{
+    if (*buffer != prepared) {
+        heap_caps_free(*buffer);
+        *buffer = prepared;
+    }
+    *capacity = prepared_capacity;
+}
+
+static bool ev_mux_preview_slot_available_locked(void)
+{
+    if (s_preview_pending >= 0) {
+        return true;
+    }
+    for (size_t i = 0; i < EV_MUX_OWNER_PREVIEW_FRAMES; ++i) {
+        if (((int8_t)i != s_preview_active) && !s_preview_frames[i].used) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static bool ev_mux_special_prepare(ev_mux_frame_t *frame,
@@ -1152,10 +1199,14 @@ static esp_err_t ev_mux_submit_special(const ev_mux_submit_options_t *options,
             xSemaphoreGive(s_special_mutex);
             return ESP_ERR_TIMEOUT;
         }
-        if (!ev_mux_special_buffer_alloc(&s_large_buffer)) {
+        size_t capacity = 0;
+        uint8_t *prepared = ev_mux_special_buffer_prepare(s_large_buffer, s_large_capacity,
+                                                          payload_len, &capacity);
+        if (prepared == NULL) {
             xSemaphoreGive(s_special_mutex);
             return ESP_ERR_NO_MEM;
         }
+        ev_mux_special_buffer_commit(&s_large_buffer, &s_large_capacity, prepared, capacity);
         special = &s_large_frame;
         special->payload = s_large_buffer;
     } else {
@@ -1176,21 +1227,36 @@ static esp_err_t ev_mux_submit_special(const ev_mux_submit_options_t *options,
             }
         }
         special = &s_preview_frames[pool];
-        if (special->used) {
-            // A pending preview has not emitted any bytes and is replaceable.
-            __atomic_fetch_add(&s_tx_drop_count, 1, __ATOMIC_RELAXED);
+        if (special->used && (special->frame.tx_offset != 0)) {
+            xSemaphoreGive(s_special_mutex);
+            return ESP_ERR_TIMEOUT;
         }
-        if (!ev_mux_special_buffer_alloc(&s_preview_buffers[pool])) {
+        size_t capacity = 0;
+        uint8_t *prepared = ev_mux_special_buffer_prepare(s_preview_buffers[pool],
+                                                          s_preview_capacities[pool],
+                                                          payload_len, &capacity);
+        if (prepared == NULL) {
             xSemaphoreGive(s_special_mutex);
             return ESP_ERR_NO_MEM;
         }
+        if (special->used) {
+            // Commit replacement only after growth succeeds. Until this point
+            // OOM leaves the pending frame, metadata and payload intact.
+            ev_mux_completion_t ignored;
+            ev_mux_special_release_locked(special, ESP_ERR_INVALID_STATE, &ignored);
+            __atomic_fetch_add(&s_tx_drop_count, 1, __ATOMIC_RELAXED);
+        }
+        ev_mux_special_buffer_commit(&s_preview_buffers[pool], &s_preview_capacities[pool],
+                                     prepared, capacity);
         special->payload = s_preview_buffers[pool];
         special->kind = EV_MUX_SPECIAL_PREVIEW;
         special->pool_index = (uint8_t)pool;
     }
 
     special->frame = fresh_frame;
-    memcpy(special->payload, payload, payload_len);
+    if (payload_len != 0) {
+        memcpy(special->payload, payload, payload_len);
+    }
     special->used = true;
     if (kind == EV_MUX_SPECIAL_PREVIEW) {
         s_preview_pending = (int8_t)special->pool_index;
@@ -1830,7 +1896,7 @@ bool ev_mux_large_payload_available(void)
             (xSemaphoreTake(s_special_mutex, pdMS_TO_TICKS(20)) != pdTRUE)) {
         return false;
     }
-    bool available = ev_mux_special_buffer_alloc(&s_large_buffer);
+    bool available = !s_large_frame.used;
     xSemaphoreGive(s_special_mutex);
     return available;
 }
@@ -1846,11 +1912,7 @@ bool ev_mux_preview_slot_available(void)
             (xSemaphoreTake(s_special_mutex, pdMS_TO_TICKS(20)) != pdTRUE)) {
         return false;
     }
-    bool available = s_preview_pending >= 0;
-    if (!available) {
-        int8_t pool = (s_preview_active == 0) ? 1 : 0;
-        available = ev_mux_special_buffer_alloc(&s_preview_buffers[pool]);
-    }
+    bool available = ev_mux_preview_slot_available_locked();
     xSemaphoreGive(s_special_mutex);
     return available;
 }
@@ -1922,8 +1984,8 @@ esp_err_t ev_mux_preview_publish_observers(const char *metadata, const void *pay
     uint32_t waiting_generation[EV_TRANSPORT_TCP_LINKS] = {0};
     uint32_t waiting_since[EV_TRANSPORT_TCP_LINKS] = {0};
     uint32_t waiting_progress[EV_TRANSPORT_TCP_LINKS] = {0};
-    // Discard only frames which have not emitted any bytes. A started frame
-    // keeps its immutable shared buffer until EOF, link loss or TX deadline.
+    // Plan replacement without dropping anything yet. A started frame keeps
+    // its immutable shared buffer until EOF, link loss or TX deadline.
     for (size_t i = EV_MUX_OWNER_PREVIEW_FRAMES; i < EV_MUX_PREVIEW_FRAMES; ++i) {
         ev_mux_special_frame_t *special = &s_preview_frames[i];
         if (special->used && (special->frame.tx_offset == 0)) {
@@ -1933,16 +1995,14 @@ esp_err_t ev_mux_preview_publish_observers(const char *metadata, const void *pay
                 waiting_since[slot] = special->frame.start_ms;
                 waiting_progress[slot] = special->frame.last_progress_ms;
             }
-            ev_mux_completion_t ignored;
-            ev_mux_special_release_locked(special, ESP_ERR_INVALID_STATE, &ignored);
-            ev_mux_record_tx_drop();
         }
     }
     int pool = -1;
     for (size_t b = 0; b < EV_MUX_OBSERVER_BUFFERS; ++b) {
         bool busy = false;
         for (size_t i = EV_MUX_OWNER_PREVIEW_FRAMES; i < EV_MUX_PREVIEW_FRAMES; ++i) {
-            if (s_preview_frames[i].used && (s_preview_frames[i].payload == s_observer_buffers[b])) {
+            if (s_preview_frames[i].used && (s_preview_frames[i].frame.tx_offset != 0) &&
+                    (s_preview_frames[i].payload == s_observer_buffers[b])) {
                 busy = true;
             }
         }
@@ -1951,12 +2011,34 @@ esp_err_t ev_mux_preview_publish_observers(const char *metadata, const void *pay
             break;
         }
     }
-    if ((pool < 0) || !ev_mux_special_buffer_alloc(&s_observer_buffers[pool])) {
+    if (pool < 0) {
         xSemaphoreGive(s_special_mutex);
         return ESP_ERR_NO_MEM;
     }
+    size_t capacity = 0;
+    uint8_t *prepared = ev_mux_special_buffer_prepare(s_observer_buffers[pool],
+                                                      s_observer_capacities[pool],
+                                                      payload_len, &capacity);
+    if (prepared == NULL) {
+        xSemaphoreGive(s_special_mutex);
+        return ESP_ERR_NO_MEM;
+    }
+    // Growth succeeded. Only now replace unstarted frames; an allocation
+    // failure must retain their bytes, shared references and blocked deadline.
+    for (size_t i = EV_MUX_OWNER_PREVIEW_FRAMES; i < EV_MUX_PREVIEW_FRAMES; ++i) {
+        ev_mux_special_frame_t *special = &s_preview_frames[i];
+        if (special->used && (special->frame.tx_offset == 0)) {
+            ev_mux_completion_t ignored;
+            ev_mux_special_release_locked(special, ESP_ERR_INVALID_STATE, &ignored);
+            ev_mux_record_tx_drop();
+        }
+    }
+    ev_mux_special_buffer_commit(&s_observer_buffers[pool], &s_observer_capacities[pool],
+                                 prepared, capacity);
     // One copy and one CRC for all observers; no per-observer JPEG encode.
-    memcpy(s_observer_buffers[pool], payload, payload_len);
+    if (payload_len != 0) {
+        memcpy(s_observer_buffers[pool], payload, payload_len);
+    }
     uint32_t crc = ev_mux_crc32(payload, payload_len);
     for (uint8_t slot = 0; slot < EV_TRANSPORT_TCP_LINKS; ++slot) {
         ev_link_ref_t link;
@@ -2912,11 +2994,7 @@ static bool ev_mux_preview_target_available(const ev_mux_stream_target_t *target
     if (xSemaphoreTake(s_special_mutex, pdMS_TO_TICKS(20)) != pdTRUE) {
         return false;
     }
-    bool available = s_preview_pending >= 0;
-    if (!available) {
-        int8_t pool = (s_preview_active == 0) ? 1 : 0;
-        available = ev_mux_special_buffer_alloc(&s_preview_buffers[pool]);
-    }
+    bool available = ev_mux_preview_slot_available_locked();
     xSemaphoreGive(s_special_mutex);
     return available;
 }

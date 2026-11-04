@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -306,5 +306,234 @@ test('Node drain rejects promptly on explicit disconnect or Python bridge exit',
   await f.transport.disconnect()
   await rejected
   const exited = await drainFixture(t, ['exit'])
-  await assert.rejects(exited.transport.drain(), { code: 'SERIAL_CLOSED' })
+  await assert.rejects(exited.transport.drain(), error => error.code === 'SERIAL_ERROR' && error.details.exitCode === 2)
+})
+
+async function failureFixture(t, mode) {
+  await mkdir(tempBase, { recursive: true })
+  const root = await mkdtemp(join(tempBase, 'serial-failure-')), gate = join(root, 'fail')
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await writeFile(join(root, 'serial.py'), `
+import os, signal, time
+MODE = ${JSON.stringify(mode)}
+GATE = ${JSON.stringify(gate)}
+SECRET = 'TRANSFERRED_BYTES_MUST_NOT_ESCAPE_' * 100
+class SerialException(Exception):
+    pass
+class Serial:
+    def __init__(self, *args, **kwargs):
+        self.baudrate = kwargs['baudrate']
+    def open(self):
+        if MODE == 'denied':
+            raise SerialException('Could not open COM7: Access is denied ' + SECRET)
+        if MODE == 'opening':
+            time.sleep(1)
+    def read(self, size):
+        if os.path.exists(GATE):
+            if MODE == 'read':
+                raise OSError(5, SECRET)
+            if MODE == 'read-private':
+                raise SerialException(SECRET)
+            if MODE == 'exit':
+                os._exit(7)
+            if MODE == 'eof':
+                os._exit(0)
+            if MODE == 'signal':
+                os.kill(os.getpid(), signal.SIGKILL)
+        time.sleep(.005)
+        return b''
+    def write(self, data):
+        if MODE == 'write':
+            raise SerialException('GetOverlappedResult failed ' + SECRET + repr(data))
+        return len(data)
+    def flush(self):
+        pass
+    def close(self):
+        pass
+`)
+  return { root, gate, fail: () => writeFile(gate, '') }
+}
+
+function deadline(promise, message) {
+  let timer
+  return Promise.race([promise, new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), 5000)
+  })]).finally(() => clearTimeout(timer))
+}
+
+async function transportFailure(t, mode) {
+  const f = await failureFixture(t, mode), previous = process.env.PYTHONPATH
+  process.env.PYTHONPATH = [f.root, previous].filter(Boolean).join(delimiter)
+  t.after(() => { if (previous === undefined) delete process.env.PYTHONPATH; else process.env.PYTHONPATH = previous })
+  const transport = serialTransport({ python, serial: '/dev/fixture' }), errors = []
+  let closed
+  const close = new Promise(resolveClose => { closed = resolveClose })
+  transport.subscribe({ error: error => errors.push(error), close: closed })
+  t.after(() => transport.disconnect())
+  await transport.connect({ signal: new AbortController().signal })
+  return { ...f, transport, errors, close: () => deadline(close, 'Serial child did not close') }
+}
+
+test('actual Python reader failure reaches Node with safe OS cause and child status', { skip: !python }, async t => {
+  const f = await transportFailure(t, 'read')
+  await f.fail()
+  await f.close()
+  assert.equal(f.errors.length, 1)
+  const error = f.errors[0]
+  assert.equal(error.code, 'SERIAL_ERROR')
+  assert.deepEqual(error.details, { stage: 'read', type: 'OSError', errno: 5, winerror: null,
+    message: 'Input/output error', exitCode: 2, signal: null })
+  assert.equal(error.cause.name, 'OSError')
+  assert.equal(error.cause.errno, 5)
+  assert.deepEqual(f.transport.getDiagnostics().lastError, error.details)
+  assert.equal(JSON.stringify(error.details).includes('TRANSFERRED_BYTES'), false)
+  const snapshot = f.transport.getDiagnostics()
+  snapshot.lastError.message = 'changed by caller'
+  assert.notEqual(f.transport.getDiagnostics().lastError.message, snapshot.lastError.message)
+})
+
+test('actual Python writer failure keeps its API category without exposing payload or arbitrary exception text', { skip: !python }, async t => {
+  const f = await transportFailure(t, 'write')
+  const payload = new TextEncoder().encode('private transmitted bytes, never a diagnostic')
+  await f.transport.writeBytes(payload)
+  await f.close()
+  assert.equal(f.errors.length, 1)
+  assert.equal(f.errors[0].code, 'SERIAL_ERROR')
+  assert.deepEqual(f.errors[0].details, { stage: 'write', type: 'SerialException', errno: null,
+    winerror: null, message: 'GetOverlappedResult failed', exitCode: 2, signal: null })
+  const diagnostic = JSON.stringify(f.transport.getDiagnostics())
+  assert.equal(diagnostic.includes('TRANSFERRED_BYTES'), false)
+  assert.equal(diagnostic.includes('private transmitted bytes'), false)
+})
+
+test('unrecognized Python exception text is omitted and diagnostics remain bounded', { skip: !python }, async t => {
+  const f = await transportFailure(t, 'read-private')
+  await f.fail()
+  await f.close()
+  assert.equal(f.errors.length, 1)
+  assert.equal(f.errors[0].details.message, 'Serial read failed')
+  assert(JSON.stringify(f.errors[0].details).length < 512)
+  assert.equal(JSON.stringify(f.errors[0].details).includes('TRANSFERRED_BYTES'), false)
+})
+
+test('unexpected bridge exit zero, nonzero or signal reports one serial error with the actual close status', {
+  skip: !python,
+}, async t => {
+  for (const mode of ['exit', 'eof', ...(process.platform === 'win32' ? [] : ['signal'])]) {
+    const f = await transportFailure(t, mode)
+    await f.fail()
+    await f.close()
+    assert.equal(f.errors.length, 1, mode)
+    assert.equal(f.errors[0].code, 'SERIAL_ERROR')
+    assert.equal(f.errors[0].details.stage, 'process')
+    assert.equal(f.errors[0].details.exitCode, mode === 'exit' ? 7 : mode === 'eof' ? 0 : null)
+    assert.equal(f.errors[0].details.signal, mode === 'signal' ? 'SIGKILL' : null)
+  }
+})
+
+test('intentional disconnect and connection cancellation do not become serial failures', { skip: !python }, async t => {
+  const f = await transportFailure(t, 'idle')
+  await f.transport.disconnect()
+  await f.close()
+  assert.deepEqual(f.errors, [])
+  assert.equal(f.transport.getDiagnostics().lastError, undefined)
+  const pending = await failureFixture(t, 'opening'), previous = process.env.PYTHONPATH
+  process.env.PYTHONPATH = [pending.root, previous].filter(Boolean).join(delimiter)
+  t.after(() => { if (previous === undefined) delete process.env.PYTHONPATH; else process.env.PYTHONPATH = previous })
+  const transport = serialTransport({ python, serial: '/dev/fixture' }), errors = []
+  let closed
+  const close = new Promise(resolveClose => { closed = resolveClose })
+  transport.subscribe({ error: error => errors.push(error), close: closed })
+  t.after(() => transport.disconnect())
+  const controller = new AbortController(), connecting = transport.connect({ signal: controller.signal })
+  const cancelled = assert.rejects(connecting, { code: 'CANCELLED' })
+  controller.abort()
+  await cancelled
+  await deadline(close, 'Cancelled child did not close')
+  assert.deepEqual(errors, [])
+  assert.equal(transport.getDiagnostics().lastError, undefined)
+})
+
+
+test('Python failure stderr is one bounded structured record and never includes transfer data', { skip: !python }, async t => {
+  for (const mode of ['read-private', 'write']) {
+    const f = await failureFixture(t, mode), stderr = [], stdout = []
+    const child = spawn(python, ['-u', adapter, '/dev/fixture'], {
+      env: fixturePythonEnv(f.root), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
+    })
+    t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM') })
+    let ready
+    const started = new Promise(resolveReady => { ready = resolveReady })
+    child.stdout.on('data', bytes => stdout.push(bytes))
+    child.stderr.on('data', bytes => { stderr.push(bytes); if (/(?:^|\n)READY\r?\n/.test(Buffer.concat(stderr).toString())) ready() })
+    const closed = new Promise((resolveClose, reject) => { child.on('error', reject); child.on('close', (code, signal) => resolveClose({ code, signal })) })
+    await deadline(started, 'Python fault fixture did not become ready')
+    if (mode === 'write') {
+      const payload = Buffer.from('private serial bytes')
+      const record = Buffer.alloc(5 + payload.length)
+      record.writeUInt8(0, 0); record.writeUInt32BE(payload.length, 1); record.set(payload, 5)
+      child.stdin.write(record)
+    } else await f.fail()
+    assert.deepEqual(await deadline(closed, 'Python fault did not terminate'), { code: 2, signal: null })
+    const text = Buffer.concat(stderr).toString(), lines = text.trim().split(/\r?\n/)
+    assert.equal(lines.filter(line => line === 'READY').length, 1)
+    const records = lines.filter(line => line !== 'READY').map(line => JSON.parse(line))
+    assert.equal(records.length, 1)
+    assert.equal(records[0].kind, 'serial.error')
+    assert.equal(records[0].stage, mode === 'write' ? 'write' : 'read')
+    assert(Buffer.byteLength(lines.find(line => line !== 'READY')) < 512)
+    assert.equal(text.includes('TRANSFERRED_BYTES'), false)
+    assert.equal(text.includes('private serial bytes'), false)
+    assert.equal(Buffer.concat(stdout).length, 0)
+  }
+})
+
+
+test('disconnect before READY settles the pending connection without reporting an unexpected failure', { skip: !python }, async t => {
+  const f = await failureFixture(t, 'opening'), previous = process.env.PYTHONPATH
+  process.env.PYTHONPATH = [f.root, previous].filter(Boolean).join(delimiter)
+  t.after(() => { if (previous === undefined) delete process.env.PYTHONPATH; else process.env.PYTHONPATH = previous })
+  const transport = serialTransport({ python, serial: '/dev/fixture' }), errors = []
+  transport.subscribe({ error: error => errors.push(error) })
+  t.after(() => transport.disconnect())
+  const connecting = transport.connect({ signal: new AbortController().signal })
+  const closed = assert.rejects(connecting, { code: 'SERIAL_CLOSED' })
+  await transport.disconnect()
+  await deadline(closed, 'Disconnect did not settle the pending connection')
+  assert.deepEqual(errors, [])
+  assert.equal(transport.getDiagnostics().lastError, undefined)
+})
+
+
+test('spawn failure before READY preserves its bounded process cause and settles once', async t => {
+  const transport = serialTransport({ python: join(tempBase, 'missing-python-executable'), serial: '/dev/fixture' }), errors = []
+  transport.subscribe({ error: error => errors.push(error) })
+  t.after(() => transport.disconnect())
+  await assert.rejects(transport.connect({ signal: new AbortController().signal }), error => {
+    assert.equal(error.code, 'SERIAL_ERROR')
+    assert.equal(error.details.stage, 'process')
+    assert.equal(error.details.type, 'ProcessError')
+    assert.equal(error.details.exitCode, process.platform === 'win32' ? -4058 : -2)
+    assert.equal(error.details.signal, null)
+    assert.match(error.details.message, /ENOENT/)
+    return true
+  })
+  assert.equal(errors.length, 1)
+})
+
+test('Windows-style access denial before READY retains its existing error code without port or exception text', { skip: !python }, async t => {
+  const f = await failureFixture(t, 'denied'), previous = process.env.PYTHONPATH
+  process.env.PYTHONPATH = [f.root, previous].filter(Boolean).join(delimiter)
+  t.after(() => { if (previous === undefined) delete process.env.PYTHONPATH; else process.env.PYTHONPATH = previous })
+  const transport = serialTransport({ python, serial: 'COM7' }), errors = []
+  transport.subscribe({ error: error => errors.push(error) })
+  t.after(() => transport.disconnect())
+  await assert.rejects(transport.connect({ signal: new AbortController().signal }), error => {
+    assert.equal(error.code, 'SERIAL_ACCESS_DENIED')
+    assert.equal(error.details.exitCode, 2)
+    assert.equal(JSON.stringify(error.details).includes('TRANSFERRED_BYTES'), false)
+    assert.equal(error.message.includes('COM7'), false)
+    return true
+  })
+  assert.equal(errors.length, 1)
 })

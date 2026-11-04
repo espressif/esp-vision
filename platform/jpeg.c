@@ -357,6 +357,7 @@ exit:
 
 #include "camera.h"
 #include "driver/jpeg_encode.h"
+#include "esp_cache.h"
 #include "esp_log.h"
 
 #define ESP_VISION_JPEG_TIMEOUT_MS (200)
@@ -654,6 +655,18 @@ esp_err_t esp_vision_jpeg_encode(const image_t *img, int quality, uint8_t **jpeg
         .sub_sample = sub_sample,
         .image_quality = quality,
     };
+
+    // jpeg_alloc_encoder_mem() zeroes the aligned output in the CPU cache.
+    // Release every owned output cache line before IDF writes its separate,
+    // cache-aligned header and starts payload DMA. Otherwise a dirty line can
+    // be evicted over newly encoded data before IDF's final M2C invalidation.
+    // Never write back this buffer after DMA has started.
+    ret = esp_cache_msync(s_jpeg.jpeg_buf, s_jpeg.jpeg_buf_size,
+                          ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_INVALIDATE);
+    if (ret != ESP_OK) {
+        ESP_LOGW("esp_vision_jpeg", "Output cache handoff failed: ret=%d", ret);
+        return ret;
+    }
 
     uint32_t out_size = 0;
     ret = jpeg_encoder_process(s_jpeg.encoder,

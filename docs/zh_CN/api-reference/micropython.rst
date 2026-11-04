@@ -77,7 +77,7 @@ GPIO 与 PWM 示例
 
 沿用的 `network <https://docs.micropython.org/en/v1.28.0/library/network.html>`_、`socket <https://docs.micropython.org/en/v1.28.0/library/socket.html>`_ 和 `select <https://docs.micropython.org/en/v1.28.0/library/select.html>`_ 模块提供网络接口管理及 TCP/UDP 通信能力。当前产品开发板配置均启用了 ``network.WLAN``，但实际使用仍需要兼容的网络硬件和固件配置。
 
-当前开发板配置关闭了 `bluetooth <https://docs.micropython.org/en/v1.28.0/library/bluetooth.html>`_ 和 `espnow <https://docs.micropython.org/en/v1.28.0/library/espnow.html>`_。SSL/TLS、``cryptolib``、WebSocket、WebREPL 和 socket event 支持取决于构建固件使用的 ESP-IDF 版本；维护中的支持摘要见 :doc:`../target-support/index`。
+当前开发板配置关闭了 `bluetooth <https://docs.micropython.org/en/v1.28.0/library/bluetooth.html>`_ 和 `espnow <https://docs.micropython.org/en/v1.28.0/library/espnow.html>`_。SSL/TLS、``cryptolib``、WebSocket 和 socket event 支持取决于构建固件使用的 ESP-IDF 版本。ESP-VISION EV-MUX 运行态不支持传统 MicroPython WebREPL，即使构建包含 ``_webrepl``，其终端与文件操作也不经过 EV-MUX 的 owner 授权。网络控制请使用 :doc:`../device-core/api` 的 TCP 连接；维护中的支持摘要见 :doc:`../target-support/index`。
 
 连接 Wi-Fi
 -----------
@@ -250,4 +250,4 @@ ESP-VISION 沿用 MicroPython 的虚拟文件系统和流行为，包括 `os <ht
 
 .. seealso::
 
-   仅使用标准 MicroPython API 的可运行示例：``example/00-HelloWorld/helloworld.py``\ （首个脚本）、``example/06-Peripherals/00-Storage/sdcard.py``\ （文件系统）与 ``example/06-Peripherals/02-WiFi/webrepl.py``\ （Wi-Fi 与 WebREPL）。
+   使用标准 MicroPython API 的可运行示例包括 ``example/00-HelloWorld/helloworld.py``\ （首个脚本）和 ``example/06-Peripherals/00-Storage/sdcard.py``\ （需要 SD 卡）。``example/07-Network/00-WebREPL/webrepl.py`` 用于说明传统 WebREPL 不受支持的边界，会在改变网络前退出，不是 ESP-VISION 上可运行的网络终端。

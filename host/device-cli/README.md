@@ -2,7 +2,7 @@
 
 `@esp-vision/device-cli` installs the `esp-vision-device` command for device discovery, inspection, configuration, control, firmware updates, Python execution, device file operations, JPEG capture, sequential batch plans, and bounded event watches. It is an optional host interface backed by the same `@esp-vision/device-core` package used by ESP-VISION clients.
 
-Requires Node.js 22 or newer. Serial access requires Python with `pyserial`; firmware flashing requires Python `esptool>=5.3,<6`. LAN discovery uses the bundled multicast-DNS client.
+Requires Node.js 22 or newer. Serial access requires Python with `pyserial`; firmware flashing requires Python `esptool==5.6.0`. LAN discovery uses the bundled multicast-DNS client.
 
 Run `esp-vision-device --help` for the command reference, or `esp-vision-device --help --json` for the versioned machine-readable command, output, and limit capabilities envelope.
 

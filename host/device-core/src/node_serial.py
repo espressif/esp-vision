@@ -11,6 +11,57 @@ import threading
 import serial
 
 
+def _report_serial_error(stage, error):
+    """Emit bounded OS diagnostics, never exception text or transferred bytes."""
+    number = getattr(error, 'errno', None)
+    winerror = getattr(error, 'winerror', None)
+    cause = error.__cause__ or error.__context__
+    if not isinstance(number, int) and cause is not None:
+        number = getattr(cause, 'errno', None)
+    if not isinstance(winerror, int) and cause is not None:
+        winerror = getattr(cause, 'winerror', None)
+    def bounded_number(value):
+        if isinstance(value, int) and not isinstance(value, bool) and -0x80000000 <= value <= 0xffffffff:
+            return value
+        return None
+    number = bounded_number(number)
+    winerror = bounded_number(winerror)
+    # Pyserial sometimes wraps a Windows API failure without preserving errno.
+    # Only recognize fixed API names/messages; arbitrary exception text may
+    # contain application bytes and must not cross this diagnostic channel.
+    text = str(error)[:512]
+    message = 'Serial ' + stage + ' failed'
+    if number is not None and 0 < number < 4096:
+        message = os.strerror(number)
+    else:
+        for needle, safe in (
+            ('ClearCommError', 'ClearCommError failed'),
+            ('GetOverlappedResult', 'GetOverlappedResult failed'),
+            ('ReadFile', 'ReadFile failed'),
+            ('WriteFile', 'WriteFile failed'),
+            ('readiness to read but returned no data', 'Device reports readiness to read but returned no data'),
+            ('write timeout', 'Serial write timed out'),
+            ('Zero-byte serial write', 'Serial write returned zero bytes'),
+        ):
+            if needle.lower() in text.lower():
+                message = safe
+                break
+    record = {'kind': 'serial.error', 'stage': stage, 'type': type(error).__name__[:64],
+              'errno': number, 'winerror': winerror, 'message': message[:160]}
+    # One small line keeps READY/control records intact when the reader thread
+    # fails concurrently with the main thread. stderr failure is terminal too.
+    line = (json.dumps(record, ensure_ascii=True) + '\n').encode()
+    try:
+        offset = 0
+        while offset < len(line):
+            count = os.write(2, line[offset:])
+            if count <= 0:
+                break
+            offset += count
+    except OSError:
+        pass
+
+
 def _configure_serial_exclusive(port, platform=os.name):
     # pyserial implements this as a non-blocking advisory lock on POSIX. The
     # Windows backend does not support this option, so leave its behavior alone.
@@ -50,16 +101,24 @@ def main():
         raise SystemExit(0)
 
     def receive():
-        try:
-            while not stopped.is_set():
+        while not stopped.is_set():
+            try:
                 data = port.read(8192)
-                if data:
+            except (OSError, serial.SerialException) as error:
+                if not stopped.is_set():
+                    _report_serial_error('read', error)
+                    os._exit(2)
+                return
+            if data:
+                try:
                     offset = 0
                     while offset < len(data):
                         offset += os.write(1, data[offset:])
-        except (OSError, serial.SerialException):
-            if not stopped.is_set():
-                os._exit(2)
+                except OSError as error:
+                    if not stopped.is_set():
+                        _report_serial_error('stdout', error)
+                        os._exit(2)
+                    return
 
     signal.signal(signal.SIGTERM, terminate)
     signal.signal(signal.SIGINT, terminate)
@@ -102,12 +161,16 @@ def main():
                     response = {'id': request.get('id'), 'ok': False}
                 print(json.dumps(response), file=sys.stderr, flush=True)
                 continue
-            offset = 0
-            while offset < len(data):
-                written = port.write(data[offset:])
-                if not written:
-                    raise OSError('Zero-byte serial write')
-                offset += written
+            try:
+                offset = 0
+                while offset < len(data):
+                    written = port.write(data[offset:])
+                    if not written:
+                        raise OSError('Zero-byte serial write')
+                    offset += written
+            except (OSError, serial.SerialException) as error:
+                _report_serial_error('write', error)
+                raise SystemExit(2) from None
     finally:
         stopped.set()
         port.close()

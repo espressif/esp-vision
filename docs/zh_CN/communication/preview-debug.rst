@@ -8,6 +8,8 @@ preview 图像由应用主动发布
 
 应用调用 ``img.flush()`` 后，preview producer 在需要发送时将当前图像编码为 JPEG，以 ``preview.frame`` 数据帧发给当前 user stream owner。只读 TCP 旁观者可独立订阅，详见下文。 已绑定的 USB 摄像头输出也是独立消费者，详见 :doc:`../api-reference/uvc`；它不接管 EV-MUX 控制会话，也不初始化相机。
 
+UVC 使用 USB 等时传输。任何失败或短包都会终止当前帧，固件不会把后续 JPEG 片段继续拼到不完整的前缀上。它会尝试发送一次仅含 UVC 头的 ``ERR|EOF`` 结束包，将失败与完整帧传输分开报告，并释放源缓冲槽。下一帧切换 FID 并清除错误标志。总线复位或 alternate setting 取消也会释放旧源。这不保证 USB 无损交付；验收必须完整解码所有保留的 UVC 帧，并覆盖 CDC/TCP 并发场景，不能只检查输出文件非空。
+
 .. code-block:: python
 
    import sensor

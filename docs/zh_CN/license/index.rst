@@ -44,6 +44,10 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - ``overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`` （v1.28.0 基线）
      - CDC/MSC/UVC 描述符及速率适配，保留上游许可证头
      - MIT
+   * - TinyUSB UVC 传输适配
+     - ``overlay/micropython/shared/tinyusb/esp_vision_video_transfer.inc``、``tools/tests/tinyusb_video_stubs/upstream_transfer.c``；espressif/tinyusb 0.19.0~3，提交 ``ab4a1817907ed865b10a712b5e03e5e0a9902df5``
+     - 构建时生成经检查的 ``src/class/video/video_device.c`` 副本；终止失败或短包 ISO 帧，单独报告失败完成，并保留原版权和许可证头
+     - MIT
    * - `micropython-ulab <https://github.com/v923z/micropython-ulab>`__ 6.12
      - ``lib/ulab``
      - 数组与数值计算

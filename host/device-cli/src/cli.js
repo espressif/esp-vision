@@ -56,7 +56,7 @@ Batch plans use schemaVersion 1 with an operations array. Operations run sequent
 In JSON mode stdout contains one schemaVersion 1 JSON envelope. Python output, status, logs, and errors are NDJSON events on stderr.
 Binary file reads and JPEG captures always write to --output. Local output is capped at 16 MiB by default and --max-bytes may lower that cap.
 Firmware versions come from dl.espressif.com by default; local catalogs are advanced overrides.
-Firmware update uses the built-in serial flasher (Python esptool>=5.3,<6). TCP is not OTA.
+Firmware update uses the built-in serial flasher (Python esptool==5.6.0). TCP is not OTA.
 Default mode update preserves the existing layout/data; explicit mode install writes a complete image, replacing data in its written range. Blank boards require --board and a ROM-capable USJ/UART port, not an application USB-OTG interface.`
 
 export const cliCapabilities = Object.freeze({

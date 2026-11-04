@@ -23,6 +23,12 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Record that development-board flashing does not require automatic firmware backup, restoration or whole-flash preservation reads; retain ordinary programming verification and reserve backup/restore for explicit requests.
+- Deliver the Node ROM recovery and bounded readback corrections as Device Core 0.6.1 with matching action-schema metadata after the published 0.6.0 release, retaining independent CLI and Plugin release lifecycles.
+- Make Device Core package/release checks invoke npm's JavaScript entry point on Windows without a shell, and accept CRLF checkout line endings in generated-schema verification without accepting content changes.
+
+- Clarify that validated compressed JPEG input is a borrowed view owned by its source Image and that asynchronous consumers must copy the returned buffer.
+
 - Use one queued camera buffer on ESP32_S31_KORVO while retaining the DVP controller's independent backup frame, saving 1,843,200 bytes for the SC101IOT 1280×720 YUYV input alongside AI and the RGB LCD.
 
 - Publish new Device Core and CLI versions automatically from protected default-branch pipelines; publish Plugin and Knowledge npm packages on qualified firmware tags with matching Core/CLI minor ranges, reproducible resolved patches and a registry-verified bundled CLI; enforce patch/minor/major version steps.
@@ -55,6 +61,20 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Reuse an existing connection to the requested SSID in the MJPEG and Cloud AI examples, reject a different connected network, and wait within the existing retry budget for managed WiFi connection attempts or EBUSY instead of repeatedly disabling STA.
+- Fix the English WebREPL support heading underline so HTML and PDF documentation builds pass the Sphinx warning gate.
+
+- Grow EV-MUX owner-preview, shared-observer and large-reply buffers to bounded capacities based on actual payloads instead of preallocating 256 KiB per slot during availability checks; preserve active/shared frame storage and retain pending bytes and deadlines on allocation failure.
+- Hand off the complete aligned hardware JPEG output buffer from CPU cache before IDF writes its header and starts payload DMA, preventing dirty allocation cache lines from later overwriting encoded bytes; fail explicitly before DMA when cache synchronization fails and keep CPU fallback memory separate.
+- Accept native Windows CRLF startup lines in the direct Python serial-failure regression rather than timing out before its assertions.
+- Validate every CRC-checked EV-MUX JPEG retained by the UVC diagnostic with the shared strict decoder, removing its missing-io failure and rejecting entropy loss accepted by Pillow alone.
+- Clarify that the EV-MUX runtime does not support traditional MicroPython WebREPL, correct the bilingual build/API claims and example path, and report an ordinary error before changing Wi-Fi or opening a listener. Network control continues through Device Core TCP session authorization.
+- Preserve bounded Node serial read/write diagnostics and Python bridge exit status without logging transferred bytes, while distinguishing unexpected failures from intentional disconnect and cancellation.
+
+- Abort native UVC frames after failed or short USB ISO transfers, send a bounded error/end marker where possible, and release the source through a failure callback so missing payloads cannot be followed by a misleading frame tail. Keep the managed TinyUSB source intact and compile a checksum-pinned MIT adaptation with fault regressions.
+- Require complete JPEG decoding for every retained UVC frame in both standalone and concurrent TCP acceptance, including a regression that removes one 510-byte middle payload while preserving SOI/EOI.
+- Require strict FFmpeg decoding and an exact decoded-frame count for retained UVC/MJPEG acceptance, rejecting missing entropy payloads that Pillow can silently conceal; fail explicitly when FFmpeg is unavailable and install it for host CI checks.
+
 - Preserve runtime UART negotiation, image ownership and complete-JPEG validation alongside native UVC/TCP preview; reject partial compressed frames before fan-out and retain bounded CPU encoding when composite USB leaves insufficient internal DMA memory for the hardware JPEG engine.
 - Keep TCP observer progress and absolute frame deadlines independent of runtime UART baud changes, avoiding premature disconnection of a progressing observer in the combined transport scheduler.
 
@@ -64,6 +84,9 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Delay the initial UVC isochronous frame until the host has time to queue receive transfers, avoiding a truncated JPEG during stream startup.
 - Reserve sufficient VFS driver slots on ESP32_P4X_EYE for ISP/camera/codec devices alongside storage and consoles, avoiding camera initialization failures at the default eight-slot limit.
 - Fall back to software JPEG encoding when the P4 hardware encoder exhausts DEFAULT-capable internal DMA memory, and pass through already-compressed image frames for UVC and EV-MUX output.
+- Wait up to five seconds for the same native USB device to reappear in its verified runtime after a read-only ROM initialization fails; preserve identity and ambiguity checks, cancellation and the single-handoff boundary without retrying writes.
+- Apply the requested Node ROM read packet budget to the external esptool reader, defaulting to one outstanding 1 KiB packet while retaining upstream ACK/MD5 verification and whole-image SHA-256 readback. Require the tested esptool 5.6.0 reader before connecting, restoring temporary adapter settings on every outcome and rejecting unsupported layouts before Flash writes.
+
 - Bind Node native USB flashing to the selected device across runtime/ROM re-enumeration, including the UVC composite runtime: verify its EV-MUX identity before one bootloader request, wait for the same USB MAC/location, and verify the actual ROM MAC before allowing writes. Wait for the explicitly selected path to settle instead of guessing another port; allow one read-only initialization recovery only after observing that same device back in its runtime.
 - Read the six-byte factory MAC explicitly for USB serials, runtime identities, launcher state and `machine.unique_id()`. Avoid eight-byte EUI-64 writes into six-byte buffers on ESP32-S31 and preserve factory MAC identity on P4/S3.
 

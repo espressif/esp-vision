@@ -265,10 +265,12 @@ test('recovery never repeats a previous active handoff or uses an incomplete pre
   }
 })
 
-test('same ROM or no runtime returns null without issuing a bootloader command', async () => {
+test('persistent ROM or absence exhausts only passive observation before returning null', async () => {
   for (const snapshot of [[rom('/dev/ttyACM1')], [], [native('/dev/ttyACM8', { serialNumber: 'e8f60ae75653', location: '2-3' })]]) {
     const f = fixture({ snapshots: [snapshot] })
     assert.equal(await f.recover(previousRom()), null)
+    assert.equal(f.now(), 200)
+    assert.equal(f.calls.enumerate.length, 4)
     assert.equal(f.calls.creates, 0)
     assert.equal(f.calls.control.length, 0)
   }
@@ -302,4 +304,82 @@ test('read-only recovery honors cancel and fresh-enumeration deadline', async ()
   const late = fixture({ snapshots: [[native()]], enumerationDelay: 250 })
   await assert.rejects(late.recover(previousRom()), { code: 'ROM_PORT_REBIND_TIMEOUT' })
   assert.equal(late.calls.creates, 0)
+})
+
+
+test('read-only recovery observes a real 2.4-second missing-device window before one handoff', async () => {
+  const runtime = native('/dev/ttyACM2', { productId: 0x4023 })
+  const f = fixture({ snapshots: [...Array.from({ length: 48 }, () => []), [runtime], [runtime], [rom('/dev/ttyACM3')]] })
+  const result = await f.recover(previousRom(), { timeout: 5000 })
+  assert.equal(f.now(), 2400)
+  assert.equal(result.port, '/dev/ttyACM3')
+  assert.equal(result.transition.recovery.runtimePid, 0x4023)
+  assert.equal(f.calls.control.length, 1)
+  assert.equal(f.calls.connect.length, 1)
+  assert.equal(f.calls.disconnect, 1)
+  assert.equal(f.calls.enumerate[48].timeout, 2600)
+})
+
+test('a stale ROM followed by disappearance is observed passively until the same runtime returns', async () => {
+  const runtime = native('/dev/ttyACM2')
+  const snapshots = [...Array.from({ length: 10 }, () => [rom('/dev/ttyACM0')]),
+    ...Array.from({ length: 38 }, () => []), [runtime], [runtime], [rom('/dev/ttyACM3')]]
+  const f = fixture({ snapshots })
+  const result = await f.recover(previousRom(), { timeout: 5000 })
+  assert.equal(f.now(), 2400)
+  assert.equal(result.port, '/dev/ttyACM3')
+  assert.equal(f.calls.creates, 1)
+  assert.equal(f.calls.control.length, 1)
+  assert.equal(f.calls.disconnect, 1)
+})
+
+test('a conflicting MAC or location seen after waiting fails before opening any runtime', async () => {
+  for (const conflicting of [native('/dev/ttyACM2', { serialNumber: 'e8f60ae75653' }),
+    native('/dev/ttyACM2', { location: '2-3' }), rom('/dev/ttyACM2', { serialNumber: 'e8f60ae75653' }),
+    rom('/dev/ttyACM2', { location: '2-3' })]) {
+    const f = fixture({ snapshots: [[], [], [conflicting]] })
+    await assert.rejects(f.recover(previousRom()), { code: 'ROM_RUNTIME_IDENTITY_MISMATCH' })
+    assert.equal(f.now(), 100)
+    assert.equal(f.calls.creates, 0)
+    assert.equal(f.calls.control.length, 0)
+  }
+})
+
+test('late duplicate runtime or simultaneous ROM/runtime descriptors remain ambiguous', async () => {
+  for (const second of [native('/dev/ttyACM3'), rom('/dev/ttyACM3')]) {
+    const f = fixture({ snapshots: [[], [native('/dev/ttyACM2'), second]] })
+    await assert.rejects(f.recover(previousRom()), { code: 'ROM_PORT_AMBIGUOUS' })
+    assert.equal(f.now(), 50)
+    assert.equal(f.calls.creates, 0)
+    assert.equal(f.calls.control.length, 0)
+  }
+})
+
+test('cancel during passive recovery sleep never creates a session or sends bootloader', async () => {
+  const reason = Object.assign(new Error('cancelled during native USB observation'), { name: 'AbortError' })
+  const f = fixture({ snapshots: [[]], onSleep(controller, clock) { if (clock >= 150) controller.abort(reason) } })
+  await assert.rejects(f.recover(previousRom(), { timeout: 5000 }), value => value === reason)
+  assert.equal(f.now(), 150)
+  assert.equal(f.calls.creates, 0)
+  assert.equal(f.calls.control.length, 0)
+})
+
+test('late runtime enumeration does not start handoff after the passive deadline', async () => {
+  const runtime = native('/dev/ttyACM2')
+  const f = fixture({ snapshots: [[runtime]], enumerationDelay: 201 })
+  await assert.rejects(f.recover(previousRom()), { code: 'ROM_PORT_REBIND_TIMEOUT' })
+  assert.equal(f.calls.creates, 0)
+  assert.equal(f.calls.control.length, 0)
+})
+
+test('a runtime handshake error after settling is propagated without another observation or handoff', async () => {
+  const runtime = native('/dev/ttyACM2')
+  const reason = failure('SESSION_BUSY')
+  const f = fixture({ snapshots: [[], [runtime], [runtime]], connectError: reason })
+  await assert.rejects(f.recover(previousRom()), value => value === reason)
+  assert.equal(f.now(), 50)
+  assert.equal(f.calls.connect.length, 1)
+  assert.equal(f.calls.creates, 1)
+  assert.equal(f.calls.control.length, 0)
+  assert.equal(f.calls.disconnect, 1)
 })

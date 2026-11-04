@@ -95,7 +95,7 @@ CI 构建和发布固件使用以下开发板与 IDF 组合：
 
 运行 `idf.py` 前，请使用对应的 ESP-IDF checkout 并 source 其 `export.sh`。v5.5.6 固定到补丁版本；`release/v6.1` 跟随 S31 所需的 6.1 维护分支。其它 IDF 版本（包括更新的补丁版本、release/v6.0 和 master）不在此 CI 验证矩阵内。ESP-IDF 或托管组件的 API 变更可能导致配置/编译失败、运行行为变化，或改变 MicroPython 暴露的 Python API；使用这些版本时，可能需要适配源码、overlay 或依赖，并单独进行硬件验证。
 
-当前 overlay 在 v5.5.6 下提供 SSL/TLS、`cryptolib`、WebSocket、WebREPL、socket events，以及芯片支持时的 `machine.I2S`、PCNT 和 I2C target 模式。这些可选功能在 6.1 构建中仍保持关闭；使用前应检查实际固件。
+当前 overlay 在 v5.5.6 下启用 SSL/TLS、`cryptolib`、WebSocket、socket events，以及芯片支持时的 `machine.I2S`、PCNT 和 I2C target 模式。这些可选功能在 6.1 构建中仍保持关闭；使用前应检查实际固件。两个构建的 ESP-VISION EV-MUX 运行态均不支持传统 MicroPython WebREPL，其终端与文件协议未接入唯一 owner 会话、租约和 VM 代次校验。网络控制请使用 Device Core 的 TCP 连接；仅启用 WebSocket 或 `_webrepl` 编译选项不代表 WebREPL 服务可用。
 
 ## 效果演示
 
@@ -139,3 +139,5 @@ EV-MUX TCP 接口用于可信本地网络中的无线调试，不提供对端身
 - [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)
 
 原生 CDC/MSC/UVC 描述符 overlay（`overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`）基于 MicroPython v1.28.0，保留其 MIT 许可证和版权声明。
+
+TinyUSB UVC 传输适配（`overlay/micropython/shared/tinyusb/esp_vision_video_transfer.inc`）及原样测试夹具（`tools/tests/tinyusb_video_stubs/upstream_transfer.c`）源于 espressif/tinyusb 0.19.0~3（提交 `ab4a1817907ed865b10a712b5e03e5e0a9902df5`）中采用 MIT 许可证的 `video_device.c`，保留原版权和许可证头。构建时生成经检查的源文件副本，不修改 managed component；[许可证清单](docs/zh_CN/license/index.rst)记录了这项适配。

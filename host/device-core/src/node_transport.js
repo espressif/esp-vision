@@ -39,7 +39,7 @@ export function tcpTransport(options) {
 
 export function serialTransport(options) {
   const events = subscribers()
-  let child, controlId = 0, baudRate = 115200
+  let child, connection, lastError = null, controlId = 0, baudRate = 115200
   const pending = new Map()
   const rejectControls = error => {
     for (const request of pending.values()) request.reject(error)
@@ -58,35 +58,65 @@ export function serialTransport(options) {
     connect({ signal }) {
       return new Promise((resolveConnect, reject) => {
         const adapter = fileURLToPath(new URL('./node_serial.py', import.meta.url))
-        child = spawn(options.python, ['-u', adapter, options.serial], { stdio: ['pipe', 'pipe', 'pipe'] })
+        const bridge = child = spawn(options.python, ['-u', adapter, options.serial], { stdio: ['pipe', 'pipe', 'pipe'] })
+        const current = connection = { intentional: false }
+        lastError = null
+        let adapterCause = null, processCause = null
+        const safeCause = value => {
+          if (value?.kind !== 'serial.error' || !['read', 'write', 'stdout'].includes(value.stage)
+              || typeof value.type !== 'string' || typeof value.message !== 'string') return null
+          const integer = n => Number.isSafeInteger(n) && n >= -0x80000000 && n <= 0xffffffff ? n : null
+          return { stage: value.stage, type: value.type.slice(0, 64), errno: integer(value.errno),
+            winerror: integer(value.winerror), message: value.message.replace(/[\r\n\x00-\x1f\x7f]/g, ' ').slice(0, 160) }
+        }
+        const errorDetails = (exitCode = null, signal = null) => ({
+          ...(adapterCause ?? processCause ?? { stage: 'process', type: 'ProcessExit', errno: null, winerror: null,
+            message: 'Serial adapter exited unexpectedly' }),
+          exitCode: Number.isInteger(exitCode) ? exitCode : null,
+          signal: typeof signal === 'string' ? signal.slice(0, 32) : null,
+        })
         let ready = false, settled = false, runtimeErrorReported = false, stderr = '', lines = ''
         const abort = () => {
-          child.kill('SIGTERM')
+          current.intentional = true
+          bridge.kill('SIGTERM')
           if (!settled) {
             settled = true
             reject(fail('CANCELLED', 'Serial connection cancelled'))
           }
         }
         const cleanup = () => signal.removeEventListener('abort', abort)
-        const serialError = () => {
-          const code = ['SERIAL_ACCESS_DENIED', 'SERIAL_BUSY'].find(code => stderr.includes(code)) ?? 'SERIAL_ERROR'
-          return fail(code, 'Serial adapter failed; ensure Python, pyserial and port access are available')
+        const serialError = details => {
+          const code = ready ? 'SERIAL_ERROR' : ['SERIAL_ACCESS_DENIED', 'SERIAL_BUSY'].find(code => stderr.includes(code)) ?? 'SERIAL_ERROR'
+          const message = ready && details?.stage !== 'process'
+            ? `Serial adapter ${details.stage} failed: ${details.message}`
+            : 'Serial adapter failed; ensure Python, pyserial and port access are available'
+          const error = fail(code, message)
+          error.details = details ?? errorDetails()
+          error.cause = Object.assign(new Error(error.details.message), { ...error.details, name: error.details.type })
+          return error
         }
-        const failBeforeReady = () => {
+        const failBeforeReady = details => {
           if (settled) return
           settled = true
           cleanup()
-          const error = serialError()
+          const error = serialError(details)
           reject(error)
           events.emit('error', error)
         }
-        const reportRuntimeError = () => {
+        const reportRuntimeError = details => {
           if (runtimeErrorReported) return
           runtimeErrorReported = true
-          events.emit('error', serialError())
+          const error = serialError(details)
+          lastError = { ...error.details }
+          events.emit('error', error)
         }
-        child.on('error', () => { if (ready) reportRuntimeError() })
-        child.stdin.on('error', () => { if (ready) reportRuntimeError() })
+        const recordProcessError = (stage, error) => {
+          processCause = { stage, type: 'ProcessError', errno: null, winerror: null,
+            message: typeof error?.code === 'string' && /^[A-Z0-9_]{1,32}$/.test(error.code)
+              ? `Serial adapter ${stage} failed (${error.code})` : `Serial adapter ${stage} failed` }
+        }
+        child.on('error', error => recordProcessError('process', error))
+        child.stdin.on('error', error => recordProcessError('stdin', error))
         child.stdout.on('data', bytes => events.emit('data', bytes))
         child.stderr.on('data', bytes => {
           // Do not print Python errors: they can contain host paths or device data.
@@ -105,6 +135,8 @@ export function serialTransport(options) {
             }
             let response
             try { response = JSON.parse(line) } catch { continue }
+            const diagnostic = safeCause(response)
+            if (diagnostic) { adapterCause = diagnostic; continue }
             const request = pending.get(response.id)
             if (!request) continue
             pending.delete(response.id)
@@ -119,7 +151,23 @@ export function serialTransport(options) {
         })
         // Wait for close rather than exit: stdout/stderr may still have buffered
         // data after exit, including the adapter's stable SERIAL_BUSY marker.
-        child.on('close', () => { cleanup(); rejectControls(fail('SERIAL_CLOSED', 'Serial adapter closed')); if (!ready) failBeforeReady(); events.emit('close') })
+        child.on('close', (code, signal) => {
+          cleanup()
+          if (connection !== current) return
+          const details = errorDetails(code, signal)
+          if (current.intentional) {
+            const error = fail('SERIAL_CLOSED', 'Serial adapter closed')
+            rejectControls(error)
+            if (!settled) { settled = true; reject(error) }
+          } else {
+            lastError = { ...details }
+            const error = serialError(details)
+            rejectControls(error)
+            if (!ready) failBeforeReady(details)
+            else reportRuntimeError(details)
+          }
+          events.emit('close')
+        })
         signal.addEventListener('abort', abort, { once: true })
         if (signal.aborted) abort()
       })
@@ -158,8 +206,9 @@ export function serialTransport(options) {
         send(1, Buffer.from(JSON.stringify({ id, baudRate: speed }))).catch(error => pending.get(id)?.reject(error))
       })
     },
-    getDiagnostics() { return { baudRate } },
+    getDiagnostics() { return { baudRate, ...(lastError ? { lastError: { ...lastError } } : {}) } },
     async disconnect() {
+      if (connection) connection.intentional = true
       rejectControls(fail('SERIAL_CLOSED', 'Serial adapter closed'))
       if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return
       await new Promise(resolveExit => {

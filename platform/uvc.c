@@ -112,6 +112,16 @@ void tud_video_frame_xfer_complete_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx
     s_inflight = -1;
 }
 
+// The scoped TinyUSB class reports aborted/error transfers separately from a
+// complete frame. Both release the immutable slot; neither retries old data.
+void tud_video_frame_xfer_failed_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx)
+{
+    (void)ctl_idx;
+    (void)stm_idx;
+    s_busy = false;
+    s_inflight = -1;
+}
+
 int tud_video_commit_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx,
                         const video_probe_and_commit_control_t *mode)
 {

@@ -1284,7 +1284,7 @@ Promise<Uint8Array>，校验 v4、精确字节数、应用分区边界和 SHA-25
 
 
 ``openNodeRom({ port, python?, signal? })``
-    返回内置 ROM 适配器，创建时不打开端口。用于 ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })``，安装与应用更新共用。需要独立安装 Python esptool>=5.3,<6；Unix 默认 python3，Windows 默认 python。Core 负责初始化、校验、写入/回读、复位与释放。SDK 0.3.0 新增，仅用于 Node；区别于运行态 serialTransport，也不是 TCP OTA。
+    返回内置 ROM 适配器，创建时不打开端口。用于 ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })``，安装与应用更新共用。需要独立安装 Python esptool==5.6.0，其 stub 读取请求与 ACK/MD5 解析器已经过兼容性验证；Unix 默认 python3，Windows 默认 python。Core 负责初始化、校验、写入/回读、复位与释放。SDK 0.3.0 新增，仅用于 Node；区别于运行态 serialTransport，也不是 TCP OTA。
 
 @esp-vision/device-core/discovery
 ------------------------------------------------------------------
@@ -1362,3 +1362,10 @@ FirmwareFlashSession.flash 返回值
 ---------------------
 
 浏览器 ROM 适配器在校验后通过当前运行的 flash stub 复位。写入校验成功不代表固件已经启动：宿主必须等待新的运行态握手后才允许配网。若 ``needsReset`` 为真，``resetError`` 会保留复位失败的代码和消息；手动复位只作为异常恢复方式。
+
+Node ROM 回读安全边界
+~~~~~~~~~~~~~~~~~~~~~
+
+Node Flash 读取默认只允许一个未确认的 1024 字节包。适配器将共享固件工作流的读包预算传给外部 esptool 读取器，并在每次读取后恢复临时实例设置。写入应用前的分区表校验也使用同一有界读取路径；不支持的版本或读取器布局会在任何写入前失败。读取不完整、超时或摘要错误都会结束本次操作，不自动重放。
+
+若先前已观察到的原生 ROM 设备正在重新枚举，只读初始化失败后 Core 会被动等待至多五秒。只有工厂 MAC 与物理 USB 位置均相同、且唯一出现的运行态设备才可收到一次经过身份验证的 bootloader 请求。身份歧义或冲突不会触发引导切换；该恢复不会重复已经提交的 bootloader 请求或 Flash 读写。

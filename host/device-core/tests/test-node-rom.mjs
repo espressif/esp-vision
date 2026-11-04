@@ -6,7 +6,7 @@ import { EventEmitter } from 'node:events'
 import { PassThrough, Writable } from 'node:stream'
 import { openNodeRom } from '../src/node_rom.js'
 
-function fixture({ mac = 'e8f60ae75642', expected = mac, prepare, initializeError } = {}) {
+function fixture({ mac = 'e8f60ae75642', expected = mac, prepare, initializeError, operationError, readResult = 'QUI=' } = {}) {
   const calls = [], requests = []
   const child = new EventEmitter()
   child.exitCode = null
@@ -15,10 +15,11 @@ function fixture({ mac = 'e8f60ae75642', expected = mac, prepare, initializeErro
     write(data, encoding, done) {
       const request = JSON.parse(data.toString())
       requests.push(request)
-      queueMicrotask(() => child.stdout.write(JSON.stringify(request.method === 'initialize' && initializeError
-        ? { id: request.id, error: 'ROM_OPERATION_FAILED', method: 'initialize', detail: initializeError }
+      const detail = request.method === 'initialize' ? initializeError : operationError
+      queueMicrotask(() => child.stdout.write(JSON.stringify(detail
+        ? { id: request.id, error: 'ROM_OPERATION_FAILED', method: request.method, detail }
         : { id: request.id, result: request.method === 'initialize'
-          ? { chipFamily: 0x3280, chipRevision: 302, chipMac: mac, connectionMode: 'no-reset' } : null }) + '\n'))
+          ? { chipFamily: 0x3280, chipRevision: 302, chipMac: mac, connectionMode: 'no-reset' } : request.method === 'read' ? readResult : null }) + '\n'))
       done()
     },
     final(done) { child.exitCode = 0; queueMicrotask(() => child.emit('exit', 0)); done() },
@@ -157,4 +158,74 @@ test('a second initialization sync failure cannot trigger a third process or han
   assert.equal(starts, 2)
   assert.equal(recoveries, 1)
   assert.equal(first.requests.length + second.requests.length, 2)
+})
+
+
+test('post-initialize read or write failures never start recovery, a second process, or replay data', async () => {
+  for (const method of ['read', 'write']) {
+    const f = fixture({ operationError: 'Original operation failed' })
+    f.selected.transition = { observed: 'rom', requested: false }
+    let recoveries = 0, progresses = 0
+    const loader = openNodeRom({ port: '/dev/rom' }, { ...f.dependencies,
+      recoverPort: async () => { recoveries++; throw Error('Read/write must not recover') },
+    })
+    try {
+      await loader.initialize()
+      const operation = method === 'read' ? loader.readFlash(0x8000, 1024)
+        : loader.flashData(new Uint8Array([1, 2, 3]), () => { progresses++ }, 0x10000)
+      await assert.rejects(operation, error => error.code === 'ROM_OPERATION_FAILED'
+        && error.operation === method && error.cause === 'Original operation failed')
+      assert.equal(recoveries, 0)
+      assert.equal(progresses, 0)
+      assert.equal(f.calls.filter(c => c[0] === 'spawn').length, 1)
+      assert.deepEqual(f.requests.map(r => r.method), ['initialize', method])
+    } finally { await loader.disconnect() }
+  }
+})
+
+
+test('Node ROM reads forward default and explicit budgets and report progress only after complete data', async () => {
+  const f = fixture(), loader = openNodeRom({ port: '/dev/runtime' }, f.dependencies)
+  const progress = []
+  try {
+    await loader.initialize()
+    assert.deepEqual(await loader.readFlash(0x8000, 2, (...args) => progress.push(args)), new Uint8Array([65, 66]))
+    assert.deepEqual(await loader.readFlash(0x10000, 2, undefined,
+      { chunkSize: 65536, blockSize: 4096, maxInFlight: 2 }), new Uint8Array([65, 66]))
+    assert.deepEqual(f.requests.map(r => [r.method, r.args]), [['initialize', []],
+      ['read', [0x8000, 2, { blockSize: 1024, maxInFlight: 1 }]],
+      ['read', [0x10000, 2, { blockSize: 4096, maxInFlight: 2 }]]])
+    assert.equal(progress.length, 1)
+    assert.deepEqual(progress[0], [new Uint8Array([65, 66]), 2, 2])
+  } finally { await loader.disconnect() }
+})
+
+test('invalid read ranges, progress, or packet budgets never issue a child process RPC', async () => {
+  const f = fixture(), loader = openNodeRom({ port: '/dev/runtime' }, f.dependencies)
+  try {
+    await loader.initialize()
+    for (const [offset, count, progress, options] of [[-1, 2], [0, 0], [0, 0x100000000], [0xffffffff, 2], [0, 2, null],
+      [0, 2, undefined, null], [0, 2, undefined, []], [0, 2, undefined, { blockSize: 512 }],
+      [0, 2, undefined, { blockSize: true }], [0, 2, undefined, { blockSize: null }], [0, 2, undefined, { maxInFlight: 0 }],
+      [0, 2, undefined, { maxInFlight: 65 }], [0, 2, undefined, { maxInFlight: null }], [0, 2, undefined, { maxInFlight: 1.5 }],
+      [0, 2, undefined, { unknown: 1 }], [0, 2, undefined, { chunkSize: 1 }]]) {
+      await assert.rejects(loader.readFlash(offset, count, progress, options), error => error instanceof TypeError || error instanceof RangeError)
+    }
+    assert.deepEqual(f.requests.map(r => r.method), ['initialize'])
+  } finally { await loader.disconnect() }
+})
+
+test('incomplete read results are rejected without progress, recovery, or duplicate read', async () => {
+  const f = fixture({ readResult: 'QQ==' })
+  let recovered = 0, progressed = 0
+  const loader = openNodeRom({ port: '/dev/runtime' }, { ...f.dependencies,
+    recoverPort: async () => { recovered++; throw Error('Read must not recover') },
+  })
+  try {
+    await loader.initialize()
+    await assert.rejects(loader.readFlash(0, 2, () => { progressed++ }), { code: 'ROM_READ_LENGTH', operation: 'read' })
+    assert.equal(recovered, 0)
+    assert.equal(progressed, 0)
+    assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'read'])
+  } finally { await loader.disconnect() }
 })

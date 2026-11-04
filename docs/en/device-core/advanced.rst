@@ -1284,7 +1284,7 @@ Promise<Uint8Array>: validate v4, exact byte size, application partition bounds 
 
 
 ``openNodeRom({ port, python?, signal? })``
-    Return the built-in ROM adapter without opening the port. Use with ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })`` for both installation and application updates. The adapter requires separately installed Python esptool>=5.3,<6; python defaults to python3 on Unix and python on Windows. Core manages initialize, validation, write/readback, reset and disconnect. Available from SDK 0.3.0; it is Node-only, not a runtime serialTransport or a TCP OTA adapter.
+    Return the built-in ROM adapter without opening the port. Use with ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })`` for both installation and application updates. The adapter requires separately installed Python esptool==5.6.0, whose stub read request and ACK/MD5 parser are covered by the compatibility checks; python defaults to python3 on Unix and python on Windows. Core manages initialize, validation, write/readback, reset and disconnect. Available from SDK 0.3.0; it is Node-only, not a runtime serialTransport or a TCP OTA adapter.
 
 @esp-vision/device-core/discovery
 ------------------------------------------------------------------
@@ -1362,3 +1362,10 @@ Browser flash startup
 ---------------------
 
 The browser ROM adapter resets through the active flash stub after verification. A verified write does not prove that firmware has started: hosts must wait for a fresh runtime handshake before enabling configuration. If ``needsReset`` is true, ``resetError`` carries the reset failure code and message; preserve this diagnostic and offer manual reset only as recovery.
+
+Node ROM readback safety
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Node Flash reads default to one outstanding 1024-byte packet. The adapter forwards the shared firmware workflow's packet budget to the external esptool reader and restores its temporary instance settings after each read. Partition-table validation uses the same bounded path before any application write; unsupported versions or reader layouts fail before writing. A short read, timeout or digest error fails the operation without replaying it.
+
+If a read-only initialization fails while a previously observed native ROM device is re-enumerating, Core passively waits for up to five seconds. Only the unique runtime with the same factory MAC and physical USB location may receive one verified bootloader request. Ambiguous or conflicting identities cannot trigger a handoff. This recovery never repeats a submitted bootloader request or a Flash read/write.
