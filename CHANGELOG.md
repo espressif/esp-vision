@@ -23,6 +23,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Make agent workspace paths configurable.
+
 - Record that development-board flashing does not require automatic firmware backup, restoration or whole-flash preservation reads; retain ordinary programming verification and reserve backup/restore for explicit requests.
 - Deliver the Node ROM recovery and bounded readback corrections as Device Core 0.6.1 with matching action-schema metadata after the published 0.6.0 release, retaining independent CLI and Plugin release lifecycles.
 - Make Device Core package/release checks invoke npm's JavaScript entry point on Windows without a shell, and accept CRLF checkout line endings in generated-schema verification without accepting content changes.

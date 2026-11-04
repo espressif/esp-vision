@@ -34,10 +34,14 @@ Documentation lives in `docs/en/` and `docs/zh_CN/`; update both translations fo
 
 Use repository-root `idf.py --board <BOARD> ...` through `idf_ext.py`, with a supported ESP-IDF environment on `PATH`. It checks the pinned `lib/micropython` revision, creates a clean build copy, applies `overlay/micropython/`, and projects `boards/<BOARD>/port/` into it. Do not create a standalone root IDF application or edit generated build/Board Manager files. Board definitions and CI configuration determine supported board/IDF combinations.
 
-During experiments, compile only the board being tested, using an explicit build directory under `/home/libo/project/.esp-vision/`. For example, replace the board and directory below with the actual test target:
+During experiments, compile only the board being tested, using an explicit build directory under a writable workspace outside the checkout. Set `ESP_VISION_WORK_DIR` to choose that workspace; the example defaults to `esp-vision` under the system temporary directory. Replace the board below with the actual test target:
 
 ```sh
-idf.py --board ESP32_P4X_EYE -B /home/libo/project/.esp-vision/build/ESP32_P4X_EYE build
+export ESP_VISION_WORK_DIR="${ESP_VISION_WORK_DIR:-${TMPDIR:-/tmp}/esp-vision}"
+mkdir -p "$ESP_VISION_WORK_DIR/tmp"
+export TMPDIR="$ESP_VISION_WORK_DIR/tmp"
+export TMP="$TMPDIR" TEMP="$TMPDIR"
+idf.py --board ESP32_P4X_EYE -B "$ESP_VISION_WORK_DIR/build/ESP32_P4X_EYE" build
 ```
 
 Prefer CI for the final firmware matrix after the feature is complete. SDK-only changes use `ESP_VISION_DEVICE_CORE_ONLY=1`; `ESP_VISION_BUILD_FIRMWARE=1` requests firmware validation. See CI rules for targeted filters.
@@ -54,7 +58,7 @@ Prefer CI for the final firmware matrix after the feature is complete. SDK-only 
 - Every committed change updates root `CHANGELOG.md` under `[Unreleased]`, grouped by Added/Changed/Fixed/Removed. SDK release changes also update its package changelog/version as appropriate; npm versions are independent of firmware versions. Git tags identify firmware/documentation releases, not SDK releases.
 - Device Core publication is controlled by `.gitlab/ci/device-core.yml`: relevant non-master changes run publish dry runs; actual npm publication uses protected master credentials. Do not expose tokens or commit secrets.
 - Use meaningful branch prefixes (`feat/`, `fix/`, `docs/`, etc.), never `codex/`. For Espressif GitLab API access use `tk_gitlab` to load the token without printing it.
-- Keep temporary worktrees, builds, caches, logs and scratch scripts under `/home/libo/project/` (ESP-VISION: `.esp-vision/`); set `TMPDIR`, `TMP` and `TEMP` accordingly. Do not commit generated output, local device paths or unrelated workspace changes.
+- Keep temporary worktrees, builds, caches, logs and scratch scripts under the writable `ESP_VISION_WORK_DIR` workspace described above; set `TMPDIR`, `TMP` and `TEMP` accordingly. Use a persistent directory outside the checkout when artifacts must survive system temporary-directory cleanup. Do not commit generated output, local device paths or unrelated workspace changes.
 - Markdown prose uses one line per paragraph/list item; do not hard-wrap it.
 
 ## Licensing
