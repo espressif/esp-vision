@@ -2,7 +2,7 @@
 
 `@esp-vision/device-cli` installs the `esp-vision-device` command for device discovery, inspection, configuration, control, firmware updates, Python execution, device file operations, JPEG capture, sequential batch plans, and bounded event watches. It is an optional host interface backed by the same `@esp-vision/device-core` package used by ESP-VISION clients.
 
-Requires Node.js 22 or newer. Serial access requires Python with `pyserial`; firmware flashing requires Python `esptool==5.6.0`. LAN discovery uses the bundled multicast-DNS client.
+Requires Node.js 22 or newer. Serial access requires Python with `pyserial`; firmware flashing requires Python `esptool==5.6.0`. LAN discovery uses the bundled multicast-DNS client. Check the selected interpreter with `PYTHON --version` and `PYTHON -c "import serial"`; install pyserial there with `PYTHON -m pip install pyserial` (replace `PYTHON` with that executable). Windows Python Launcher users can use `--python py` and `py -m pip install pyserial`. A failed serial setup gets a bounded environment diagnosis after connection cleanup; successful connections, TCP operations, help, and offline firmware checks do not start it. Busy/access-denied errors keep their port-specific guidance; an unknown adapter failure is not proof of missing Python or pyserial.
 
 Run `esp-vision-device --help` for the command reference, or `esp-vision-device --help --json` for the versioned machine-readable command, output, and limit capabilities envelope.
 
@@ -26,7 +26,7 @@ For a continuous app, finish directory operations and uploads before starting it
 
 `files list`, `files read`, `files write`, `files remove`, and `files mkdir` operate on device paths. `files read DEVICE_PATH --output LOCAL_FILE` writes binary content to a local file. `files write DEVICE_PATH --file LOCAL_FILE` sends local bytes to the device. Reads are capped at 16 MiB by default; `--max-bytes` can lower that limit.
 
-`capture camera|screen --output LOCAL.jpg` writes one JPEG and returns its path, byte count, source, MIME type, and capture metadata. Images are never embedded as base64 in JSON output.
+`capture camera|screen --output LOCAL.jpg` writes one JPEG and returns its path, byte count, source, MIME type, and capture metadata. Images are never embedded as base64 in JSON output. The `source` field identifies the requested source; it does not certify whether annotations are present. `camera` observes the application's latest camera frame, not the LCD image. Application drawing depends on firmware publication behavior; firmware advertising `debug.capture_frame.observed.v1` supplies an independent copy made at acquisition, before later drawing, without triggering a new acquisition. `screen` captures the current LCD framebuffer, including drawing rendered there; use it to verify LCD overlays and UI. It requires an initialized display, and camera/display dimensions may differ. Neither source starts the application or initializes the sensor/display for you.
 
 ## Bounded event watch
 

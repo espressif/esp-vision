@@ -120,7 +120,7 @@ Bundled from: `node_modules/@esp-vision/device-core/src/firmware_feed.js`, `node
 
 ### Source notice 7
 
-Bundled from: `node_modules/@esp-vision/device-core/src/firmware_io.js`, `node_modules/@esp-vision/device-core/src/firmware_release.js`, `node_modules/@esp-vision/device-core/src/node.js`
+Bundled from: `node_modules/@esp-vision/device-core/src/firmware_io.js`, `node_modules/@esp-vision/device-core/src/firmware_release.js`, `node_modules/@esp-vision/device-core/src/node.js`, `src/serial_diagnostics.js`
 
 ```text
 // SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
@@ -128,7 +128,7 @@ Bundled from: `node_modules/@esp-vision/device-core/src/firmware_io.js`, `node_m
 
 ### Source notice 8
 
-Bundled from: `node_modules/@esp-vision/device-core/src/device_files.js`, `node_modules/@esp-vision/device-core/src/device_python.js`, `node_modules/@esp-vision/device-core/src/firmware_feed.js`, `node_modules/@esp-vision/device-core/src/firmware_flash.js`, `node_modules/@esp-vision/device-core/src/firmware_io.js`, `node_modules/@esp-vision/device-core/src/firmware_release.js`, `node_modules/@esp-vision/device-core/src/index.js`, `node_modules/@esp-vision/device-core/src/network_discovery.js`, `node_modules/@esp-vision/device-core/src/network_discovery_node.js`, `node_modules/@esp-vision/device-core/src/node.js`, `node_modules/@esp-vision/device-core/src/node_inventory.js`, `node_modules/@esp-vision/device-core/src/node_rom.js`, `node_modules/@esp-vision/device-core/src/node_transport.js`, `src/cli.js`
+Bundled from: `node_modules/@esp-vision/device-core/src/device_files.js`, `node_modules/@esp-vision/device-core/src/device_python.js`, `node_modules/@esp-vision/device-core/src/firmware_feed.js`, `node_modules/@esp-vision/device-core/src/firmware_flash.js`, `node_modules/@esp-vision/device-core/src/firmware_io.js`, `node_modules/@esp-vision/device-core/src/firmware_release.js`, `node_modules/@esp-vision/device-core/src/index.js`, `node_modules/@esp-vision/device-core/src/network_discovery.js`, `node_modules/@esp-vision/device-core/src/network_discovery_node.js`, `node_modules/@esp-vision/device-core/src/node.js`, `node_modules/@esp-vision/device-core/src/node_inventory.js`, `node_modules/@esp-vision/device-core/src/node_rom.js`, `node_modules/@esp-vision/device-core/src/node_transport.js`, `src/cli.js`, `src/serial_diagnostics.js`
 
 ```text
 // SPDX-License-Identifier: Apache-2.0

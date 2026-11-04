@@ -1,6 +1,6 @@
 {
   "name": "@esp-vision/device-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Standalone command line interface for ESP-VISION devices.",
   "type": "module",
   "bin": {

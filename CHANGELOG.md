@@ -61,6 +61,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Diagnose failed CLI serial setup with bounded checks of the selected Python/pyserial environment after cleanup, preserve busy/access-denied and runtime I/O distinctions, and document Windows `--python py` setup without automatic installation or retries. Clarify camera versus LCD capture in real help and bilingual CLI documentation, including firmware-dependent camera drawing semantics.
+
 - Reuse an existing connection to the requested SSID in the MJPEG and Cloud AI examples, reject a different connected network, and wait within the existing retry budget for managed WiFi connection attempts or EBUSY instead of repeatedly disabling STA.
 - Fix the English WebREPL support heading underline so HTML and PDF documentation builds pass the Sphinx warning gate.
 
