@@ -50,7 +50,9 @@ static bool esp_vision_msc_lun_ready(uint8_t lun)
         return false;
     }
     if (lun == ESP_VISION_MSC_FLASH_LUN) {
-        return esp_vision_storage_flash_block_count() != 0;
+        // A partition may already exist while provisioning is incomplete.
+        // Do not admit host files before the durable READY record and mount.
+        return esp_vision_storage_flash_is_mounted() && esp_vision_storage_flash_block_count() != 0;
     }
 #if MICROPY_HW_ENABLE_SDCARD && SOC_SDMMC_HOST_SUPPORTED
     if (lun == ESP_VISION_MSC_SDCARD_LUN) {

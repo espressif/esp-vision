@@ -29,6 +29,7 @@ set(ESP_VISION_MODULE_SOURCES
     ${ESP_VISION_ROOT}/modules/py_esp_vision_launcher.c
     ${ESP_VISION_ROOT}/modules/py_uvc.c
     ${ESP_VISION_ROOT}/modules/py_display.c
+    ${ESP_VISION_ROOT}/modules/py_storage.c
     ${ESP_VISION_ROOT}/modules/py_image.c
     ${ESP_VISION_ROOT}/modules/py_imageio.c
     ${ESP_VISION_ROOT}/modules/py_helper.c
@@ -217,6 +218,7 @@ target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_ROOT}/platform/preview.c
     ${ESP_VISION_ROOT}/platform/sdcard.c
     ${ESP_VISION_ROOT}/platform/storage.c
+    ${ESP_VISION_ROOT}/platform/storage_provision.c
     ${ESP_VISION_ROOT}/platform/storage_vfs.c
     ${ESP_VISION_ROOT}/platform/lcd_touch.c
     ${ESP_VISION_ROOT}/platform/storage_writer_msc.c

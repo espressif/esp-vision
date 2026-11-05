@@ -254,3 +254,5 @@ USB MSC 的主机块设备写入与 MicroPython VFS 共享同一卷，不能因�
 它们涉及 volume（flash/sd）、operationId、writer leaseId 与当前 session，以及 available/held/handoff_ready/quarantined 等状态。交接时先关闭新 I/O admission，再等待进行中的操作/文件句柄 drain；异常条件可以隔离卷。主机应查询状态、执行其能力允许的安全交接；不能把 CDC 与 MSC 共存当作两个独立文件系统副本。
 
 会话 token、writer leaseId 和网络 operationId 的字段格式虽可能相似，但作用不同，不能互换。writer 事务详细结构以 capabilities 与实际控制响应为准，不应把所有 file RPC 自动包装成已获得写权限。
+
+文件系统就绪状态独立于写入所有权。状态响应包含 ``fs_state``、``fs_error``、``fatfs_result`` 和 ``format_supported``，未挂载卷返回 ``writable: false``。自动初始化要求对应板级策略开启且精确返回 ``FR_NO_FILESYSTEM``，默认内部 Flash 开启、SD 关闭。需要保留未知数据时应关闭对应策略。其他失败应诊断并由用户决定恢复操作，``storage.retry()`` 始终不格式化。统一的介质、备份和恢复规范见 :doc:`../storage/index`，显式 REPL API 见 :doc:`../api-reference/storage`。

@@ -924,13 +924,15 @@ void esp_vision_storage_mount_micropython(void)
 {
     if (esp_vision_storage_flash_is_mounted()) {
         esp_vision_storage_mount_volume(ESP_VISION_STORAGE_FLASH_PATH, "/");
+        // A second bridge to the same IDF filesystem, not a second FAT mount.
+        esp_vision_storage_mount_volume(ESP_VISION_STORAGE_FLASH_PATH, ESP_VISION_STORAGE_FLASH_ALIAS);
     }
 
     /* Storage initialization already attempted the cold-boot SD mount. Retry
      * only on later VM starts so an absent card does not incur two probes at
      * cold boot, while a card inserted later is picked up on soft reset. */
-    if (s_initial_vm_mount_done) {
-        esp_vision_storage_sdcard_try_mount();
+    if (s_initial_vm_mount_done && ESP_VISION_STORAGE_AUTO_MOUNT_SD) {
+        esp_vision_storage_sdcard_auto_mount();
     } else {
         s_initial_vm_mount_done = true;
     }

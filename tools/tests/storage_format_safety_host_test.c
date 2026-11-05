@@ -12,11 +12,6 @@
 
 #include "storage_safety.h"
 
-enum {
-    MOCK_FR_INT_ERR = 2,
-    MOCK_FR_NO_FILESYSTEM = 13,
-};
-
 typedef struct {
     const uint8_t *partition;
     size_t partition_size;
@@ -106,32 +101,11 @@ static void test_empty_partition_is_not_a_blank_factory_volume(void)
     assert(!esp_vision_storage_partition_erased(1, scratch, sizeof(scratch), NULL, &mock));
 }
 
-static void test_only_erased_factory_ffat_with_no_filesystem_can_format(void)
-{
-    assert(esp_vision_storage_should_format_factory_ffat(MOCK_FR_NO_FILESYSTEM,
-                                                         MOCK_FR_NO_FILESYSTEM,
-                                                         true,
-                                                         true));
-    assert(!esp_vision_storage_should_format_factory_ffat(MOCK_FR_NO_FILESYSTEM,
-                                                          MOCK_FR_NO_FILESYSTEM,
-                                                          true,
-                                                          false));
-    assert(!esp_vision_storage_should_format_factory_ffat(MOCK_FR_NO_FILESYSTEM,
-                                                          MOCK_FR_NO_FILESYSTEM,
-                                                          false,
-                                                          true));
-    assert(!esp_vision_storage_should_format_factory_ffat(MOCK_FR_INT_ERR,
-                                                          MOCK_FR_NO_FILESYSTEM,
-                                                          true,
-                                                          true));
-}
-
 int main(void)
 {
     test_all_erased_partition_uses_exact_chunk_offsets();
     test_partial_non_erased_partition_fails_closed();
     test_read_failure_fails_closed();
     test_empty_partition_is_not_a_blank_factory_volume();
-    test_only_erased_factory_ffat_with_no_filesystem_can_format();
     return 0;
 }

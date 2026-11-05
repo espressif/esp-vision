@@ -41,6 +41,7 @@ class StorageWriterServiceTests(unittest.TestCase):
                 "stale-transition-quarantine",
                 "session-change",
                 "open-timeout",
+                "unmounted-flash",
             ):
                 subprocess.run([str(executable), scenario], check=True, cwd=ROOT)
 

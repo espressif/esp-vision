@@ -14,6 +14,7 @@ ESP-VISION 是面向乐鑫 SoC 的低代码端侧 AI 与计算机视觉框架，
    target-support/index
    get-started/index
    concepts/index
+   storage/index
    api-reference/index
    how-to/index
    architecture/index

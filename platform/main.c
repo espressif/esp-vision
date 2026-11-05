@@ -218,9 +218,19 @@ soft_reset:
     esp_vision_lcd_touch_deinit();
     esp_vision_display_init0();
     esp_vision_preview_init0();
-    esp_vision_debug_printf("[esp-vision] storage status: flash=/ %s; sdcard=/sdcard %s\n",
+    esp_vision_debug_printf("[esp-vision] storage status: flash=/ and /flash %s; sdcard=/sdcard %s\n",
                             esp_vision_storage_flash_is_mounted() ? "mounted" : "unavailable",
                             esp_vision_storage_sdcard_is_mounted() ? "mounted" : "unavailable");
+    for (unsigned int volume = 0; volume < ESP_VISION_STORAGE_VOLUME_COUNT; ++volume) {
+        esp_vision_storage_status_t status;
+        esp_vision_storage_get_status((esp_vision_storage_volume_t)volume, &status);
+        if (status.supported && status.state != ESP_VISION_STORAGE_READY) {
+            esp_vision_debug_printf("[esp-vision] storage %s: %s: %s\n",
+                                   volume == ESP_VISION_STORAGE_VOLUME_FLASH ? "flash" : "sd",
+                                   esp_vision_storage_status_code(status.state),
+                                   esp_vision_storage_status_message(status.state));
+        }
+    }
     fb_alloc_init0();
     mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR__slash_lib));
     readline_init0();

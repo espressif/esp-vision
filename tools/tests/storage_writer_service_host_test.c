@@ -35,6 +35,10 @@ static unsigned int s_sd_sync_count;
 static unsigned int s_refresh_count;
 static esp_err_t s_flash_write_result = ESP_OK;
 static bool s_quarantine_during_commit;
+static bool s_flash_mounted = true;
+static bool s_sd_ready = true;
+static unsigned int s_flash_read_count;
+static unsigned int s_flash_write_count;
 
 static int volume_for_key(const char *key)
 {
@@ -157,9 +161,15 @@ uint32_t esp_vision_storage_flash_block_count(void)
     return 1024;
 }
 
+bool esp_vision_storage_flash_is_mounted(void)
+{
+    return s_flash_mounted;
+}
+
 esp_err_t esp_vision_storage_flash_read(uint32_t address, void *buffer, size_t len)
 {
     (void)address;
+    ++s_flash_read_count;
     memset(buffer, 0, len);
     return ESP_OK;
 }
@@ -169,12 +179,13 @@ esp_err_t esp_vision_storage_flash_write(uint32_t address, const void *buffer, s
     (void)address;
     (void)buffer;
     (void)len;
+    ++s_flash_write_count;
     return s_flash_write_result;
 }
 
 bool esp_vision_storage_sdcard_is_ready(void)
 {
-    return true;
+    return s_sd_ready;
 }
 
 uint32_t esp_vision_storage_sdcard_block_count(void)
@@ -235,6 +246,7 @@ static void setup(void)
 static void test_real_service_vfs_transition_drains_open_call_and_handle(void)
 {
     setup();
+    assert(tud_msc_get_maxlun_cb() == 2);
     esp_vision_storage_writer_status_t status;
     assert(esp_vision_msc_writer_status(ESP_VISION_STORAGE_VOLUME_FLASH, &status) == ESP_OK);
     assert(status.writable && status.mode == ESP_VISION_STORAGE_WRITER_AVAILABLE);
@@ -472,6 +484,35 @@ static void test_open_handle_timeout_never_refreshes_volume(void)
     assert(status.mode == ESP_VISION_STORAGE_WRITER_QUARANTINED);
 }
 
+static void test_unmounted_flash_cannot_accept_host_files(void)
+{
+    setup();
+    s_flash_mounted = false;
+    uint8_t buffer[512] = {0};
+    assert(!tud_msc_test_unit_ready_cb(0));
+    assert(!tud_msc_is_writable_cb(0));
+    assert(tud_msc_read10_cb(0, 0, 0, buffer, sizeof(buffer)) == -1);
+    assert(tud_msc_write10_cb(0, 0, 0, buffer, sizeof(buffer)) == -1);
+    assert(s_flash_read_count == 0 && s_flash_write_count == 0);
+    assert(tud_msc_test_unit_ready_cb(1)); // SD is independent of Flash initialization.
+    s_flash_mounted = true;
+    assert(tud_msc_test_unit_ready_cb(0));
+    assert(tud_msc_is_writable_cb(0));
+    assert(tud_msc_read10_cb(0, 0, 0, buffer, sizeof(buffer)) == sizeof(buffer));
+    assert(tud_msc_write10_cb(0, 0, 0, buffer, sizeof(buffer)) == sizeof(buffer));
+    assert(s_flash_read_count == 1 && s_flash_write_count == 1);
+    tud_msc_write10_complete_cb(0);
+    s_sd_ready = false;
+    assert(tud_msc_get_maxlun_cb() == 2); // Keep fixed identities when one medium disappears.
+    assert(tud_msc_test_unit_ready_cb(0));
+    assert(!tud_msc_test_unit_ready_cb(1));
+    assert(!tud_msc_is_writable_cb(1));
+    assert(tud_msc_read10_cb(1, 0, 0, buffer, sizeof(buffer)) == -1);
+    assert(tud_msc_write10_cb(1, 0, 0, buffer, sizeof(buffer)) == -1);
+    s_flash_mounted = false;
+    assert(!tud_msc_test_unit_ready_cb(0) && !tud_msc_test_unit_ready_cb(1));
+}
+
 int main(int argc, char **argv)
 {
     assert(argc == 2);
@@ -491,6 +532,8 @@ int main(int argc, char **argv)
         test_actual_session_change_quarantines_lease();
     } else if (strcmp(argv[1], "open-timeout") == 0) {
         test_open_handle_timeout_never_refreshes_volume();
+    } else if (strcmp(argv[1], "unmounted-flash") == 0) {
+        test_unmounted_flash_cannot_accept_host_files();
     } else {
         assert(!"unknown test scenario");
     }

@@ -124,7 +124,7 @@ device.inspect(request)
    * - ``network``
      - network.status 结果，包括 enabled/configured/state/IPv4 与事务状态，不含已保存密码。
    * - ``storage``
-     - flash 与 sd 的 storage.writer.status 结果，要求 storage.writer.lease 能力。
+     - flash 与 sd 的 storage.writer.status 结果，要求 storage.writer.lease 能力。新固件包含 fs_state/fs_error/fatfs_result/format_supported，见 :doc:`../storage/index`。写入所有权本身不代表文件系统就绪，也不授权格式化。
 
 ``fields`` 必须是上述五个名字组成的非空数组，仅返回请求的键，重复字段只查询一次。身份和能力是协商数据的副本，不是新采集的传感器数据。网络与存储会发起 RPC；该超时应用于各底层查询，不是整个 inspect 的统一总时限。
 

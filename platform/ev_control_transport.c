@@ -2299,6 +2299,8 @@ static esp_err_t ev_control_send_storage_writer_control(uint32_t seq,
         const bool mounted = volume == ESP_VISION_STORAGE_VOLUME_FLASH
                              ? esp_vision_storage_flash_is_mounted()
                              : esp_vision_storage_sdcard_is_mounted();
+        esp_vision_storage_status_t filesystem;
+        esp_vision_storage_get_status(volume, &filesystem);
         const char *reason = status.reason != NULL ? status.reason : "";
         char operation_json[35] = "null";
         char lease_json[35] = "null";
@@ -2319,10 +2321,13 @@ static esp_err_t ev_control_send_storage_writer_control(uint32_t seq,
         int len = snprintf(payload, sizeof(payload),
                            "{\"ok\":true,\"action\":\"storage.writer.status\",\"volume\":\"%s\","
                            "\"status\":\"%s\",\"writable\":%s,\"present\":%s,\"mounted\":%s,\"operation_id\":%s,"
-                           "\"lease_id\":%s,\"session_id\":%s,\"reason\":%s}",
-                           volume_name, mode, ev_control_bool_str(status.writable),
+                           "\"lease_id\":%s,\"session_id\":%s,\"reason\":%s,"
+                           "\"fs_state\":\"%s\",\"fs_error\":%d,\"fatfs_result\":%d,\"format_supported\":%s}",
+                           volume_name, mode, ev_control_bool_str(status.writable && mounted),
                            ev_control_bool_str(present), ev_control_bool_str(mounted),
-                           operation_json, lease_json, owner_json, reason_json);
+                           operation_json, lease_json, owner_json, reason_json,
+                           esp_vision_storage_state_name(filesystem.state), filesystem.error, filesystem.fatfs_result,
+                           ev_control_bool_str(filesystem.format_supported));
         if ((len <= 0) || ((size_t)len >= sizeof(payload))) {
             return ev_control_send_error("device.control", seq, "INTERNAL_ERROR", "could not encode writer status");
         }
@@ -2915,7 +2920,14 @@ static void ev_control_handle_file_write(uint32_t seq, const ev_control_json_met
         }
     }
     if (error != NULL) {
-        (void)ev_control_send_error("file.write", seq, error, "binary file transfer failed");
+        const char *message = strcmp(error, "STORAGE_UNAVAILABLE") == 0
+                              ? "Target filesystem is not mounted. Inspect storage.status(), preserve or back up data, then choose retry or explicit confirmed format."
+                              : strcmp(error, "STORAGE_READ_ONLY") == 0
+                              ? "Storage writer is unavailable or quarantined; inspect storage status and ownership before retrying."
+                              : strncmp(error, "FILE_", 5) == 0
+                              ? "Storage operation failed. Stop writes, inspect free space and I/O errors, and preserve or back up data before recovery."
+                              : "binary file transfer failed";
+        (void)ev_control_send_error("file.write", seq, error, message);
     } else {
         (void)ev_control_send_rpc_with_seq("rsp", "file.write", response, seq);
     }

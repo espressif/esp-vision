@@ -20,6 +20,17 @@ static unsigned int gate, closes, writes;
 static bool deny_gate, fail_write, fail_sync, fail_close, fail_publish;
 static size_t partial_write;
 static const char *root;
+static bool flash_mounted = true;
+static bool sd_mounted = true;
+
+bool esp_vision_storage_flash_is_mounted(void)
+{
+    return flash_mounted;
+}
+bool esp_vision_storage_sdcard_is_mounted(void)
+{
+    return sd_mounted;
+}
 
 bool ev_session_snapshot(ev_session_snapshot_t *out)
 {
@@ -202,8 +213,38 @@ int main(int argc, char **argv)
     begin(id, data, 4096); ++current.vm_epoch; ev_file_transfer_poll(); assert(gate == 0); assert_old();
     begin(id, data, 4096); clock_ms += 30001; ev_file_transfer_poll(); assert(gate == 0); assert_old();
     begin(id, data, 0); assert(ev_file_transfer_end(&current, id, true, &received) == NULL); assert(received == 0 && gate == 0);
+    flash_mounted = false;
+    digest(data, 4096, hash);
+    assert_error(ev_file_transfer_begin(&current, "/target", true, 4096, hash, id), "STORAGE_UNAVAILABLE");
+    assert(gate == 0);
+    flash_mounted = true;
+    sd_mounted = false;
+    assert_error(ev_file_transfer_begin(&current, "/sdcard/target", true, 4096, hash, id), "STORAGE_UNAVAILABLE");
+    assert(gate == 0);
+    sd_mounted = true;
     deny_gate = true; digest(data, 4096, hash); assert_error(ev_file_transfer_begin(&current, "/target", true, 4096, hash, id), "STORAGE_READ_ONLY"); deny_gate = false;
     assert_error(ev_file_transfer_begin(&current, "/../bad", true, 4096, hash, id), "INVALID_ARGUMENT");
+    assert_error(ev_file_transfer_begin(&current, "/flash", true, 4096, hash, id), "INVALID_ARGUMENT");
+    seed_old();
+    assert_error(ev_file_transfer_begin(&current, "/flash/target", false, 4096, hash, id), "FILE_EXISTS");
+    assert(ev_file_transfer_begin(&current, "/flash/target", true, 4096, hash, id) == NULL);
+    packet(frame, id, 0, data, 4096);
+    assert(ev_file_transfer_write(&current, frame, 4116, &received) == NULL);
+    assert(ev_file_transfer_end(&current, id, true, &received) == NULL);
+    physical(path, "/target");
+    file = fopen(path, "rb");
+    assert(file);
+    for (size_t i = 0; i < 4096; ++i) {
+        assert(fgetc(file) == data[i]);
+    }
+    assert(fgetc(file) == EOF);
+    fclose(file);
+    // A partial prefix is an ordinary file, not the alias root.
+    assert(ev_file_transfer_begin(&current, "/flash-not-alias", true, 0,
+                                  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", id) == NULL);
+    assert(ev_file_transfer_end(&current, id, true, &received) == NULL);
+    physical(path, "/flash-not-alias");
+    assert(access(path, F_OK) == 0);
     begin(id, data, 4096); fail_close = true; assert_error(ev_file_transfer_end(&current, id, false, &received), "FILE_CLOSE_FAILED"); assert(gate == 1);
     assert_error(ev_file_transfer_begin(&current, "/other", true, 4096, hash, other), "TRANSFER_BUSY");
     free(data); puts("binary file engine: integrity, offsets, partial IO, FAT replacement/rollback, lifecycle and close barrier passed");

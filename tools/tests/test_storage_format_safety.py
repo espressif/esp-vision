@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
-"""Compile and exercise the production blank-FFAT safety predicates natively."""
+"""Compile and exercise the production complete-partition erase check natively."""
 
 from pathlib import Path
 import shutil
@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class StorageFormatSafetyTests(unittest.TestCase):
-    def test_factory_format_requires_a_completely_erased_ffat_partition(self) -> None:
+    def test_blank_diagnosis_checks_the_complete_partition(self) -> None:
         compiler = shutil.which("cc") or shutil.which("gcc")
         if compiler is None:
             self.skipTest("a native C compiler is unavailable")
