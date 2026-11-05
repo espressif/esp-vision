@@ -16,6 +16,8 @@
 
 串口访问需要安装带 ``pyserial`` 的 Python。Windows 默认使用 ``python``，macOS/Linux 默认使用 ``python3``；可通过 ``--python`` 选择其它解释器。固件烧录还需要在该解释器中安装 ``esptool==5.6.0``。局域网发现使用 CLI 内置的 multicast-DNS 客户端。
 
+使用 ``--python`` 指定的同一个解释器执行 ``PYTHON --version`` 和 ``PYTHON -c "import serial"``，将 ``PYTHON`` 替换成该可执行程序；通过 ``PYTHON -m pip install pyserial`` 在该解释器中安装依赖。Windows Python Launcher 用户可使用 ``--python py`` 和 ``py -m pip install pyserial``。串口初始化失败并清理连接后，CLI 会运行有时间上限的环境诊断；不会打开端口、尝试其他解释器或安装软件包。正常连接、纯 TCP 操作、帮助和离线固件检查不会启动该诊断。缺少解释器、缺少 pyserial、同名 ``serial`` 模块冲突会给出不同提示；端口占用或权限错误仍提示检查端口。其他失败不会被直接判定为缺少依赖。混合发现中串口失败仍会保留可用的局域网结果及串口警告。
+
 发现与检查
 ----------------------------------------
 
@@ -83,6 +85,8 @@ Python 输入必须且只能选择一种：内联 ``--source CODE``、本地 ``-
    esp-vision-device files mkdir /data --recursive --port COM3
    esp-vision-device capture camera --output ./frame.jpg --quality 80 --port COM3
    esp-vision-device capture screen --output ./screen.jpg --port COM3
+
+``capture camera`` 观察应用最近的相机帧，不是 LCD 画面。应用绘制是否可见取决于固件发布帧的方式；声明 ``debug.capture_frame.observed.v1`` 的固件在采集时发布独立副本，因此不包含之后的绘制，也不会触发新的采集。``capture screen`` 获取当前 LCD 帧缓冲，包含已经绘制到该缓冲中的标注和界面，适合检查 LCD 显示效果，并要求显示器已初始化。相机与显示器的图像尺寸可能不同；两种命令都不会启动应用或初始化传感器、显示器。输出的 ``source`` 只标明请求来源，不保证是否存在标注。
 
 文件读取和 JPEG 采集会将二进制数据写入指定的本地 ``--output``，并返回路径、字节数和元数据。读取和采集默认上限为 16 MiB；``--max-bytes`` 可调低上限。``files write`` 通过二进制文件 RPC 发送本地字节。JSON 中不会嵌入图像或文件内容。
 

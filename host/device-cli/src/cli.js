@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import { Writable } from 'node:stream'
 import stringWidth from 'string-width'
+import { explainSerialFailure } from './serial_diagnostics.js'
 import { createDevice } from '@esp-vision/device-core'
 import {
   defaultPython, filterSerialPorts, inventory, listSerial, serialEntry, transportFor,
@@ -43,9 +44,12 @@ esp-vision-device files write DEVICE_PATH --file LOCAL_FILE [--no-overwrite]
 esp-vision-device files remove DEVICE_PATH [--type file|directory]
 esp-vision-device files mkdir DEVICE_DIR [--recursive]
 esp-vision-device capture camera|screen --output LOCAL.jpg [--quality N] [--max-bytes N]
+  camera: Observe the application's camera-frame source, not the LCD image. Freshness and application drawing depend on firmware publication behavior.
+  screen: Capture the current LCD framebuffer, including drawing rendered there. Use this to verify LCD overlays and UI; display initialization is required.
 esp-vision-device batch PLAN.json [--port PATH | --tcp HOST[:PORT]]
 esp-vision-device watch --duration MS [--port PATH | --tcp HOST[:PORT]]
 Common: --timeout MS, --python PYTHON (default python3; Windows python), --json, --help
+Serial setup: check PYTHON --version and PYTHON -c "import serial" with the selected interpreter. Install pyserial there with PYTHON -m pip install pyserial. Windows Launcher: --python py and py -m pip install pyserial.
 All commands that operate on a device require --port or --tcp, except inspect and offline firmware check.
 Python --completion start accepts only --path DEVICE.py. It acknowledges the start, disconnects, and exits; it does not retain a daemon or resumable job.
 Python --timeout is an execution deadline for --completion wait only; omit it with --completion start.
@@ -67,7 +71,7 @@ export const cliCapabilities = Object.freeze({
     firmware: ['check', 'update'],
     python: ['--source CODE', '--file LOCAL.py', '--path DEVICE.py', 'live output, log and state NDJSON events'],
     files: ['list', 'read', 'write', 'remove', 'mkdir'],
-    capture: ['camera JPEG', 'screen JPEG'],
+    capture: ['camera JPEG: latest application camera frame, not the LCD image; drawing depends on firmware publication behavior', 'screen JPEG: LCD framebuffer with drawing rendered there; requires display initialization'],
     batch: ['sequential schemaVersion 1 JSON plan', 'one connection', 'stop at first failure'],
     watch: ['bounded output, log, state and diagnostic stream', 'one connection', 'no script launch or reconnect'],
   },
@@ -637,6 +641,24 @@ function createWatchObserver(device, options, dependencies) {
   }
 }
 
+async function cliInventory(options, dependencies) {
+  let serialFailure
+  const listing = await inventory(options, {
+    ...dependencies,
+    async listSerial(request) {
+      try { return await (dependencies.listSerial ?? listSerial)(request) }
+      catch (failure) {
+        serialFailure = await explainSerialFailure(failure, options, dependencies)
+        throw serialFailure
+      }
+    },
+  })
+  if (serialFailure) for (const warning of listing.warnings) {
+    if (warning.source === 'serial') warning.message = serialFailure.message
+  }
+  return listing
+}
+
 export async function runCli(options, dependencies = {}) {
   if (options.help) return { help: usage }
   const startedAt = Date.now()
@@ -650,13 +672,13 @@ export async function runCli(options, dependencies = {}) {
     }
   }
   if (options.command === 'inspect' && !endpoint && !options.select) {
-    const listing = await (dependencies.inventory ?? inventory)({ ...options, signal: dependencies.signal, timeout: Math.min(options.timeout, 10000) }, dependencies)
-    if (listing.sourcesAvailable === 0) throw error('ENUMERATION_UNAVAILABLE', 'No inventory source succeeded; check Python/pyserial, multicast-dns and permissions')
+    const listing = await (dependencies.inventory ?? cliInventory)({ ...options, signal: dependencies.signal, timeout: Math.min(options.timeout, 10000) }, dependencies)
+    if (listing.sourcesAvailable === 0) throw error('ENUMERATION_UNAVAILABLE', `No inventory source succeeded. ${listing.warnings.map(warning => warning.message).join(' ')}`)
     emit(dependencies, { event: 'duration', milliseconds: Date.now() - startedAt })
     return listing
   }
   if (options.command === 'inspect' && !endpoint && options.select) {
-    const listing = await (dependencies.inventory ?? inventory)({ ...options, signal: dependencies.signal, timeout: Math.min(options.timeout, 10000) }, dependencies)
+    const listing = await (dependencies.inventory ?? cliInventory)({ ...options, signal: dependencies.signal, timeout: Math.min(options.timeout, 10000) }, dependencies)
     endpoint = listing.devices.find(row => row.number === options.select)
     if (!endpoint) {
       emit(dependencies, { event: 'duration', milliseconds: Date.now() - startedAt })
@@ -733,6 +755,9 @@ export async function runCli(options, dependencies = {}) {
   try { await device.disconnect() }
   catch (cleanupFailure) { primary = attachCleanupFailure(primary, cleanupFailure) }
   emit(dependencies, { event: 'state', state: 'disconnected' })
+  if (primary && endpoint?.interface !== 'tcp' && (endpoint || options.port)) {
+    primary = await explainSerialFailure(primary, options, dependencies)
+  }
   const durationMs = Date.now() - startedAt
   emit(dependencies, { event: 'duration', milliseconds: durationMs })
   if (primary) {

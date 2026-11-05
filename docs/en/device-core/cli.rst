@@ -16,6 +16,8 @@ Installation and host requirements
 
 Serial access requires Python with ``pyserial``. Windows defaults to ``python`` and macOS/Linux to ``python3``; use ``--python`` to select another interpreter. Firmware flashing also requires ``esptool==5.6.0`` in that interpreter. LAN discovery uses the CLI's bundled multicast-DNS client.
 
+Check the same interpreter selected by ``--python`` with ``PYTHON --version`` and ``PYTHON -c "import serial"``; replace ``PYTHON`` with its executable. Install pyserial there with ``PYTHON -m pip install pyserial``. Windows Python Launcher users can use ``--python py`` and ``py -m pip install pyserial``. After a serial setup failure and connection cleanup, the CLI performs a bounded environment diagnosis without opening a port, trying alternate interpreters or installing packages. Successful connections, TCP-only operations, help and offline firmware checks do not run it. Missing executables, missing pyserial and conflicting ``serial`` modules get distinct guidance; busy/access-denied errors retain port-specific guidance. Other failures are not proof of missing dependencies. Partial discovery still returns available LAN results with a serial warning.
+
 Discovery and inspection
 ----------------------------------------
 
@@ -85,6 +87,8 @@ Device paths such as ``/models`` belong to the device, including on Windows. Inv
    esp-vision-device capture screen --output ./screen.jpg --port COM3
 
 File reads and JPEG captures write binary data to the requested local ``--output`` and return path, byte count, and metadata. Files read/capture are capped at 16 MiB by default; ``--max-bytes`` may lower the cap. ``files write`` sends local bytes with the binary file RPC. Images and file contents are not embedded in JSON.
+
+``capture camera`` observes the application's latest camera frame; it is not the LCD image. Application drawing depends on firmware publication behavior: firmware advertising ``debug.capture_frame.observed.v1`` publishes an independent copy at acquisition, before later drawing, without triggering a new acquisition. ``capture screen`` captures the current LCD framebuffer, including drawing rendered there, and is the source for verifying LCD overlays and UI. It requires an initialized display. Camera/display dimensions may differ; neither command starts the application or initializes the sensor/display. The output's ``source`` identifies the requested source, without certifying the presence or absence of annotations.
 
 Batch and watch
 ----------------------------------------
