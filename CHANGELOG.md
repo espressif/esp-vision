@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Add browser ROM factory-MAC identity binding to Device Core 0.7.0 through the pinned official chip reader, exposing Node-compatible `chipMac` and optional prevalidated `expectedMac`; reject initial or recovered identity changes before stub startup, erase or write, with browser-bundle and same-model-device regressions.
+
 - Default unlabeled automatically mounted FAT volumes and MSC LUN names to `ESP_FLASH` / `ESP_SDCARD`, preserving custom labels, board-specific USB MSC interface strings and writer ownership without formatting; add a bilingual USB interface/configuration and disk-naming chapter explaining Windows volume names, and align storage acceptance with the explicit initialization policy.
 - Add independent board policies `ESP_VISION_STORAGE_FLASH_FORMAT_IF_NO_FILESYSTEM` (default `1`) and `ESP_VISION_STORAGE_SD_FORMAT_IF_NO_FILESYSTEM` (default `0`) to initialize internal `ffat` or opt-in SD only on `FR_NO_FILESYSTEM`; keep mount-only retries, writer/handle guards and raw SD FatFs diagnostics. Flash initialization may erase unrecognized/foreign contents; SD preserves them by default.
 - Add the Python `/flash` alias and matching native uploads, independent default-on board policies for Flash/SD automatic mounting, and documented fixed USB MSC slots for optional volumes.
@@ -29,6 +31,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Add strict ESP-DL inference hardware acceptance with a SHA-256-verified ESPDet model in a temporary read-only RAM VFS, real camera inference, repeatability/output checks, transfer/latency measurements and identity-scoped cleanup after uncertain mount results; persistent Flash/SD acceptance remains independent.
 
 ### Changed
+
+- Document the public address-based ROM erase/write/read primitives separately from firmware installation policy, including the portable one-write-per-session contract and integer JEDEC ID; clarify that Core 0.7.0 adds region erase and complete-install deletion semantics, while partition-address changes are handled by supplied metadata.
+
+- Prepare Device Core 0.7.0: explicit complete installations erase and verify the internal `ffat` partition derived from the authenticated image's real partition table, after image/layout/chip/security/capacity checks; add bounded browser/Node region erase, failure/cancellation regressions and bilingual deletion/adapter documentation. Application updates retain their existing layout and files; SD cards and unrelated Flash ranges are not erased.
 
 - State the ESP32-P4 v3.1–v3.99 silicon range in the development-board list and firmware notes; v1.3 users must compile and validate their own matching bootloader and application.
 - Keep the Function EV hardware CI gate on its eighteen explicitly qualified checks, including ESP-DL inference; retain the two scene-dependent ISP checks for separate acceptance without weakening strict pass requirements or public all-check selection, and verify that CI actually selects every required issue regression.
@@ -73,6 +79,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Refresh the shared dark/light/adaptive architecture diagrams and bilingual README/architecture guides for Plugin, standalone Device CLI, public Device Core and the official online Knowledge MCP; show all four public npm versions and package responsibilities in the READMEs.
 
 ### Fixed
+
+- Complete serial startup frames that cross the initial 300 ms drain window within the parser's existing progress/total budgets, without extending the fixed deadline for later frames or accepting old sessions; reject parser receive timeouts even after they clear the buffer, and clean up waits on cancellation or close. Add byte-count/timing diagnostics and regressions for split/coalesced byte boundaries, timeout budgets and injected legacy parsers.
+
+- Clear and verify the S31 ROM download latch at its own target address after Device Core programming, preserving unrelated bits before normal reset; cover successful return and failed latch verification for both S31 and P4. Firmware-side S31 USB-OTG entry is delivered separately.
 
 - Correct the storage documentation heading widths for strict English and Chinese Sphinx builds.
 - Correct the ISP validation heading underlines in both languages so strict Sphinx HTML and PDF builds pass.

@@ -5,6 +5,7 @@ import { loadOfficialFirmware } from './firmware_feed.js'
 import { FirmwareFlashSession, validateFirmwareImage, firmwareMode } from './firmware_flash.js'
 import { validateFirmwareRelease as release } from './firmware_release.js'
 import { downloadBytes, MAX_FIRMWARE_BYTES } from './firmware_io.js'
+import { planInstallFilesystemErase } from './firmware_partitions.js'
 
 function record(value, keys, name) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${name} must be an object`)
@@ -79,6 +80,7 @@ export async function updateFirmware(request, connectedIdentity, disconnect) {
     bytes = bytes.slice(source.offset, source.offset + image.bytes)
   }
   await validateFirmwareImage(image, bytes, { mode })
+  if (mode === 'install') planInstallFilesystemErase(image, bytes)
   abort(signal)
   // Validate everything before releasing EV-MUX or acquiring a download port.
   await disconnect()
@@ -87,10 +89,11 @@ export async function updateFirmware(request, connectedIdentity, disconnect) {
   let session
   try {
     abort(signal)
-    session = new FirmwareFlashSession(loader, image, { mode, reset: reset ? () => reset(loader) : undefined })
+    session = new FirmwareFlashSession(loader, image, { mode, signal, reset: reset ? () => reset(loader) : undefined })
     await session.connect(bytes)
     abort(signal)
-    // No interruption after writing starts: finish verification and reset policy.
+    // Erase/erase-verification honor cancellation; once firmware writing starts,
+    // finish verification/reset as before. No uncertain operation is replayed.
     const result = await session.flash(bytes, { onProgress, onPhase })
     return { ...result, version: target.version, board: target.board, reconnected: false }
   } finally {

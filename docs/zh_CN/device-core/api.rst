@@ -351,11 +351,11 @@ loader 契约沿用 :doc:`advanced` 中的 FirmwareFlashSession。可选 ``reset
 
 复用 ``firmware.check/update``，显式传入 ``mode: 'install'``。不需要 EV-MUX 连接或运行中的固件；用户必须选择真实开发板，使芯片进入 ROM 下载模式，并选择 ROM 支持的 USB-Serial-JTAG（USJ）或 UART 端口。空白设备不能依赖应用固件提供的 USB-OTG CDC 接口。浏览器宿主仍提供 ROM 适配器，CLI 内置 Node/esptool 适配器。此流程不是 TCP OTA。
 
-默认 ``mode: 'update'`` 保留原有只更新应用的行为；分区不匹配时拒绝，不会自动切换到 install。显式 install 将经过校验的完整合并镜像从地址 0 写入，包括 bootloader、分区表和应用。镜像覆盖范围内已有数据（包括可能存在的 NVS、文件系统数据）可能被替换，不承诺保留或回滚，也不会隐式执行整片擦除。宿主界面应明确区分首次安装与保留数据的应用更新。
+默认 ``mode: 'update'`` 保留原有只更新应用的行为；分区不匹配时拒绝，不会自动切换到 install。从 Core 0.7.0 起，显式 install 会先删除内部 Flash 文件系统中的文件（包括脚本、模型），再将经过校验的完整合并镜像从地址 0 写入，包括 bootloader、分区表和应用。镜像还可能替换 NVS 配置，包括已保存的 Wi-Fi 设置；不擦除 SD 卡。宿主必须在用户选择完整安装前明确提示删除行为。不执行整片擦除、固件备份、自动恢复或回滚。
 
 沿用 schemaVersion 1，发布条目新增可选 ``install: { offset: 0, bytes, flashSize, sha256, url, chipRevisionMin, chipRevisionMax, bootloader: { offset, bytes, sha256 } }``。flashSize 是布局要求的 Flash 容量（字节）；发布器取 bootloader 与应用芯片修订范围的交集。原有 image 仍是应用描述；安装会核验完整镜像中 bootloader、分区表和应用各自范围的哈希，范围必须有序、不重叠且不越界。发布流水线从现有合并镜像与实际 IDF 产物生成这些元数据；历史版本缺少合格安装元数据时不会推测兼容。
 
-``firmware.check({ mode: 'install', ... })`` 选择第一个具备安装元数据的版本，或精确选择指定版本。仅提供应用更新的版本仍显示在 releases 中，显式选择它安装时报 FIRMWARE_INSTALL_UNAVAILABLE；未知 mode 被拒绝。``firmware.update({ mode: 'install', ... })`` 在释放会话和获取 ROM 端口前校验镜像，随后检查真实芯片、修订、安全启动/加密状态及 JEDEC 实测容量，再开始写入。空白设备没有分区表，因此安装不要求旧表匹配。完整回读、复位策略、互斥、取消与返回结构沿用应用更新；是否已运行新固件仍须重新连接并 inspect 确认。
+``firmware.check({ mode: 'install', ... })`` 选择第一个具备安装元数据的版本，或精确选择指定版本。仅提供应用更新的版本仍显示在 releases 中，显式选择它安装时报 FIRMWARE_INSTALL_UNAVAILABLE；未知 mode 被拒绝。``firmware.update({ mode: 'install', ... })`` 在释放会话和获取 ROM 端口前校验镜像，并解析通过哈希校验的实际 ESP 分区表；检查边界、重叠、标签及存在的 MD5，要求匹配的应用分区，以及位于固件写入范围外、按扇区对齐、可写且未加密的 ``ffat`` data/FAT 分区。缺失或不支持的布局会拒绝，不会推测旧 ``vfs`` 就是 FAT。随后检查真实芯片、修订、安全状态及 JEDEC 实测容量，只擦除这个 ``ffat`` 范围，并通过有界回读确认所有字节均为 ``0xFF`` 后才写固件。擦除、回读失败或在这些阶段取消均不报告成功、不复位、不重放不确定操作。固件写入开始后沿用完成完整镜像校验和复位的策略；之后仍须重新连接并 inspect，确认文件系统已挂载且新固件实际运行。
 
 .. code-block:: javascript
 

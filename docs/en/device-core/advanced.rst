@@ -30,7 +30,7 @@ Incremental byte parser with bounded partial frames, CRC checks, frame filtering
     Clear buffered data, partial-frame timers and diagnostics.
 
 ``EvMuxParser.getDiagnostics()``
-    Return active/rxBytes/rxChunks/bufferedBytes/frames/droppedFrames/lastChannel.
+    Return active/rxBytes/rxChunks/bufferedBytes/frames/droppedFrames/invalidImageFrames/lastChannel, incompleteFrameTimeouts, and a detached partialFrame timing snapshot (null or startedAt/lastProgressAt/progressDeadline/totalDeadline in milliseconds). These diagnostics contain no frame payload. reset clears counters and the partial-frame state.
 
 ``EvMuxParser.hasPartialFrame()``
     Return whether buffered bytes form an incomplete possible frame.
@@ -243,7 +243,7 @@ Low-level v4 interpreter. Inject transport, EvMuxParser, EvRepl and makeEvMuxFra
 ``DeviceSession.close(error = new Error('connection closed'))``
     Reject pending work and reset session state/timers; physical transport closing is the host responsibility.
 
-Readable negotiated state includes state, role, identity, capabilities, sessionId, vmEpoch, vmReady, limits, parser and repl. Update it through session methods rather than direct assignment. ``negotiate`` options: role="unknown", drainMs=300, acquire=true, probeRepl=true, expectedDevice=null, signal=null. TCP skips startup drain. ``control`` operation strings are stop/soft-reset/hard-reset/bootloader, distinct from the facade request object. Low-level network mutation methods return accepted ACKs; the facade configure waits for matching operation completion. A typed run trial, if used, requires operation_id UUIDv4, source_path (at most 512 UTF-8 bytes), source_hash (64 lowercase SHA-256 hex digits) and the advertised launcher trial/typed-runner features; inlineCompletion cannot be combined with a trial.
+Readable negotiated state includes state, role, identity, capabilities, sessionId, vmEpoch, vmReady, limits, parser and repl. Update it through session methods rather than direct assignment. ``negotiate`` options: role="unknown", drainMs=300, acquire=true, probeRepl=true, expectedDevice=null, signal=null. TCP skips startup drain. Serial may complete a crossing partial frame within the parser's remaining receive budgets while continuing to reject old frames; successive frames cannot extend the initial partial frame's total deadline. An injected older parser without receive-budget support retains the conservative incomplete-frame failure instead of an unbounded wait. ``control`` operation strings are stop/soft-reset/hard-reset/bootloader, distinct from the facade request object. Low-level network mutation methods return accepted ACKs; the facade configure waits for matching operation completion. A typed run trial, if used, requires operation_id UUIDv4, source_path (at most 512 UTF-8 bytes), source_hash (64 lowercase SHA-256 hex digits) and the advertised launcher trial/typed-runner features; inlineCompletion cannot be combined with a trial.
 
 EV_MUX_DEFAULT_LIMITS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1215,10 +1215,24 @@ Bind generic session/file/Python/capture handlers to a registry and return { evi
 @esp-vision/device-core/firmware
 ----------------------------------------------------------------
 
+Addressed ROM operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The public ``openNodeRom`` and ``openBrowserRom`` adapters also support callers that manage their own Flash layout. After ``initialize()``, qualify the selected chip/revision and ``getSecurityInfo()`` before ``runStub()``; operate only after the stub is running and call ``disconnect()`` in cleanup. These operations are addressed, not restricted to a FAT partition name:
+
+* ``stub.eraseRegion(address, size)`` erases the supplied range. Address and positive size must be 4096-byte aligned and fit the 32-bit address space.
+* ``stub.flashData(arrayBuffer, onProgress, offset)`` writes the supplied bytes at the caller-selected offset through the official flasher.
+* ``stub.readFlash(offset, byteCount, onProgress?, options?)`` reads the caller-selected range. ``options`` accepts ``chunkSize``, ``blockSize`` (1024 or 4096) and ``maxInFlight``; large verification reads should loop over at most 65536 bytes with a 1024-byte packet and one outstanding packet.
+* ``stub.flashId()`` returns the integer JEDEC ID, with the capacity exponent in bits 16–23, not a capacity in bytes. Callers must check that their selected ranges fit the actual chip. Callers also own partition selection, overlap decisions, data hashes and readback verification.
+
+For portable Node/browser use, plan one ``flashData()`` call per adapter instance. The browser adapter rejects a second call with ``ROM_WRITE_REUSE`` and closes the session. Merge multiple segments into one continuous payload with intentional contents for the gaps, or establish and qualify a new ROM session for each write. Do not replay a write after an uncertain result.
+
+These primitives are the flexible layer for custom partition tools. ``FirmwareFlashSession`` adds the approved-image installation/update workflow, complete verification and target-specific reset handling. Core 0.7.0 adds the previously missing cross-platform region-erase primitive and changes complete-installation deletion semantics. It does not add a fixed FAT address: that workflow parses the approved partition table, so moving a partition does not itself require a new Core release. Application-only updates keep user files.
+
 FirmwareFlashSession
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``new FirmwareFlashSession(loader, image, { reset = () => loader.hardReset(), mode = 'update' } = {})``
+``new FirmwareFlashSession(loader, image, { reset = () => loader.hardReset(), mode = 'update', signal? } = {})``
 
 ROM-loader adapter, separate from a live EV-MUX session. Each instance has one lifetime. state progresses idle → connecting → connected → flashing → verified → closed, or error → closed. flash always disconnects, so closed alone is not evidence that verification succeeded.
 
@@ -1231,10 +1245,10 @@ ROM-loader adapter, separate from a live EV-MUX session. Each instance has one l
 ``FirmwareFlashSession.disconnect()``
     Close loader once; subsequent calls are no-ops.
 
-Image descriptor: evMuxVersion=4, bytes, offset, partitionSize, sha256, chipFamily, chipRevision and partitionTable:{offset,bytes,sha256}. Supply trusted build metadata and an exact Uint8Array; default mode never performs whole-chip erase or partition migration. The injected loader provides initialize(), chipFamily/chipRevision, getSecurityInfo(), runStub(true), hardReset(), disconnect(). The returned stub provides flashData(), readFlash(), readRegister() and writeRegister(). P4 normal-boot latch handling is built in. A reset failure after verified readback is reported through onPhase; it does not undo verification or automatically flash again.
+Image descriptor: evMuxVersion=4, bytes, offset, partitionSize, sha256, chipFamily, chipRevision and partitionTable:{offset,bytes,sha256}. Supply trusted build metadata and an exact Uint8Array; default mode never performs whole-chip erase or partition migration. The injected loader provides initialize(), chipFamily/chipRevision, getSecurityInfo(), runStub(true), hardReset(), disconnect(). The returned stub provides flashData(), readFlash(), readRegister() and writeRegister(). P4/S31 normal-boot latch handling is built in, using each target's register address. A reset failure after verified readback is reported through onPhase; it does not undo verification or automatically flash again.
 
 
-``mode: 'install'`` uses a merged image descriptor: application metadata remains under ``application``, while ``bytes/offset=0/sha256/flashSize/bootloader`` describe the complete image. The partitionTable descriptor remains unchanged. Chip revision bounds must cover both bootloader and application. Install skips existing-layout matching and requires the returned stub to implement ``flashId()`` returning the integer JEDEC ID (capacity exponent in bits 16–23). Existing application-update adapters need no changes; the bundled Node and browser ROM adapters provide flashId. Full installation and data replacement semantics are defined in :doc:`api`.
+``mode: 'install'`` uses a merged image descriptor: application metadata remains under ``application``, while ``bytes/offset=0/sha256/flashSize/bootloader`` describe the complete image. The partitionTable descriptor remains unchanged. Chip revision bounds must cover both bootloader and application. Install skips existing-layout matching and requires the returned stub to implement ``flashId()`` returning the integer JEDEC ID (capacity exponent in bits 16–23). From Core 0.7.0, complete installation also requires ``eraseRegion(address, size)`` and ``readFlash`` on that stub. The range is derived from the authenticated table, uses 4096-byte aligned positive bounds, and must be erased before firmware writing. Core verifies the erased bytes with reads of at most 65536 bytes, one outstanding 1024-byte packet. Missing capabilities return FIRMWARE_ERASE_UNSUPPORTED; invalid layouts return FIRMWARE_PARTITION_INVALID or FIRMWARE_FATFS_UNAVAILABLE; non-FF/short erase readback returns FIRMWARE_ERASE_VERIFY_FAILED. No retry, whole-chip erase, backup or automatic restore is performed. Existing application-update adapters need no changes; both built-in ROM adapters implement this contract. Full installation and deletion semantics are defined in :doc:`api`.
 
 ``firmwareMode(mode = 'update')`` validates and returns update/install; other values throw TypeError. ``validateFirmwareImage(image, bytes, { mode = 'update' } = {})`` also validates embedded bootloader/partition/application ranges and hashes for install mode.
 
@@ -1346,8 +1360,10 @@ After verified readback, flash returns ``{ verified: true, needsReset: boolean }
 @esp-vision/device-core/browser
 ------------------------------------------------------------------
 
-``openBrowserRom({ port, logger = {}, signal? })``
-    Included in SDK 0.6.0. Return a passive browser ROM adapter for a selected Web Serial ``SerialPort``. Request the port in the user gesture and release any runtime connection first. ``initialize()`` lazily loads official ``esptool-js@0.7.1``, opens/detects the chip and exposes ``chipName/chipFamily/chipRevision``; it does not start a stub. The adapter implements ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` for ``firmware.update``. Core checks the approved image and ROM security before starting the stub and owns all write/readback/reset semantics. ``logger`` optionally provides ``log/error/debug`` functions. ``signal`` cancels initialization; it never closes a started write/readback. ``disconnect()`` is idempotent and releases the port; initialization failures also close acquired resources. A disconnected adapter cannot be reused. Use a browser bundler; direct upstream native ESM loading is unsupported. See :doc:`integration` for the complete example. This subpath imports no Node modules; the root and Node paths do not load this browser backend.
+``openBrowserRom({ port, logger = {}, signal?, expectedMac? })``
+    Included in SDK 0.6.0. Return a passive browser ROM adapter for a selected Web Serial ``SerialPort``. Request the port in the user gesture and release any runtime connection first. ``initialize()`` lazily loads official ``esptool-js@0.7.1``, opens/detects the chip and exposes ``chipName/chipFamily/chipRevision``; it does not start a stub. The adapter implements ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` for ``firmware.update``. Core checks the approved image and ROM security before starting the stub and owns all write/readback/reset semantics. ``logger`` optionally provides ``log/error/debug`` functions. ``signal`` cancels initialization and region erase. Core also checks cancellation during erased-range verification and before firmware writing; once writing starts, verification/reset finishes as before. ``disconnect()`` is idempotent and releases the port; initialization failures also close acquired resources. A disconnected adapter cannot be reused. Use a browser bundler; direct upstream native ESM loading is unsupported. See :doc:`integration` for the complete example. This subpath imports no Node modules; the root and Node paths do not load this browser backend.
+
+    Core 0.7.0 also exposes ``chipMac``: ``null`` before qualification, then the factory MAC as 12 lowercase hexadecimal characters, matching the Node adapter. The pinned official chip ``readMac(loader)`` primitive supplies the value. Optional ``expectedMac`` accepts exactly 12 hexadecimal characters (uppercase is normalized); separators, whitespace, ``null`` and non-string values synchronously reject before port access. The host must obtain the selected runtime's verified factory MAC, for example a validated ``machine.unique_id()`` known to match that board's factory MAC; arbitrary legacy ``deviceId`` values or USB VID/PID do not establish this association. If the value cannot be verified, use an explicitly user-selected manual ROM workflow rather than infer an automatic association. A first mismatch or recovery to a different family/revision/MAC returns ROM_IDENTITY_CHANGED, closes the adapter and prevents another stub, erase or write; malformed MAC replies return ROM_IDENTITY_INVALID. These codes are retained on USB-OTG rather than being replaced with manual-download guidance. Omitting the option preserves manual initial ROM selection, but subsequent synchronization remains bound to that first device.
 
 Release readers in @esp-vision/device-core/firmware (0.5.1)
 ------------------------------------------------------------------

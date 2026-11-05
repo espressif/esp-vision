@@ -51,7 +51,7 @@
 
 USB 串口打开可能读到上一次连接的完整帧、残帧、旧 traceback 和 IDF 启动文字；“打开串口”不会触发新的 discovery hello。``serial.flush()`` 通常等待的是主机 TX，不是读取/清除设备响应。
 
-Core 在连接开始时，通过同一个 parser 接收并处理目标 300 ms 的启动数据；这一步不建立业务会话。窗口结束仍有未完成的 header/body 时，连接以结构化错误失败并清理，而非随意截断后马上发命令。
+Core 在连接开始时，通过同一个 parser 接收并处理目标 300 ms 的启动数据；这一步不建立业务会话。可能未完成的 header/body 跨越该窗口时，Core 会在 parser 剩余的进度和整帧预算内继续接收（两项默认均为 12 秒），持续拒绝旧帧，直到到达完整帧边界才发送 hello。额外等待开始时固定总截止时间，后续新帧不能延长它。取消、断线或接收预算到期时，连接失败并清理；parser 因超时丢弃半帧不算到达完整边界，Core 也不会通过清空或截断缓冲区制造成功。
 
 排空只减少已读到的旧数据，不保证全部设备/USB/主机缓冲已空，也不诊断 USB completion 错误。后续请求绝不能每次清输入，否则会丢弃保活、preview 或业务响应。
 
@@ -62,8 +62,8 @@ Core 在连接开始时，通过同一个 parser 接收并处理目标 300 ms �
      node_height = 60;
      orientation = portrait;
      open [label = "open serial once"];
-     drain [label = "300 ms bounded read\none parser across chunks"];
-     test [label = "no incomplete header/body"];
+     drain [label = "300 ms initial read\none parser across chunks"];
+     test [label = "finish partial frame\nfixed receive deadline"];
      hello [label = "new correlated hello/acquire"];
      work [label = "continuous reader\nnever flush per request"];
      open -> drain -> test -> hello -> work;
@@ -150,7 +150,7 @@ Wi-Fi 与 NVS 的真实状态机
 
 * discovery/capabilities：参考客户端的关联 RPC 默认预算约 6 秒。
 * keepalive：单次约 3 秒，同时满足固件 lease 总预算。
-* 串口 startup drain：目标 300 ms，首次连接一次。
+* 串口 startup drain：目标 300 ms，首次连接一次；跨窗口的半帧可在剩余接收预算内补齐，但不能延长固定的总截止时间。
 * 主机 RX 拼帧：参考实现约 12 秒预算，允许 TCP 收包出现数秒间隔。
 * 设备 RX：空闲/整帧约 3/10 秒，与主机收大图预算不是同一个方向。
 * VM 排队：设备约 5 秒过期，增加主机等待不扩大设备队列。

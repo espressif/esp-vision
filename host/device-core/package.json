@@ -1,6 +1,6 @@
 {
   "name": "@esp-vision/device-core",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Shared EV-MUX, framed REPL, device session, and action contracts for ESP Vision clients.",
   "type": "module",
   "exports": {
@@ -78,5 +78,5 @@
   "devDependencies": {
     "esbuild": "0.25.12"
   },
-  "espVisionReleaseType": "patch"
+  "espVisionReleaseType": "minor"
 }

@@ -1,12 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 // SPDX-License-Identifier: Apache-2.0
+import { normalizeExpectedMac } from './rom_identity.js'
 
 export { serialTransport } from './browser_serial.js'
 
 /** Passive browser ROM adapter. Request the SerialPort in the UI's click handler. */
-export function openBrowserRom({ port, logger = {}, signal, interface: romInterface = 'auto', baudRate = 'auto', onStatus = () => {} } = {}) {
+export function openBrowserRom({ port, logger = {}, signal, interface: romInterface = 'auto', baudRate = 'auto', onStatus = () => {}, expectedMac } = {}) {
   if (!port || typeof port.open !== 'function' || typeof port.close !== 'function') throw new TypeError('A browser SerialPort is required')
   if (signal !== undefined && (!signal || typeof signal.addEventListener !== 'function' || typeof signal.aborted !== 'boolean')) throw new TypeError('signal must be an AbortSignal')
+  const expected = normalizeExpectedMac(expectedMac)
   let raw, initialized, closing = false, cleanup
   const closed = () => Object.assign(new Error('Browser ROM adapter is closed'), { code: 'ROM_CLOSED' })
   const cancelled = () => signal.reason instanceof Error ? signal.reason : Object.assign(new Error('Firmware operation cancelled'), { name: 'AbortError' })
@@ -25,6 +27,7 @@ export function openBrowserRom({ port, logger = {}, signal, interface: romInterf
     get chipName() { return raw?.chipName ?? null },
     get chipFamily() { return raw?.chipFamily ?? null },
     get chipRevision() { return raw?.chipRevision ?? null },
+    get chipMac() { return raw?.chipMac ?? null },
     get interface() { return raw?.interface ?? romInterface },
     get baudRate() { return raw?.baudRate ?? null },
     initialize() {
@@ -43,7 +46,7 @@ export function openBrowserRom({ port, logger = {}, signal, interface: romInterf
             log: (...args) => logger.log?.(...args),
             error: (...args) => logger.error?.(...args),
             debug: (...args) => logger.debug?.(...args),
-          }, { interface: romInterface, baudRate, onStatus })
+          }, { interface: romInterface, baudRate, onStatus, signal, expectedMac: expected })
           if (closing || signal?.aborted) { await disconnect(); check() }
           await raw.initialize()
           check()

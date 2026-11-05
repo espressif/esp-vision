@@ -3,6 +3,7 @@
 // Loaded only by openBrowserRom.initialize(), never by the root/Node entry point.
 import { ESPLoader, Transport } from 'esptool-js'
 import { browserRomCompatibility, browserTransportCompatibility, readBrowserFlash, romError, romWords } from './browser_rom_compat.js'
+import { normalizeExpectedMac } from './rom_identity.js'
 
 export const ROM_UART_BAUD_RATES = Object.freeze([2000000, 1500000, 921600, 460800, 115200])
 const families = { 'ESP32-S3': 0x3253, 'ESP32-P4': 0x3280, 'ESP32-S31': 0x3231 }
@@ -29,8 +30,9 @@ export function createBrowserLoader(port, logger = {}, options = {}) {
 // Dependency injection is internal to the package and permits lifecycle/error
 // testing against fake official-loader dependencies without browser globals.
 export function createOfficialBrowserLoader({ ESPLoader: Loader, Transport: SerialTransport }, port, logger = {}, {
-  interface: requestedInterface = 'auto', baudRate = 'auto', onStatus = () => {},
+  interface: requestedInterface = 'auto', baudRate = 'auto', onStatus = () => {}, signal, expectedMac,
 } = {}) {
+  const expected = normalizeExpectedMac(expectedMac)
   let kind = browserRomInterface(port, requestedInterface)
   if (baudRate !== 'auto' && !ROM_UART_BAUD_RATES.includes(baudRate)) throw new RangeError('Unsupported ROM UART baudRate')
   let loader, transport, identity, initialized = false, active = false, fault, writing = false, disconnected = false
@@ -61,8 +63,19 @@ export function createOfficialBrowserLoader({ ESPLoader: Loader, Transport: Seri
       await loader.detectChip(mode, 3)
       if (disconnected) throw romError('ROM_CLOSED', 'Browser ROM adapter is closed')
       if (!loader.chip || !families[loader.chip.CHIP_NAME]) throw romError('ROM_CHIP_UNSUPPORTED', 'Browser flashing supports ESP32-S3, ESP32-P4 and ESP32-S31')
-      const current = { name: loader.chip.CHIP_NAME, family: families[loader.chip.CHIP_NAME], revision: await loader.chip.getChipRevision(loader) }
-      if (identity && (identity.family !== current.family || identity.revision !== current.revision)) throw romError('ROM_IDENTITY_CHANGED', 'Chip identity changed while recovering the download session')
+      const revision = await loader.chip.getChipRevision(loader)
+      if (typeof loader.chip.readMac !== 'function') throw romError('ROM_IDENTITY_INVALID', 'The ROM chip does not expose its factory MAC reader')
+      const rawMac = await loader.chip.readMac(loader)
+      // The pinned official chip API returns six colon-separated hex octets.
+      // Keep register layouts and byte ordering owned by that implementation.
+      if (typeof rawMac !== 'string' || rawMac.length !== 17 || !/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(rawMac)) throw romError('ROM_IDENTITY_INVALID', 'The ROM did not return a complete factory MAC')
+      const mac = rawMac.replaceAll(':', '').toLowerCase()
+      const current = { name: loader.chip.CHIP_NAME, family: families[loader.chip.CHIP_NAME], revision, mac }
+      if ((expected !== undefined && current.mac !== expected)
+          || (identity && (identity.family !== current.family || identity.revision !== current.revision || identity.mac !== current.mac))) {
+        throw romError('ROM_IDENTITY_CHANGED', 'ROM identity differs from the selected device or the bound download session')
+      }
+      if (disconnected) throw romError('ROM_CLOSED', 'Browser ROM adapter is closed')
       identity = current
       if (kind === 'unknown') {
         if (await loader.usesUsbOtg()) kind = 'usb-otg'
@@ -71,8 +84,13 @@ export function createOfficialBrowserLoader({ ESPLoader: Loader, Transport: Seri
       initialized = true
       status({ phase: 'rom-connected', interface: kind, baudRate: transport.baudrate })
     } catch (error) {
-      initialized = false
+      initialized = active = false
       await closeTransport().catch(() => {})
+      if (error.code === 'ROM_IDENTITY_CHANGED' || error.code === 'ROM_IDENTITY_INVALID') {
+        fault = error
+        disconnected = true
+        throw error
+      }
       const lost = /device.*lost|disconnected|setSignals|networkerror/i.test(`${error.name} ${error.message}`)
       if (lost) throw romError('ROM_PORT_LOST', 'Download port detached or re-enumerated; select its current ROM port again', error)
       if (kind === 'usb-otg') throw romError('ROM_MANUAL_DOWNLOAD', 'USB-OTG ROM is not ready. Hold BOOT, press RESET, release BOOT, then select the ROM port again', error)
@@ -128,7 +146,7 @@ export function createOfficialBrowserLoader({ ESPLoader: Loader, Transport: Seri
         return
       } catch (error) {
         status({ phase: 'baud-failed', interface: kind, baudRate: candidate, code: error.code ?? 'ROM_BAUD_FAILED', message: error.message })
-        if (error.code === 'ROM_IDENTITY_CHANGED' || error.code === 'ROM_SECURITY' || error.code === 'ROM_PORT_LOST') throw error
+        if (error.code === 'ROM_IDENTITY_CHANGED' || error.code === 'ROM_IDENTITY_INVALID' || error.code === 'ROM_SECURITY' || error.code === 'ROM_PORT_LOST') throw error
         if (index === candidates.length - 1) throw romError('ROM_BAUD_FAILED', 'No requested UART download speed passed verification', error)
       }
     }
@@ -160,6 +178,37 @@ export function createOfficialBrowserLoader({ ESPLoader: Loader, Transport: Seri
     readRegister: address => operation(() => loader.readReg(address)),
     writeRegister: (address, value, mask = 0xffffffff) => operation(() => loader.writeReg(address, value, mask)),
     readFlash: (address, size, progress, options) => operation(() => readBrowserFlash(loader, address, size, progress, options)),
+    eraseRegion(address, size) {
+      return operation(async () => {
+        if (!Number.isSafeInteger(address) || address < 0 || address % 4096 !== 0
+            || !Number.isSafeInteger(size) || size <= 0 || size > 0xffffffff || size % 4096 !== 0
+            || address + size > 0x100000000) throw new RangeError('ROM erase requires a positive, sector-aligned 32-bit address range')
+        if (loader.ESP_ERASE_REGION !== 0xd1 || typeof loader.timeoutPerMb !== 'function'
+            || !Number.isFinite(loader.ERASE_REGION_TIMEOUT_PER_MB) || loader.ERASE_REGION_TIMEOUT_PER_MB <= 0) throw romError('ROM_ERASE_UNSUPPORTED', 'Use the qualified esptool-js region erase primitives')
+        const cancelled = () => signal.reason instanceof Error ? signal.reason : Object.assign(romError('CANCELLED', 'Flash region erase cancelled'), { name: 'AbortError' })
+        if (signal?.aborted) throw cancelled()
+        let abort
+        const aborted = new Promise((_, reject) => {
+          abort = () => { reject(cancelled()); void adapter.disconnect().catch(() => {}) }
+        })
+        signal?.addEventListener('abort', abort, { once: true })
+        try {
+          if (signal?.aborted) throw cancelled()
+          status({ phase: 'erasing-region', address, size })
+          // 0.7.1 exposes the region command and checked request primitives,
+          // but no eraseRegion convenience method. Retain its framing, status
+          // parser and size-scaled timeout rather than implementing transport.
+          const erasing = loader.checkCommand('erase region', loader.ESP_ERASE_REGION, romWords(address, size), 0, 0,
+            loader.timeoutPerMb(loader.ERASE_REGION_TIMEOUT_PER_MB, size))
+          const result = await (signal ? Promise.race([erasing, aborted]) : erasing)
+          assertReady()
+          if (signal?.aborted) throw cancelled()
+          if (!transport.device?.readable || !transport.device?.writable) throw romError('ROM_PORT_LOST', 'Serial device disconnected during Flash region erase')
+          if (!active || !loader.IS_STUB) throw romError('ROM_STUB_REQUIRED', 'Flash region erase lost its validated stub')
+          if (result !== 0) throw romError('ROM_ERASE_STATUS', `Flash region erase command failed: ${result}`)
+        } finally { signal?.removeEventListener('abort', abort) }
+      })
+    },
     flashData(data, progress, address, _compress) {
       return operation(async () => {
         if (writing) throw romError('ROM_WRITE_REUSE', 'Start a fresh download session before another firmware write')
@@ -175,6 +224,7 @@ export function createOfficialBrowserLoader({ ESPLoader: Loader, Transport: Seri
     get chipName() { return identity?.name ?? null },
     get chipFamily() { return identity?.family ?? null },
     get chipRevision() { return identity?.revision ?? null },
+    get chipMac() { return identity?.mac ?? null },
     get interface() { return kind },
     get baudRate() { return kind === 'uart' ? transport?.baudrate ?? 115200 : null },
     async initialize() { if (disconnected) throw romError('ROM_CLOSED', 'Browser ROM adapter is closed'); await detect(kind === 'uart' || kind === 'usb-jtag' ? 'default_reset' : 'no_reset') },

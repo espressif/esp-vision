@@ -2,43 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createDevice } from '../src/index.js'
-import { firmwareSha256 } from '../src/firmware_flash.js'
-
-async function fixture() {
-  const data = new Uint8Array(0x11000).fill(0xff), calls = []
-  data.set([0xe9, 1, 2, 3], 0x2000)
-  data.set([0xaa, 0x50, 4, 5], 0x8000)
-  data.set([0xe9, 6, 7, 8], 0x10000)
-  const part = async offset => ({ offset, bytes: 4, sha256: await firmwareSha256(data.subarray(offset, offset + 4)) })
-  const release = { board: 'BOARD', version: 'new', image: {
-    evMuxVersion: 4, chipFamily: 0x3280, chipRevision: 302, ...(await part(0x10000)),
-    partitionSize: 4096, partitionTable: await part(0x8000), url: 'https://example.test/app.bin',
-  }, install: { offset: 0, bytes: data.length, flashSize: 0x1000000, chipRevisionMin: 302, chipRevisionMax: 302,
-    sha256: await firmwareSha256(data), bootloader: await part(0x2000), url: 'https://example.test/full.bin' } }
-  const flash = new Uint8Array(data.length).fill(0xff)
-  const loader = {
-    chipFamily: 0x3280, chipRevision: 302,
-    async initialize() { calls.push('initialize') },
-    async getSecurityInfo() { return { flags: 0, flashCryptCnt: 0 } },
-    async runStub() { calls.push('stub'); return loader },
-    async flashId() { calls.push('capacity'); return 0x1840ef },
-    async flashData(buffer, progress, offset) { calls.push(['write', offset]); flash.set(new Uint8Array(buffer), offset); progress(buffer.byteLength, buffer.byteLength) },
-    async readFlash(offset, count) { calls.push(['read', offset]); return flash.slice(offset, offset + count) },
-    async readRegister() { return 0 },
-    async hardReset() { calls.push('reset') },
-    async disconnect() { calls.push('close') },
-  }
-  const device = createDevice(), request = { mode: 'install', release, board: 'BOARD', data, async openLoader() { calls.push('open'); return loader } }
-  return { data, calls, release, loader, device, request, flash }
-}
+import { installFixture as fixture } from './firmware-fixtures.mjs'
 
 test('blank device installs through ROM without an EV-MUX transport or existing partition table', async () => {
   const f = await fixture(), progress = []
   const result = await f.device.firmware.update({ ...f.request, onProgress: value => progress.push(value) })
   assert.equal(result.verified, true); assert.equal(result.reconnected, false)
-  assert.deepEqual(f.flash, f.data)
-  assert.deepEqual(f.calls, ['open', 'initialize', 'stub', 'capacity', ['write', 0], ['read', 0], ['read', 65536], 'reset', 'close'])
+  assert.deepEqual(f.flash.slice(0, f.data.length), f.data)
+  assert.ok(f.flash.subarray(0x20000).every(value => value === 0xff))
+  assert.deepEqual(f.calls, ['open', 'initialize', 'stub', 'capacity', ['erase', 0x20000, 0x21000], ['read', 0x20000], ['read', 0x30000], ['read', 0x40000], ['write', 0], ['read', 0], ['read', 65536], 'reset', 'close'])
   assert.equal(progress.at(-1), 100)
 })
 
@@ -54,7 +26,7 @@ test('complete image is downloaded from install URL with the requested cancellat
   await f.device.firmware.update({ ...f.request, data: undefined, signal: controller.signal,
     async fetch(url, options) { assert.equal(url, f.release.install.url); assert.equal(options.signal, controller.signal); return { ok: true, arrayBuffer: async () => f.data.buffer } },
   })
-  assert.deepEqual(f.flash, f.data)
+  assert.deepEqual(f.flash.slice(0, f.data.length), f.data)
 })
 
 test('install selection skips app-only releases and rejects explicit unqualified versions', async () => {
@@ -97,13 +69,14 @@ for (const change of ['wrong-chip', 'wrong-revision', 'secure-boot', 'encryption
     if (change === 'unknown-flash') f.loader.flashId = async () => 0xffffff
     if (change === 'missing-capacity') delete f.loader.flashId
     await assert.rejects(f.device.firmware.update(f.request))
-    assert.ok(!f.calls.some(call => Array.isArray(call) && call[0] === 'write'))
+    assert.ok(!f.calls.some(call => Array.isArray(call) && ['write', 'erase'].includes(call[0])))
     assert.equal(f.calls.at(-1), 'close')
   })
 }
 
 test('installation with damaged readback does not reset or report success', async () => {
-  const f = await fixture(); f.loader.readFlash = async (_offset, count) => new Uint8Array(count)
+  const f = await fixture(), read = f.loader.readFlash
+  f.loader.readFlash = async (offset, count) => offset >= 0x20000 ? read(offset, count) : new Uint8Array(count)
   await assert.rejects(f.device.firmware.update(f.request), /verification failed/)
   assert.ok(!f.calls.includes('reset')); assert.equal(f.calls.at(-1), 'close')
 })

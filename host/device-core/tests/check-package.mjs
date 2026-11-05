@@ -45,6 +45,13 @@ try {
   const { defaultPython, filterSerialPorts, inventory, listSerial, serialEntry, tcpTransport, serialTransport, transportFor, openNodeRom } = await import('@esp-vision/device-core/node');
   const { openBrowserRom } = await import('@esp-vision/device-core/browser');
   if (typeof openBrowserRom !== 'function' || typeof openBrowserRom({ port: { open() { throw new Error('Not opened'); }, close() {} } }).initialize !== 'function') throw new Error('Missing passive browser ROM adapter');
+  const romPort = { open() { throw new Error('Not opened'); }, close() {} };
+  const browserRom = openBrowserRom({ port: romPort, expectedMac: '30EDA0EDA1B0' });
+  if (!Object.hasOwn(browserRom, 'chipMac') || browserRom.chipMac !== null) throw new Error('Missing passive browser ROM MAC contract');
+  let rejectedExpectedMac = false;
+  try { openBrowserRom({ port: romPort, expectedMac: '30:ed:a0:ed:a1:b0' }); } catch (error) { rejectedExpectedMac = error instanceof TypeError; }
+  if (!rejectedExpectedMac) throw new Error('Installed browser ROM must validate expectedMac before opening');
+  await browserRom.disconnect();
   if (typeof tcpTransport !== 'function' || typeof serialTransport !== 'function') throw new Error('Missing public Node transports');
   if (typeof inventory !== 'function' || typeof listSerial !== 'function' || typeof filterSerialPorts !== 'function'
       || typeof serialEntry !== 'function' || typeof transportFor !== 'function' || typeof defaultPython !== 'string') throw new Error('Missing public Node inventory APIs');
@@ -63,7 +70,7 @@ try {
   api.createDevice({ transport: serialTransport({ python: 'python3', serial: 'not-opened' }) });
   if (typeof DeviceSession !== 'function' || typeof FirmwareFlashSession !== 'function') throw new Error('Missing host adapter APIs');`
   execFileSync(process.execPath, ['--input-type=module', '-e', script], { cwd: consumer, stdio: 'pipe' })
-  for (const required of ['src/node_serial.py', 'src/jpeg_validate.js', 'scripts/run-tests.mjs', 'tests/hardware-check.mjs', 'tests/device-checks.mjs', 'tests/jpeg-fixtures.mjs', 'tests/test-jpeg-validation.mjs', 'tests/fixtures/device-checks.py']) {
+  for (const required of ['src/node_serial.py', 'src/jpeg_validate.js', 'src/rom_identity.js', 'scripts/run-tests.mjs', 'tests/hardware-check.mjs', 'tests/device-checks.mjs', 'tests/jpeg-fixtures.mjs', 'tests/test-jpeg-validation.mjs', 'tests/fixtures/device-checks.py']) {
     assert.ok(packed.files.some(({ path }) => path === required), `Missing installed check asset: ${required}`)
   }
   const unitOutput = execFileSync(...npmCommand(['test']), { cwd: installed, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })

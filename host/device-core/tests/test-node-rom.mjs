@@ -6,7 +6,7 @@ import { EventEmitter } from 'node:events'
 import { PassThrough, Writable } from 'node:stream'
 import { openNodeRom } from '../src/node_rom.js'
 
-function fixture({ mac = 'e8f60ae75642', expected = mac, prepare, initializeError, operationError, readResult = 'QUI=' } = {}) {
+function fixture({ mac = 'e8f60ae75642', expected = mac, prepare, initializeError, operationError, readResult = 'QUI=', stubResult = { stubRunning: true }, holdErase = false } = {}) {
   const calls = [], requests = []
   const child = new EventEmitter()
   child.exitCode = null
@@ -15,11 +15,14 @@ function fixture({ mac = 'e8f60ae75642', expected = mac, prepare, initializeErro
     write(data, encoding, done) {
       const request = JSON.parse(data.toString())
       requests.push(request)
-      const detail = request.method === 'initialize' ? initializeError : operationError
+      const detail = request.method === 'initialize' ? initializeError
+        : typeof operationError === 'function' ? operationError(request) : operationError
+      if (request.method === 'eraseRegion' && holdErase) { done(); return }
       queueMicrotask(() => child.stdout.write(JSON.stringify(detail
         ? { id: request.id, error: 'ROM_OPERATION_FAILED', method: request.method, detail }
         : { id: request.id, result: request.method === 'initialize'
-          ? { chipFamily: 0x3280, chipRevision: 302, chipMac: mac, connectionMode: 'no-reset' } : request.method === 'read' ? readResult : null }) + '\n'))
+          ? { chipFamily: 0x3280, chipRevision: 302, chipMac: mac, connectionMode: 'no-reset' }
+          : request.method === 'read' ? readResult : request.method === 'stub' ? stubResult : null }) + '\n'))
       done()
     },
     final(done) { child.exitCode = 0; queueMicrotask(() => child.emit('exit', 0)); done() },
@@ -228,4 +231,85 @@ test('incomplete read results are rejected without progress, recovery, or duplic
     assert.equal(progressed, 0)
     assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'read'])
   } finally { await loader.disconnect() }
+})
+
+test('Node region erase requires the validated stub and sends only the exact qualified range', async () => {
+  const f = fixture(), loader = openNodeRom({ port: '/dev/runtime' }, f.dependencies)
+  try {
+    await assert.rejects(loader.eraseRegion(0x710000, 4096), { code: 'ROM_NOT_INITIALIZED' })
+    await loader.initialize()
+    await assert.rejects(loader.eraseRegion(0x710000, 4096), { code: 'ROM_STUB_REQUIRED' })
+    const stub = await loader.runStub()
+    assert.equal(stub, loader); assert.equal(stub.IS_STUB, true)
+    await stub.eraseRegion(0x710000, 0x8f0000)
+    await stub.eraseRegion(0xfffff000, 4096)
+    assert.deepEqual(f.requests.map(r => [r.method, r.args]), [
+      ['initialize', []], ['stub', []], ['eraseRegion', [0x710000, 0x8f0000]],
+      ['eraseRegion', [0xfffff000, 4096]],
+    ])
+  } finally { await loader.disconnect() }
+  assert.equal(loader.IS_STUB, false)
+  await assert.rejects(loader.eraseRegion(0x710000, 4096), { code: 'ROM_CLOSED' })
+})
+
+test('invalid Node erase ranges issue no child request', async () => {
+  const f = fixture(), loader = openNodeRom({ port: '/dev/runtime' }, f.dependencies)
+  try {
+    await loader.initialize(); await loader.runStub()
+    for (const [address, size] of [[-4096, 4096], [1, 4096], [0, 0], [0, 1], [0, 0x100000000],
+      [0xfffff000, 8192], [NaN, 4096], [true, 4096], [0, true], [0x100000000, 4096]]) {
+      await assert.rejects(loader.eraseRegion(address, size), RangeError)
+    }
+    assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'stub'])
+  } finally { await loader.disconnect() }
+})
+
+test('unconfirmed Node stub responses close the process before any erase', async () => {
+  for (const stubResult of [null, {}, { stubRunning: false }, { stubRunning: 1 }]) {
+    const f = fixture({ stubResult }), loader = openNodeRom({ port: '/dev/runtime' }, f.dependencies)
+    await loader.initialize()
+    await assert.rejects(loader.runStub(), { code: 'ROM_STUB_REQUIRED' })
+    await assert.rejects(loader.eraseRegion(0x710000, 4096), { code: 'ROM_CLOSED' })
+    assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'stub'])
+    assert.equal(f.child.exitCode, 0)
+  }
+})
+
+test('Node erase failure keeps official diagnostics and prevents later writes or recovery', async () => {
+  const f = fixture({ operationError: request => request.method === 'eraseRegion' ? 'Erase command rejected' : undefined })
+  let recoveries = 0
+  const loader = openNodeRom({ port: '/dev/runtime' }, { ...f.dependencies,
+    recoverPort: async () => { recoveries++; throw new Error('Erase must not recover') },
+  })
+  await loader.initialize(); await loader.runStub()
+  await assert.rejects(loader.eraseRegion(0x710000, 4096), error => error.code === 'ROM_OPERATION_FAILED'
+    && error.operation === 'eraseRegion' && error.cause === 'Erase command rejected')
+  await assert.rejects(loader.flashData(new Uint8Array([1]), () => {}, 0), { code: 'ROM_CLOSED' })
+  await assert.rejects(loader.eraseRegion(0x710000, 4096), { code: 'ROM_CLOSED' })
+  assert.equal(recoveries, 0)
+  assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'stub', 'eraseRegion'])
+})
+
+test('Node erase cancellation or port loss closes the in-flight request without success or retry', async () => {
+  for (const cancelled of [true, false]) {
+    const f = fixture({ holdErase: true }), controller = new AbortController()
+    const loader = openNodeRom({ port: '/dev/runtime', signal: controller.signal }, f.dependencies)
+    await loader.initialize(); await loader.runStub()
+    const erasing = loader.eraseRegion(0x710000, 4096)
+    const failed = assert.rejects(erasing, { code: cancelled ? 'CANCELLED' : 'ROM_CLOSED' })
+    if (cancelled) controller.abort()
+    else { f.child.exitCode = 1; f.child.emit('exit', 1) }
+    await failed
+    await assert.rejects(loader.flashData(new Uint8Array([1]), () => {}, 0), { code: 'ROM_CLOSED' })
+    assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'stub', 'eraseRegion'])
+  }
+})
+
+test('a previously cancelled Node erase never sends a command', async () => {
+  const f = fixture(), controller = new AbortController()
+  const loader = openNodeRom({ port: '/dev/runtime', signal: controller.signal }, f.dependencies)
+  await loader.initialize(); await loader.runStub(); controller.abort()
+  await assert.rejects(loader.eraseRegion(0x710000, 4096), { name: 'AbortError' })
+  assert.deepEqual(f.requests.map(r => r.method), ['initialize', 'stub'])
+  assert.equal(f.child.exitCode, 0)
 })
