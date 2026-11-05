@@ -29,6 +29,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- State the ESP32-P4 v3.1–v3.99 silicon range in the development-board list and firmware notes; v1.3 users must compile and validate their own matching bootloader and application.
 - Keep the Function EV hardware CI gate on its eighteen explicitly qualified checks, including ESP-DL inference; retain the two scene-dependent ISP checks for separate acceptance without weakening strict pass requirements or public all-check selection, and verify that CI actually selects every required issue regression.
 
 - Document the OV2710 scoped build adaptation and verbatim driver fixture provenance in both README translations.

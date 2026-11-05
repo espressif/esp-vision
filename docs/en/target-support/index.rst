@@ -8,6 +8,12 @@ ESP-VISION documentation is built separately for each supported chip. Select the
 Supported Development Boards
 ----------------------------
 
+.. note::
+
+   Current standard prebuilt ESP32-P4 firmware supports silicon revisions v3.1–v3.99. This is the chip revision reported by esptool, not a board or module silkscreen version. Check the exact image's revision bounds before flashing; a board name or a generic v3.x label alone is insufficient.
+
+   No prebuilt firmware is provided here for ESP32-P4 v1.3. Users who need it must build and validate their own firmware: select the matching board, enable ``CONFIG_ESP32P4_SELECTS_REV_LESS_V3`` in menuconfig, choose a minimum revision compatible with the chip, and rebuild both the bootloader and application. IDF's pre-v3 and v3.x targets are mutually incompatible. Do not force-flash a v3.x image or patch its revision header to bypass checks.
+
 .. include:: _generated/boards.rst
 
 Chip Versus Board Capabilities
