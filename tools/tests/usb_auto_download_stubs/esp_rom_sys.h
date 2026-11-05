@@ -6,3 +6,4 @@
 #pragma once
 
 void esp_rom_printf(const char *format, ...);
+void esp_rom_software_reset_system(void);

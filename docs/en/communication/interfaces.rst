@@ -176,7 +176,9 @@ DTR/RTS, RESET and ROM download
 
 DTR changes do not acquire or release EV-MUX sessions. Closing a host serial handle while USB remains connected may be invisible to firmware. Send ``session.release`` before closing, or wait for lease expiry.
 
-CDC DTR/RTS automatic download is a separate USB control path. It shares ``esp_vision_restart(download_mode)`` with Python ``machine.bootloader()``. Python can request an immediate restart; USB control callbacks record state and a deferred timer restarts outside the callback. P4 preserves other system-register bits when setting/clearing download bits; S3 follows its ROM USB persistence/PHY handoff contract.
+CDC DTR/RTS automatic download is a separate USB control path. It shares ``esp_vision_restart(download_mode)`` with Python ``machine.bootloader()``. Python can request an immediate restart; USB control callbacks record state and a deferred timer restarts outside the callback. P4 and S31 preserve other system-register bits when setting/clearing download bits; S3 follows its ROM USB persistence/PHY handoff contract. S31 Korvo and Mosaico enable this CDC entry, while Chatbot retains its connected USB Serial/JTAG interface and does not enable its unconnected OTG port. Formal 2026.10.23 S31 firmware predates this support and requires hardware ROM entry.
+
+The firmware change provides S31 runtime-to-ROM entry. Returning to the application after programming also requires a host that clears and verifies the S31 download latch, such as Device Core 0.7.0; older Device Core 0.6.1 does not provide that step. Publish and adopt the matching Core in IDE/website clients before releasing this firmware.
 
 .. seqdiag::
 
