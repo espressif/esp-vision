@@ -21,7 +21,6 @@
 #if MICROPY_HW_ENABLE_SDCARD && SOC_SDMMC_HOST_SUPPORTED
 #define ESP_VISION_MSC_SDCARD_LUN (1)
 #define ESP_VISION_MSC_LUN_COUNT  (2)
-#define ESP_VISION_MSC_SDCARD_PRODUCT_STRING "ESP-VISION SD"
 #else
 #define ESP_VISION_MSC_LUN_COUNT (1)
 #endif
@@ -50,7 +49,9 @@ static bool esp_vision_msc_lun_ready(uint8_t lun)
         return false;
     }
     if (lun == ESP_VISION_MSC_FLASH_LUN) {
-        return esp_vision_storage_flash_block_count() != 0;
+        // A partition may already exist while provisioning is incomplete.
+        // Do not admit host files before the durable READY record and mount.
+        return esp_vision_storage_flash_is_mounted() && esp_vision_storage_flash_block_count() != 0;
     }
 #if MICROPY_HW_ENABLE_SDCARD && SOC_SDMMC_HOST_SUPPORTED
     if (lun == ESP_VISION_MSC_SDCARD_LUN) {
@@ -125,10 +126,10 @@ static void esp_vision_msc_copy_inquiry_string(uint8_t *dst, size_t dst_len, con
 
 void tud_msc_inquiry_cb(uint8_t lun, uint8_t vendor_id[8], uint8_t product_id[16], uint8_t product_rev[4])
 {
-    const char *product = MICROPY_HW_USB_MSC_INQUIRY_PRODUCT_STRING;
+    const char *product = ESP_VISION_STORAGE_FLASH_LABEL;
 #if MICROPY_HW_ENABLE_SDCARD && SOC_SDMMC_HOST_SUPPORTED
     if (lun == ESP_VISION_MSC_SDCARD_LUN) {
-        product = ESP_VISION_MSC_SDCARD_PRODUCT_STRING;
+        product = ESP_VISION_STORAGE_SDCARD_LABEL;
     }
 #endif
     esp_vision_msc_copy_inquiry_string(vendor_id, 8, MICROPY_HW_USB_MSC_INQUIRY_VENDOR_STRING);

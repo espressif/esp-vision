@@ -27,7 +27,7 @@ ESP-VISION 启动顺序
      reset    [label = "硬复位或软复位"];
      storage  [label = "通过 ESP-IDF storage 挂载\nFlash 和可用的 SD 卡"];
      runtime  [label = "初始化 MicroPython 运行时\n和 machine 外设"];
-     bridge   [label = "在 / 和 /sdcard 发布\n原生 VFS bridge"];
+     bridge   [label = "在 /、/flash 和 /sdcard\n发布可用 VFS bridge"];
      services [label = "初始化摄像头、显示、\n预览和帧缓冲服务"];
      boot     [label = "执行冻结的 _boot.py\n运行清理工作"];
      setup    [label = "执行冻结的 py_inisetup.py\n创建缺失的默认文件"];
@@ -48,9 +48,9 @@ ESP-VISION 启动顺序
 首次启动与 Flash 文件系统
 -------------------------
 
-ESP-IDF storage manager 独立于 MicroPython VM 持有开发板文件系统。它在内部将 ``ffat`` 分区挂载到 ``/flash``，并将可用的 SD 卡挂载到 ``/sdcard``。每次 VM 启动时，原生 MicroPython VFS bridge 会把 Flash 卷发布到 ``/``，把 SD 卷发布到 ``/sdcard``。软复位只会重新创建 bridge 对象，不会重新挂载已挂载的物理文件系统；如果 SD 卡在冷启动时未挂载，后续每次 VM 启动都会重试，因此开机后插入的 SD 卡可在软复位后变为可用。
+ESP-IDF storage manager 独立于 MicroPython VM 持有开发板文件系统。默认尝试在内部将 ``ffat`` 分区挂载到 ``/flash``，并将可用的 SD 卡挂载到 ``/sdcard``。两个卷均为独立的可选卷。每次 VM 启动时，原生 MicroPython VFS bridge 会把 Flash 卷发布到 ``/`` 及别名 ``/flash``，把 SD 卷发布到 ``/sdcard``。软复位重新创建 bridge 对象，不会重新挂载已挂载的物理文件系统；开启自动 SD 挂载时，冷启动时不可用的卡会在后续 VM 启动重试。开发板可分别将 ``ESP_VISION_STORAGE_AUTO_MOUNT_FLASH`` 或 ``ESP_VISION_STORAGE_AUTO_MOUNT_SD`` 设为 ``0`` 来推迟对应挂载，两者默认均为 ``1``。显式挂载重试及固定 USB MSC 卷槽位见 :doc:`../storage/index`。
 
-storage manager 会在初始化时将未格式化的 ``ffat`` 分区格式化为 FAT。兼容旧固件的 ``vfs`` 分区只有在已经包含 FAT 时才会挂载，绝不会自动格式化，因此不会静默擦除可能存在的 LittleFS2 卷。其他挂载或写入失败只会上报，不会执行破坏性修复。随后，冻结的 ``py_inisetup.py`` 会在对应文件不存在时创建 ``/boot.py``、``/main.py``、``/README.txt`` 和 ``/.esp_vision_disk`` 标记文件。
+自动初始化使用两个独立的板级策略：``ESP_VISION_STORAGE_FLASH_FORMAT_IF_NO_FILESYSTEM`` 默认 ``1``，``ESP_VISION_STORAGE_SD_FORMAT_IF_NO_FILESYSTEM`` 默认 ``0``。精确返回 ``FR_NO_FILESYSTEM`` 时，内部 ``ffat`` 默认初始化，SD 只有在板级显式开启后才初始化；这可能擦除出厂、其他格式或损坏的数据。对应策略设为 ``0`` 后自动启动只尝试挂载。两个介质仍默认自动挂载，``storage.retry()`` 始终只挂载。有效 FAT 保持原样，其他挂载错误不触发自动格式化或重启。中断的 Flash 事务保持隔离；SD 没有同等持久日志。策略风险、所有权、备份和显式确认恢复见 :doc:`../storage/index`。无法打开文件时仍可查询状态；显式恢复后，由用户选择软复位以发布 Python 挂载。冻结的默认文件初始化仅写入可用文件系统，失败会报告错误，不导致 crash。
 
 正常固件升级或软复位不会覆盖已有启动文件。开发板包可以通过 ``boards/<BOARD>/board_inisetup.py`` 提供板级默认 ``main.py`` 和 ``README.txt`` 内容。
 

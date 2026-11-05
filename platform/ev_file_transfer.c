@@ -137,7 +137,8 @@ const char *ev_file_transfer_begin(const ev_session_snapshot_t *owner, const cha
     } else if (s_file.active) {
         error = "TRANSFER_BUSY";
     } else if (!path_safe || path[0] != '/' || strlen(path) > 123 || path[1] == '\0' ||
-               path[strlen(path) - 1] == '/' || strstr(path, "..") != NULL || strstr(path, "//") != NULL || strcmp(path, ESP_VISION_STORAGE_SDCARD_PATH) == 0 ||
+               path[strlen(path) - 1] == '/' || strstr(path, "..") != NULL || strstr(path, "//") != NULL ||
+               strcmp(path, ESP_VISION_STORAGE_SDCARD_PATH) == 0 || strcmp(path, ESP_VISION_STORAGE_FLASH_ALIAS) == 0 ||
                !unhex(sha256, digest, sizeof(digest)) || !unhex(upload_id, token, sizeof(token))) {
         error = "INVALID_ARGUMENT";
     } else {
@@ -149,10 +150,19 @@ const char *ev_file_transfer_begin(const ev_session_snapshot_t *owner, const cha
         if (strncmp(path, ESP_VISION_STORAGE_SDCARD_PATH, sd_len) == 0 && path[sd_len] == '/') {
             s_file.volume = ESP_VISION_STORAGE_VOLUME_SD;
         }
+        const char *relative_path = path;
+        const size_t flash_alias_len = strlen(ESP_VISION_STORAGE_FLASH_ALIAS);
+        if (s_file.volume == ESP_VISION_STORAGE_VOLUME_FLASH &&
+                strncmp(path, ESP_VISION_STORAGE_FLASH_ALIAS, flash_alias_len) == 0 && path[flash_alias_len] == '/') {
+            relative_path += flash_alias_len;
+        }
         int count = snprintf(s_file.target, sizeof(s_file.target), "%s%s",
-                             s_file.volume == ESP_VISION_STORAGE_VOLUME_FLASH ? ESP_VISION_STORAGE_FLASH_PATH : "", path);
+                             s_file.volume == ESP_VISION_STORAGE_VOLUME_FLASH ? ESP_VISION_STORAGE_FLASH_PATH : "", relative_path);
         if (count < 0 || (size_t)count >= sizeof(s_file.target)) {
             error = "INVALID_PATH";
+        } else if (!(s_file.volume == ESP_VISION_STORAGE_VOLUME_FLASH
+                     ? esp_vision_storage_flash_is_mounted() : esp_vision_storage_sdcard_is_mounted())) {
+            error = "STORAGE_UNAVAILABLE";
         } else if (!esp_vision_msc_writer_vfs_begin(s_file.volume, true)) {
             error = "STORAGE_READ_ONLY";
         } else {

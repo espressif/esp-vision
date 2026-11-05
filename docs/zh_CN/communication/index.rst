@@ -45,6 +45,7 @@
 
    architecture
    interfaces
+   usb
    sessions
    wire-protocol
    python-files

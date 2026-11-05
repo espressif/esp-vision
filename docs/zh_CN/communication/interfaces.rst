@@ -63,6 +63,8 @@ sink 类型与实际 link
 板级后端启用条件
 ----------------
 
+USB 功能组合、配置、卷标和固定 MSC LUN 见 :doc:`usb`。
+
 后端由 ``boards/<BOARD>/boardconfig.h``、``boards/<BOARD>/port/mpconfigboard.h`` 和 SoC 能力共同决定。关闭 MicroPython 接口宏会关闭对应接口，而非仅禁止 EV-MUX 使用它；当前没有 MUX 专用串口白名单。下表描述当前源码默认配置，运行时以 ``capabilities.sinks`` 为准。
 
 .. list-table:: 编译条件与当前板级示例

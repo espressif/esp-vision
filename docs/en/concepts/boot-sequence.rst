@@ -27,7 +27,7 @@ After a hard or soft reset, ESP-VISION executes the following startup flow:
      reset    [label = "Hard or soft reset"];
      storage  [label = "Mount Flash and available SD\nthrough ESP-IDF storage"];
      runtime  [label = "Initialize MicroPython runtime\nand machine peripherals"];
-     bridge   [label = "Publish native VFS bridges\nat / and /sdcard"];
+     bridge   [label = "Publish available VFS bridges\nat /, /flash and /sdcard"];
      services [label = "Initialize camera, display,\npreview, and framebuffer"];
      boot     [label = "Run frozen _boot.py\nhousekeeping"];
      setup    [label = "Run frozen py_inisetup.py\ncreate missing default files"];
@@ -48,9 +48,9 @@ The raw REPL used by host automation can skip ``main.py`` during a soft reset. T
 First Boot and Flash Filesystem
 -------------------------------
 
-The ESP-IDF storage manager owns the board filesystems independently of the MicroPython VM. It mounts the ``ffat`` partition internally at ``/flash`` and mounts an available SD card at ``/sdcard``. On each VM start, native MicroPython VFS bridges publish the Flash volume at ``/`` and the SD volume at ``/sdcard``. A soft reset recreates only these bridge objects and does not remount an already mounted physical filesystem; if the SD card was not mounted during cold boot, the mount is retried on each subsequent VM start so that a card inserted later becomes available after a soft reset.
+The ESP-IDF storage manager owns the board filesystems independently of the MicroPython VM. By default it attempts to mount the ``ffat`` partition internally at ``/flash`` and an available SD card at ``/sdcard``. Both volumes are optional and independent. On each VM start, native MicroPython VFS bridges publish the Flash volume at ``/`` and alias ``/flash``, and the SD volume at ``/sdcard``. A soft reset recreates these bridge objects without remounting an already mounted physical filesystem; when automatic SD mounting is enabled, an SD card that was unavailable at cold boot is retried on subsequent VM starts. Boards may independently set ``ESP_VISION_STORAGE_AUTO_MOUNT_FLASH`` or ``ESP_VISION_STORAGE_AUTO_MOUNT_SD`` to ``0`` to defer that mount; both default to ``1``. See :doc:`../storage/index` for explicit mount retry and fixed USB MSC volume slots.
 
-An unformatted ``ffat`` partition is formatted as FAT during storage initialization. A legacy partition named ``vfs`` is only mounted when it already contains FAT and is never automatically formatted, so a possible LittleFS2 volume is not silently erased. Other mount or write failures are reported without destructive repair. The frozen ``py_inisetup.py`` then creates ``/boot.py``, ``/main.py``, ``/README.txt``, and the ``/.esp_vision_disk`` marker when they do not already exist.
+Automatic initialization uses independent board policies: ``ESP_VISION_STORAGE_FLASH_FORMAT_IF_NO_FILESYSTEM`` defaults to ``1`` and ``ESP_VISION_STORAGE_SD_FORMAT_IF_NO_FILESYSTEM`` defaults to ``0``. Exact ``FR_NO_FILESYSTEM`` initializes internal ``ffat`` by default and initializes SD only after explicit board opt-in; this can erase factory, foreign or damaged contents. Set the relevant policy to ``0`` for mount-only automatic startup. Both media still default to automatic mounting, and ``storage.retry()`` always remains mount-only. A valid FAT is preserved; other mount errors do not trigger automatic formatting or rebooting. Interrupted Flash transactions remain blocked; SD has no equivalent persistent format journal. See :doc:`../storage/index` for policy risks, ownership, backup and confirmed recovery. Status/inspection remain available when files cannot be opened. After explicit recovery, a user-selected soft reset publishes the Python mount. Frozen default-file setup only writes to a usable filesystem and reports errors without crashing.
 
 Existing startup files are not overwritten during a normal firmware update or soft reset. Board packages can provide board-specific default ``main.py`` and ``README.txt`` content through ``boards/<BOARD>/board_inisetup.py``.
 

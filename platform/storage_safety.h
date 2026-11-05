@@ -50,14 +50,4 @@ static inline bool esp_vision_storage_partition_erased(size_t partition_size,
     return true;
 }
 
-/* Keep formatting eligibility small and host-testable; callers must provide
- * the actual FatFs result and confirm the specific factory FFAT is blank. */
-static inline bool esp_vision_storage_should_format_factory_ffat(int mount_result,
-                                                                 int no_filesystem_result,
-                                                                 bool factory_ffat,
-                                                                 bool partition_erased)
-{
-    return mount_result == no_filesystem_result && factory_ffat && partition_erased;
-}
-
 #endif /* ESP_VISION_STORAGE_SAFETY_H */

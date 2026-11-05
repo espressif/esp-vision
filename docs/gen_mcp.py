@@ -381,7 +381,7 @@ def extract_micropython() -> List[dict]:
 EXAMPLE_DIR = os.path.join(REPO_ROOT, 'example')
 PROSE_SECTIONS = ('introduction', 'get-started', 'concepts', 'how-to',
                   'architecture', 'communication', 'device-core', 'target-support',
-                  'project-relationship')
+                  'project-relationship', 'storage')
 _IMPORT_RE = re.compile(r'^\s*(?:import|from)\s+([A-Za-z_][\w]*)', re.M)
 
 
@@ -502,7 +502,7 @@ def extract_docs() -> List[dict]:
         if not os.path.isdir(d):
             continue
         for fn in sorted(os.listdir(d)):
-            if not fn.endswith('.rst') or fn == 'index.rst':
+            if not fn.endswith('.rst') or (fn == 'index.rst' and section != 'storage'):
                 continue
             title, text, code = _rst_prose(os.path.join(d, fn))
             doc_id = '{}/{}'.format(section, fn[:-4])

@@ -45,6 +45,7 @@ Recommended reading order
 
    architecture
    interfaces
+   usb
    sessions
    wire-protocol
    python-files

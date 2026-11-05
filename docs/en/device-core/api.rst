@@ -124,7 +124,7 @@ device.inspect(request)
    * - ``network``
      - network.status reply including enabled/configured/state/IPv4 and operation state; no saved password.
    * - ``storage``
-     - flash and sd storage.writer.status replies; requires storage.writer.lease.
+     - flash and sd storage.writer.status replies; requires storage.writer.lease. New firmware includes fs_state/fs_error/fatfs_result/format_supported; see :doc:`../storage/index`. Writer ownership alone does not establish filesystem readiness or authorize formatting.
 
 ``fields`` must be a nonempty array of the five names above. Only requested keys are returned; duplicate fields are queried once. Identity/capabilities are copied negotiated data, not a new sensor sample. Network and storage perform RPCs; the supplied timeout applies to each underlying query, not a single aggregate inspection deadline.
 

@@ -30,6 +30,7 @@ class StorageWriterControlContractTests(unittest.TestCase):
 #include <string.h>
 
 #include "storage_writer.h"
+#include "storage_status.h"
 
 static char s_response_session_id[33] = "0123456789abcdef0123456789abcdef";
 static char response[1024];
@@ -77,6 +78,15 @@ bool esp_vision_storage_flash_is_present(void) { return flash_present; }
 bool esp_vision_storage_flash_is_mounted(void) { return flash_mounted; }
 bool esp_vision_sdcard_is_present(void) { return sd_present; }
 bool esp_vision_storage_sdcard_is_mounted(void) { return sd_mounted; }
+void esp_vision_storage_get_status(esp_vision_storage_volume_t volume, esp_vision_storage_status_t *out)
+{
+    memset(out, 0, sizeof(*out));
+    bool mounted = volume == ESP_VISION_STORAGE_VOLUME_FLASH ? flash_mounted : sd_mounted;
+    out->state = mounted ? ESP_VISION_STORAGE_READY : ESP_VISION_STORAGE_UNRECOGNIZED;
+    out->error = mounted ? ESP_OK : ESP_ERR_INVALID_STATE;
+    out->fatfs_result = mounted ? 0 : 13;
+    out->format_supported = volume == ESP_VISION_STORAGE_VOLUME_FLASH;
+}
 
 static esp_err_t ev_control_send_error(const char *method, uint32_t seq, const char *code, const char *message)
 {
@@ -178,6 +188,10 @@ int main(void)
     assert(ev_control_send_storage_writer_control(9, "{\"volume\":\"flash\"}", "storage.writer.status") == ESP_OK);
     assert(strstr(response, "\"present\":true"));
     assert(strstr(response, "\"mounted\":false"));
+    assert(strstr(response, "\"fs_state\":\"unrecognized\""));
+    assert(strstr(response, "\"fatfs_result\":13"));
+    assert(strstr(response, "\"format_supported\":true"));
+    assert(strstr(response, "\"writable\":false"));
     flash_present = false;
     assert(ev_control_send_storage_writer_control(10, "{\"volume\":\"flash\"}", "storage.writer.status") == ESP_OK);
     assert(strstr(response, "\"present\":false"));

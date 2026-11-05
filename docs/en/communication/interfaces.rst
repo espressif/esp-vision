@@ -63,6 +63,8 @@ The host/Core/protocol relationship follows :doc:`../architecture/index`. This f
 Board backend enablement
 ------------------------
 
+See :doc:`usb` for USB class composition, configuration, volume labels and fixed MSC LUNs.
+
 Backends depend on ``boards/<BOARD>/boardconfig.h``, ``boards/<BOARD>/port/mpconfigboard.h`` and SoC capabilities. Disabling a MicroPython interface macro disables that interface, rather than only excluding it from EV-MUX; there is no mux-specific serial allowlist. The table describes current source defaults; runtime ``capabilities.sinks`` is authoritative.
 
 .. list-table:: Build conditions and current board examples
