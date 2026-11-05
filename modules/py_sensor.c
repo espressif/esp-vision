@@ -79,9 +79,13 @@ static void sensor_drop_frame(uint8_t *pixels, size_t frame_size)
 static mp_obj_t sensor_reset(void)
 {
     sensor_ensure_vm_task();
+    esp_err_t ret = esp_vision_camera_shutdown();
+    if (ret != ESP_OK) {
+        sensor_raise_esp_err(ret);
+    }
     esp_vision_camera_release_snapshot_buffer();
     esp_vision_camera_init0();
-    esp_err_t ret = esp_vision_camera_init();
+    ret = esp_vision_camera_init();
     if (ret != ESP_OK) {
         sensor_raise_esp_err(ret);
     }
@@ -98,8 +102,11 @@ static mp_obj_t sensor_shutdown(size_t n_args, const mp_obj_t *args)
     }
 
     if (enable) {
+        esp_err_t ret = esp_vision_camera_shutdown();
+        if (ret != ESP_OK) {
+            sensor_raise_esp_err(ret);
+        }
         esp_vision_camera_release_snapshot_buffer();
-        esp_vision_camera_deinit();
     } else {
         sensor_ensure_camera_ready();
     }

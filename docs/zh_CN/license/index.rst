@@ -44,6 +44,10 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - ``overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`` （v1.28.0 基线）
      - CDC/MSC/UVC 描述符及速率适配，保留上游许可证头
      - MIT
+   * - OV2710 定时器生命周期适配
+     - ``tools/prepare_ov2710.py``、``platform/ov2710_lifecycle.inc`` 与原样测试源 ``tools/tests/fixtures/ov2710/upstream.c``；esp_cam_sensor 2.4.0，提交 ``8fc931636ffa937c89cab53b53f4ce380190c1a4``
+     - 构建时校验并复制 ``sensors/ov2710/ov2710.c``（SHA-256 ``4a9af395151527b156b1d685c39b298502490f33a8391a641a51ac72b3bc8876``）；确认回调停止后才释放 SCCB，保留原始文件头，不修改托管组件
+     - Apache-2.0
    * - TinyUSB UVC 传输适配
      - ``overlay/micropython/shared/tinyusb/esp_vision_video_transfer.inc``、``tools/tests/tinyusb_video_stubs/upstream_transfer.c``；espressif/tinyusb 0.19.0~3，提交 ``ab4a1817907ed865b10a712b5e03e5e0a9902df5``
      - 构建时生成经检查的 ``src/class/video/video_device.c`` 副本；终止失败或短包 ISO 帧，单独报告失败完成，并保留原版权和许可证头

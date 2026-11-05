@@ -6,6 +6,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Add real-frame ISP regressions for single CCM writes, explicit white-balance preservation and IPA ownership, plus LSC switching with CCM write bursts during camera/canvas/LCD preview, DMA/internal/PSRAM heap measurements and cleanup/restart recovery.
 - Added read-only TCP `preview.frame` subscriptions for two simultaneous observers alongside an independent control session, bounded shared JPEG fan-out, a Python/ffplay viewer and targeted native/hardware acceptance checks; TCP frame segments use scatter/gather writes without extra application copies.
 - Added native composite CDC/MSC/UVC output on USB-device boards, a default ESP-VISION logo independent of sensor capture, Python fixed/live frame APIs, and shared JPEG fan-out from `Image.flush()` to UVC and EV-MUX.
 - Add a bounded camera/real-AI/LCD/WiFi MJPEG stress example with one shared full-panel RGB565 canvas, per-frame hashes, configurable ESPDet/TFLite models, health/heap/latency counters, slow-client deadlines and cooperative cleanup.
@@ -24,6 +25,9 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Keep the Function EV hardware CI gate on its eighteen explicitly qualified checks, including ESP-DL inference; retain the two scene-dependent ISP checks for separate acceptance without weakening strict pass requirements or public all-check selection, and verify that CI actually selects every required issue regression.
+
+- Document the OV2710 scoped build adaptation and verbatim driver fixture provenance in both README translations.
 - Make agent workspace paths configurable.
 
 - Record that development-board flashing does not require automatic firmware backup, restoration or whole-flash preservation reads; retain ordinary programming verification and reserve backup/restore for explicit requests.
@@ -64,6 +68,9 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Correct the ISP validation heading underlines in both languages so strict Sphinx HTML and PDF builds pass.
+
+- Quiesce and acknowledge OV2710 statistics timer deletion before P4 EYE camera teardown releases SCCB, retain callback context on bounded shutdown failures, and report shutdown errors without retrying uncertain native ownership.
 - Diagnose failed CLI serial setup with bounded checks of the selected Python/pyserial environment after cleanup, preserve busy/access-denied and runtime I/O distinctions, and document Windows `--python py` setup without automatic installation or retries. Clarify camera versus LCD capture in real help and bilingual CLI documentation, including firmware-dependent camera drawing semantics.
 - Make ESP-DL HIL uploads acknowledge the nonce and committed offset, safely replay only the latest identical block after at most two timeout recoveries, and require semantic mount/cleanup acknowledgements instead of treating printed Python exceptions as success; retain existing deadlines and strict model/inference assertions.
 

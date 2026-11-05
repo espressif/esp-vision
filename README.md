@@ -138,6 +138,8 @@ The EV-MUX TCP interface provides wireless debugging on trusted local networks a
 - [Customize firmware features](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/how-to/customize-firmware.html)
 - [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html)
 
+The OV2710 timer lifecycle adaptation (`platform/ov2710_lifecycle.inc`, `tools/prepare_ov2710.py`) prepares a checked copy of the Apache-2.0 `ov2710.c` from esp_cam_sensor 2.4.0 (commit `8fc931636ffa937c89cab53b53f4ce380190c1a4`, source SHA-256 `4a9af395151527b156b1d685c39b298502490f33a8391a641a51ac72b3bc8876`). Its verbatim test fixture (`tools/tests/fixtures/ov2710/upstream.c`) and generated copy retain the original header; the managed component remains unchanged. See the [license inventory](docs/en/license/index.rst).
+
 The native CDC/MSC/UVC descriptor overlay (`overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`) derives from MicroPython v1.28.0 and retains its MIT license and notices.
 
 The TinyUSB UVC transfer adaptation (`overlay/micropython/shared/tinyusb/esp_vision_video_transfer.inc`) and its verbatim test fixture (`tools/tests/tinyusb_video_stubs/upstream_transfer.c`) derive from the MIT-licensed `video_device.c` in espressif/tinyusb 0.19.0~3 (commit `ab4a1817907ed865b10a712b5e03e5e0a9902df5`). They retain its original copyright and license header. The build prepares a checked source copy without modifying the managed component; the [license inventory](docs/en/license/index.rst) records this adaptation.

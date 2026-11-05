@@ -43,6 +43,7 @@ typedef struct {
 void esp_vision_camera_init0(void);
 esp_err_t esp_vision_camera_init(void);
 void esp_vision_camera_deinit(void);
+esp_err_t esp_vision_camera_shutdown(void);
 bool esp_vision_camera_is_ready(void);
 
 esp_err_t esp_vision_camera_set_pixformat(uint32_t pixfmt);

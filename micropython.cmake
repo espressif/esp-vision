@@ -194,6 +194,7 @@ target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_MODULE_SOURCES}
     ${ESP_VISION_CAMERA_SOURCE}
     ${ESP_VISION_ROOT}/platform/camera_framebuffer.c
+    ${ESP_VISION_ROOT}/platform/camera_lifecycle.c
     ${ESP_VISION_BOARD_MANAGER_SOURCES}
     ${ESP_VISION_ROOT}/platform/debug.c
     ${ESP_VISION_ROOT}/platform/display.c
@@ -282,13 +283,15 @@ endif()
 # only works where the camera feeds the ESP32-P4 ISP over MIPI-CSI. The ISP
 # pipeline controller lives in esp_video's private_include, so this depends on
 # upstream internals and needs revisiting whenever esp_video is upgraded.
-if(ESP_VISION_ENABLE_CAMERA_IPA_CONTROL)
-    target_compile_definitions(usermod_esp_vision_platform INTERFACE ESP_VISION_ENABLE_CAMERA_IPA_CONTROL=1)
-    list(APPEND MICROPY_CPP_DEF_EXTRA ESP_VISION_ENABLE_CAMERA_IPA_CONTROL=1)
+if(ESP_VISION_BOARD STREQUAL "ESP32_P4X_EYE" OR ESP_VISION_ENABLE_CAMERA_IPA_CONTROL)
     idf_component_get_property(ESP_VISION_VIDEO_DIR espressif__esp_video COMPONENT_DIR)
     target_include_directories(usermod_esp_vision_platform INTERFACE
         ${ESP_VISION_VIDEO_DIR}/private_include
     )
+endif()
+if(ESP_VISION_ENABLE_CAMERA_IPA_CONTROL)
+    target_compile_definitions(usermod_esp_vision_platform INTERFACE ESP_VISION_ENABLE_CAMERA_IPA_CONTROL=1)
+    list(APPEND MICROPY_CPP_DEF_EXTRA ESP_VISION_ENABLE_CAMERA_IPA_CONTROL=1)
     target_sources(usermod_esp_vision_platform INTERFACE
         ${ESP_VISION_ROOT}/modules/py_sensor_isp.c
         ${ESP_VISION_ROOT}/platform/camera_isp.c

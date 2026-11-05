@@ -10,6 +10,7 @@ import ast
 import fnmatch
 import subprocess
 import re
+import shlex
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -225,14 +226,20 @@ class FirmwarePublicationGateTests(unittest.TestCase):
     def test_issue_regressions_are_selected_and_required_by_target_job(self):
         hil = yaml.safe_load((ROOT / ".gitlab/ci/target_test.yml").read_text())
         target_command = "\n".join(hil[".target_test_base"]["script"])
-        self.assertIn("--checks all", target_command)
-        self.assertIn("--require-all", target_command)
+        arguments = shlex.split(target_command.replace("\\\n", " "))
+        self.assertEqual(arguments.count("--checks"), 1)
+        checks = arguments[arguments.index("--checks") + 1].split(",")
+        self.assertNotIn("all", checks)
+        self.assertEqual(len(checks), len(set(checks)))
+        self.assertIn("--require-all", arguments)
+        self.assertTrue({"isp_ccm_frames", "isp_lsc_display"}.isdisjoint(checks))
 
         check_registry = (ROOT / "host/device-core/tests/device-checks.mjs").read_text()
         for check in ("camera_display_lifecycle", "image_copy_to_fb", "image_transform_argument",
                       "sensor_snapshot_buffer", "memory_policy", "espdl_inference"):
             with self.subTest(check=check):
                 self.assertIn(f"'{check}'", check_registry)
+                self.assertIn(check, checks)
 
     def test_upload_waits_for_package_and_required_qualification(self):
         jobs = yaml.safe_load((ROOT / ".gitlab/ci/deploy.yml").read_text())
