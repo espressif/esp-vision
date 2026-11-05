@@ -138,6 +138,8 @@ EV-MUX TCP 接口用于可信本地网络中的无线调试，不提供对端身
 - [客制化固件功能](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/how-to/customize-firmware.html)
 - [方案架构与许可证](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/architecture/index.html)
 
+OV2710 定时器生命周期适配（`platform/ov2710_lifecycle.inc`、`tools/prepare_ov2710.py`）会校验并复制 esp_cam_sensor 2.4.0（提交 `8fc931636ffa937c89cab53b53f4ce380190c1a4`）中采用 Apache-2.0 许可证的 `ov2710.c`，源文件 SHA-256 为 `4a9af395151527b156b1d685c39b298502490f33a8391a641a51ac72b3bc8876`。原样测试夹具（`tools/tests/fixtures/ov2710/upstream.c`）和生成副本均保留原文件头，不修改 managed component，详见[许可证清单](docs/zh_CN/license/index.rst)。
+
 原生 CDC/MSC/UVC 描述符 overlay（`overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`）基于 MicroPython v1.28.0，保留其 MIT 许可证和版权声明。
 
 TinyUSB UVC 传输适配（`overlay/micropython/shared/tinyusb/esp_vision_video_transfer.inc`）及原样测试夹具（`tools/tests/tinyusb_video_stubs/upstream_transfer.c`）源于 espressif/tinyusb 0.19.0~3（提交 `ab4a1817907ed865b10a712b5e03e5e0a9902df5`）中采用 MIT 许可证的 `video_device.c`，保留原版权和许可证头。构建时生成经检查的源文件副本，不修改 managed component；[许可证清单](docs/zh_CN/license/index.rst)记录了这项适配。

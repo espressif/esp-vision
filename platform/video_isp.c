@@ -623,11 +623,16 @@ esp_err_t esp_vision_video_isp_set_controller(bool enable, int *fd, bool *stream
         }
     }
     ops->release_buffers();
-    if (close(*fd) != 0) {
+    int closing_fd = *fd;
+    *fd = -1;
+    if (close(closing_fd) != 0) {
         ret = ESP_FAIL;
+        if (ops->close_failed != NULL) {
+            ops->close_failed();
+            return ret;
+        }
         goto fail;
     }
-    *fd = -1;
 
     if (enable) {
         esp_video_isp_config_t config = {

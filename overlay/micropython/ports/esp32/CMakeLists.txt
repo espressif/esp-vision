@@ -73,6 +73,46 @@ idf_build_set_property(DEPENDENCIES_LOCK ${LOCKFILE_PATH})
 # Define the project and the public name embedded in the ESP-IDF app descriptor.
 project(esp-vision)
 
+# The P4 EYE deletes OV2710 statistics callbacks before Board Manager releases
+# SCCB. Compile a source-identity-checked copy, never change the registry cache.
+if(MICROPY_BOARD STREQUAL "ESP32_P4X_EYE" AND CONFIG_CAMERA_OV2710_STATS_UPDATE_EN)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    idf_component_get_property(esp_vision_sensor_lib espressif__esp_cam_sensor COMPONENT_LIB)
+    idf_component_get_property(esp_vision_sensor_dir espressif__esp_cam_sensor COMPONENT_DIR)
+    get_filename_component(esp_vision_sensor_root "${USER_C_MODULES}" DIRECTORY)
+    set(esp_vision_sensor_original "${esp_vision_sensor_dir}/sensors/ov2710/ov2710.c")
+    set(esp_vision_sensor_adapter "${esp_vision_sensor_root}/tools/prepare_ov2710.py")
+    set(esp_vision_sensor_include "${esp_vision_sensor_root}/platform")
+    set(esp_vision_sensor_copy "${CMAKE_BINARY_DIR}/esp_vision_ov2710.c")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${esp_vision_sensor_original}" "${esp_vision_sensor_adapter}"
+        "${esp_vision_sensor_include}/ov2710_lifecycle.inc"
+        "${esp_vision_sensor_include}/ov2710_lifecycle.h")
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "${esp_vision_sensor_adapter}"
+        "${esp_vision_sensor_original}" "${esp_vision_sensor_copy}"
+        RESULT_VARIABLE esp_vision_sensor_result ERROR_VARIABLE esp_vision_sensor_error)
+    if(NOT esp_vision_sensor_result EQUAL 0)
+        message(FATAL_ERROR "OV2710 lifecycle adaptation failed: ${esp_vision_sensor_error}")
+    endif()
+    get_target_property(esp_vision_sensor_sources ${esp_vision_sensor_lib} SOURCES)
+    set(esp_vision_sensor_scoped_sources)
+    set(esp_vision_sensor_replaced FALSE)
+    foreach(esp_vision_sensor_file IN LISTS esp_vision_sensor_sources)
+        if(esp_vision_sensor_file STREQUAL esp_vision_sensor_original)
+            list(APPEND esp_vision_sensor_scoped_sources "${esp_vision_sensor_copy}")
+            set(esp_vision_sensor_replaced TRUE)
+        else()
+            list(APPEND esp_vision_sensor_scoped_sources "${esp_vision_sensor_file}")
+        endif()
+    endforeach()
+    if(NOT esp_vision_sensor_replaced)
+        message(FATAL_ERROR "OV2710 source was not present in its component target")
+    endif()
+    set_property(TARGET ${esp_vision_sensor_lib} PROPERTY SOURCES "${esp_vision_sensor_scoped_sources}")
+    target_include_directories(${esp_vision_sensor_lib} PRIVATE
+        "${esp_vision_sensor_dir}/sensors/ov2710" "${esp_vision_sensor_include}")
+endif()
+
 # Keep the managed MIT TinyUSB source pristine. Compile a checked scoped copy
 # whose video transfer callback aborts failed/short ISO frames rather than
 # silently advancing to the next JPEG payload.

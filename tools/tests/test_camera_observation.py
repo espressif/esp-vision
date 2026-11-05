@@ -341,6 +341,7 @@ typedef struct {
     void (*update_active_window)(void);
     int (*init_buffers)(void),(*start_stream)(void);
     void (*cleanup)(void);
+    void (*close_failed)(void);
 } esp_vision_camera_restart_ops_t;
 static struct {int fd;bool streaming,initialized;const char *isp_device_path,*device_path;void *ipa_config;}
     s_camera={.fd=3,.streaming=true,.initialized=true,.isp_device_path="isp",.device_path="camera"};
@@ -355,6 +356,8 @@ static void esp_vision_camera_update_active_window(void) {}
 static int esp_vision_camera_init_buffers(void) {return 0;}
 static int esp_vision_camera_start_stream(void) {return 0;}
 static void esp_vision_camera_cleanup(void) {ready=false;}
+void esp_vision_camera_deinit(void) {esp_vision_camera_cleanup();}
+void esp_vision_camera_close_failed(void) {ready=false;}
 static int esp_vision_video_isp_set_controller(bool enable,int *fd,bool *streaming,bool *initialized,
                                                const char *isp,const char *camera,void *config,
                                                const esp_vision_camera_restart_ops_t *ops) {

@@ -24,6 +24,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Document the OV2710 scoped build adaptation and verbatim driver fixture provenance in both README translations.
 - Make agent workspace paths configurable.
 
 - Record that development-board flashing does not require automatic firmware backup, restoration or whole-flash preservation reads; retain ordinary programming verification and reserve backup/restore for explicit requests.
@@ -64,6 +65,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Quiesce and acknowledge OV2710 statistics timer deletion before P4 EYE camera teardown releases SCCB, retain callback context on bounded shutdown failures, and report shutdown errors without retrying uncertain native ownership.
 - Diagnose failed CLI serial setup with bounded checks of the selected Python/pyserial environment after cleanup, preserve busy/access-denied and runtime I/O distinctions, and document Windows `--python py` setup without automatic installation or retries. Clarify camera versus LCD capture in real help and bilingual CLI documentation, including firmware-dependent camera drawing semantics.
 - Make ESP-DL HIL uploads acknowledge the nonce and committed offset, safely replay only the latest identical block after at most two timeout recoveries, and require semantic mount/cleanup acknowledgements instead of treating printed Python exceptions as success; retain existing deadlines and strict model/inference assertions.
 

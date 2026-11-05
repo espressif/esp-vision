@@ -113,6 +113,9 @@ typedef struct {
     esp_err_t (*init_buffers)(void);
     esp_err_t (*start_stream)(void);
     void (*cleanup)(void);
+    // Optional board latch when close has invalidated the fd but may retain
+    // the native video reference. Such state must not enter normal cleanup.
+    void (*close_failed)(void);
 } esp_vision_camera_restart_ops_t;
 
 // True while the ESP Video ISP pipeline controller is running.

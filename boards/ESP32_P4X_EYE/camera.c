@@ -29,6 +29,11 @@
 
 #include "boardconfig.h"
 #include "ev_memory.h"
+#if CONFIG_CAMERA_OV2710_STATS_UPDATE_EN
+#include "esp_video_device_common.h"
+#include "esp_video_device_internal.h"
+#include "ov2710_lifecycle.h"
+#endif
 
 #ifndef CMSIS_MCU_H
 #define CMSIS_MCU_H "cmsis_compiler.h"
@@ -51,6 +56,7 @@ typedef struct {
     bool initialized;
     bool video_initialized;
     bool streaming;
+    bool teardown_failed;
     bool hmirror;
     bool vflip;
     int fd;
@@ -99,7 +105,9 @@ void esp_vision_camera_init0(void)
         return;
     }
     esp_vision_camera_invalidate_observed_frame();
-    esp_vision_camera_deinit();
+    if (esp_vision_camera_shutdown() != ESP_OK) {
+        return;
+    }
     memset(&s_camera, 0, sizeof(s_camera));
     esp_vision_camera_set_defaults();
 }
@@ -193,7 +201,9 @@ static esp_err_t esp_vision_camera_video_init(void)
     ret = esp_board_manager_get_device_handle(ESP_BOARD_DEVICE_NAME_CAMERA,
                                               (void **)&camera);
     if ((ret != ESP_OK) || (camera == NULL) || (camera->dev_path == NULL)) {
-        (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
+        if (esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA) != ESP_OK) {
+            s_camera.teardown_failed = true;
+        }
         return (ret == ESP_OK) ? ESP_ERR_INVALID_STATE : ret;
     }
 
@@ -210,13 +220,18 @@ static esp_err_t esp_vision_camera_video_init(void)
     return ESP_OK;
 }
 
-static void esp_vision_camera_video_deinit(void)
+static esp_err_t esp_vision_camera_video_deinit(void)
 {
     if (s_camera.video_initialized) {
+        s_camera.teardown_failed = true;
         esp_err_t ret = esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "failed to deinitialize camera: %s", esp_err_to_name(ret));
+            // Board Manager may have partially freed its handle even on error.
+            // Never dereference that sensor again; a hardware reset is needed.
+            return ret;
         }
+        s_camera.teardown_failed = false;
         // A failed deinit may leave the ISP pointing at the LSC tables, so only
         // free them once the device is known to be gone.
 #if ESP_VISION_ENABLE_CAMERA_IPA_CONTROL
@@ -231,6 +246,7 @@ static void esp_vision_camera_video_deinit(void)
         s_camera.ipa_config = NULL;
 #endif
     }
+    return ESP_OK;
 }
 
 static esp_err_t esp_vision_camera_open_device(void)
@@ -438,11 +454,32 @@ static esp_err_t esp_vision_camera_queue_buffer(struct v4l2_buffer *buf)
     return (ioctl(s_camera.fd, VIDIOC_QBUF, buf) == 0) ? ESP_OK : ESP_FAIL;
 }
 
-static void esp_vision_camera_cleanup(void)
+static esp_err_t esp_vision_camera_cleanup(void)
 {
+    // Even a failed stream start can enqueue the OV2710 statistics timer.
+    // Quiesce it before Board Manager can destroy SCCB, independently of the
+    // streaming flag. A failed preparation retains every native resource.
+    s_camera.initialized = false;
+    if (s_camera.teardown_failed) {
+        ESP_LOGE(TAG, "camera teardown state is uncertain; hardware reset required");
+        return ESP_ERR_INVALID_STATE;
+    }
+#if CONFIG_CAMERA_OV2710_STATS_UPDATE_EN
+    if (s_camera.video_initialized) {
+        esp_video_cam_t cam = {0};
+        ESP_RETURN_ON_ERROR(esp_video_device_common_get_video_cam(CSI_NAME, &cam), TAG,
+                            "failed to get camera before shutdown");
+        if ((cam.sensor != NULL) && (strcmp(cam.sensor->name, "OV2710") == 0)) {
+            ESP_RETURN_ON_ERROR(esp_vision_ov2710_prepare_delete(cam.sensor), TAG,
+                                "failed to quiesce OV2710 statistics");
+        }
+    }
+#endif
     if (s_camera.streaming) {
         enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        ioctl(s_camera.fd, VIDIOC_STREAMOFF, &type);
+        if (ioctl(s_camera.fd, VIDIOC_STREAMOFF, &type) != 0) {
+            return ESP_FAIL;
+        }
         s_camera.streaming = false;
     }
 
@@ -450,12 +487,17 @@ static void esp_vision_camera_cleanup(void)
     esp_vision_camera_release_ppa();
 
     if (s_camera.fd >= 0) {
-        close(s_camera.fd);
+        if (close(s_camera.fd) != 0) {
+            // A failed close has uncertain ownership; never reuse this fd or
+            // enter Board Manager teardown with a possible live reference.
+            s_camera.teardown_failed = true;
+            s_camera.fd = -1;
+            return ESP_FAIL;
+        }
         s_camera.fd = -1;
     }
 
-    esp_vision_camera_video_deinit();
-    s_camera.initialized = false;
+    return esp_vision_camera_video_deinit();
 }
 
 esp_err_t esp_vision_camera_init(void)
@@ -465,8 +507,15 @@ esp_err_t esp_vision_camera_init(void)
     }
     esp_err_t ret;
 
+    if (s_camera.teardown_failed) {
+        ESP_LOGE(TAG, "camera teardown state is uncertain; hardware reset required");
+        return ESP_ERR_INVALID_STATE;
+    }
     if (s_camera.initialized) {
         return ESP_OK;
+    }
+    if (s_camera.video_initialized || (s_camera.fd >= 0) || s_camera.streaming) {
+        ESP_RETURN_ON_ERROR(esp_vision_camera_cleanup(), TAG, "failed to retry camera shutdown");
     }
 
     if ((s_camera.width == 0) || (s_camera.height == 0) || (s_camera.output_pixfmt == PIXFORMAT_INVALID)) {
@@ -521,19 +570,33 @@ esp_err_t esp_vision_camera_init(void)
                             (uint32_t)s_camera.output_pixfmt);
     return ESP_OK;
 
-fail:
-    esp_vision_camera_cleanup();
+fail: {
+        esp_err_t cleanup_ret = esp_vision_camera_cleanup();
+        if (cleanup_ret != ESP_OK) {
+            ESP_LOGE(TAG, "camera start failed (%s), cleanup pending (%s)",
+                     esp_err_to_name(ret), esp_err_to_name(cleanup_ret));
+            return cleanup_ret;
+        }
+    }
     esp_vision_debug_printf("[esp-vision] camera start failed: %s\r\n", esp_err_to_name(ret));
     return ret;
 }
 
 void esp_vision_camera_deinit(void)
 {
+    esp_err_t ret = esp_vision_camera_shutdown();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "camera shutdown pending: %s", esp_err_to_name(ret));
+    }
+}
+
+esp_err_t esp_vision_camera_shutdown(void)
+{
     if (!esp_vision_camera_is_vm_task()) {
-        return;
+        return ESP_ERR_INVALID_STATE;
     }
     esp_vision_camera_invalidate_observed_frame();
-    esp_vision_camera_cleanup();
+    return esp_vision_camera_cleanup();
 }
 
 bool esp_vision_camera_is_ready(void)
@@ -651,6 +714,13 @@ bool esp_vision_camera_get_vflip(void)
 }
 
 #if ESP_VISION_ENABLE_CAMERA_IPA_CONTROL && CONFIG_ESP_VIDEO_ENABLE_ISP_PIPELINE_CONTROLLER
+static void esp_vision_camera_close_failed(void)
+{
+    s_camera.initialized = false;
+    s_camera.teardown_failed = true;
+    ESP_LOGE(TAG, "camera close failed; hardware reset required");
+}
+
 esp_err_t esp_vision_camera_get_ipa(bool *enabled)
 {
     return esp_vision_video_isp_get_controller(esp_vision_camera_is_ready(), s_camera.ipa_config, enabled);
@@ -677,7 +747,8 @@ esp_err_t esp_vision_camera_set_ipa(bool enable)
         .update_active_window = esp_vision_camera_update_active_window,
         .init_buffers = esp_vision_camera_init_buffers,
         .start_stream = esp_vision_camera_start_stream,
-        .cleanup = esp_vision_camera_cleanup,
+        .cleanup = esp_vision_camera_deinit,
+        .close_failed = esp_vision_camera_close_failed,
     };
     return esp_vision_video_isp_set_controller(enable, &s_camera.fd, &s_camera.streaming, &s_camera.initialized,
                                                s_camera.isp_device_path, s_camera.device_path, s_camera.ipa_config, &ops);
