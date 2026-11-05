@@ -7,6 +7,8 @@ import { EV_REPL_INPUT_MAX_BYTES, evReplExecInputBytes } from '../src/evrepl.js'
 import { tmpdir } from 'node:os'
 import { existsSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { parseArgs } from './hardware-check.mjs'
 import { DEFAULT_ESPDL_MODEL, DEFAULT_ESPDL_SHA256, DEVICE_CHECKS, parseCheckResult, runDeviceChecks, saveJpeg } from './device-checks.mjs'
 import { jpegFixture } from './jpeg-fixtures.mjs'
@@ -170,7 +172,7 @@ test('identity and RAM checks do not require optional storage inspection support
 })
 
 test('P4 issue regressions are included in the strict target-check path', async () => {
-  const required = ['camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy']
+  const required = ['camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy', 'isp_ccm_frames', 'isp_lsc_display']
   assert.ok(required.every(name => DEVICE_CHECKS.includes(name)))
   const device = devicePeer(), reports = []
   await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', required.join(','), '--require-all']),
@@ -392,4 +394,35 @@ test('repository checkouts provide the default ESP-DL model', { skip: !existsSyn
   const bytes = await readFile(DEFAULT_ESPDL_MODEL)
   assert.equal(bytes.length, 495840)
   assert.equal(createHash('sha256').update(bytes).digest('hex'), DEFAULT_ESPDL_SHA256)
+})
+
+test('ISP cleanup releases camera and collects memory even when display deinit fails', t => {
+  const python = [process.env.PYTHON, 'python3', 'python'].filter(Boolean).find(command => spawnSync(command, ['-c', 'pass'], { windowsHide: true }).status === 0)
+  if (!python) return t.skip('Python is required to execute the device-side cleanup fixture')
+  const source = `
+import runpy, sys, types
+fixture = runpy.run_path(sys.argv[1])
+for display_fails, camera_fails in ((False, False), (True, False), (False, True), (True, True)):
+    events = []
+    class Display:
+        def deinit(self):
+            events.append('display')
+            if display_fails:
+                raise RuntimeError('display cleanup failed')
+    def shutdown():
+        events.append('camera')
+        if camera_fails:
+            raise RuntimeError('camera cleanup failed')
+    sys.modules['sensor'] = types.SimpleNamespace(shutdown=shutdown)
+    sys.modules['gc'] = types.SimpleNamespace(collect=lambda: events.append('collect'))
+    try:
+        fixture['isp_release_camera_lcd'](Display())
+    except RuntimeError:
+        assert display_fails or camera_fails
+    else:
+        assert not display_fails and not camera_fails
+    assert events == ['display', 'camera', 'collect'], events
+`
+  const result = spawnSync(python, ['-c', source, fileURLToPath(new URL('./fixtures/device-checks.py', import.meta.url))], { encoding: 'utf8', windowsHide: true })
+  assert.equal(result.status, 0, result.stderr)
 })

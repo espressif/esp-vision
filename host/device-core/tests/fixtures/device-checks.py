@@ -647,6 +647,210 @@ def espdl_inference(opts):
             sensor.shutdown()
 
 
+def isp_frame_sample(frame):
+    """Measure rendered RGB565 pixels, independently of ISP configuration."""
+    saturation = 0.0
+    bright = 0
+    rgb = [0, 0, 0]
+    for y in range(8, frame.height(), 16):
+        for x in range(8, frame.width(), 16):
+            pixel = frame.get_pixel(x, y)
+            maximum = max(pixel)
+            if maximum >= 16:
+                saturation += (maximum - min(pixel)) / maximum
+                bright += 1
+            for channel in range(3):
+                rgb[channel] += pixel[channel]
+    if bright < 16:
+        raise RuntimeError('ISP image effect unobservable: illuminate a stationary target (at least 16 bright samples required)')
+    return dict(saturation=saturation / bright, brightSamples=bright, rgb=rgb)
+
+
+def isp_ccm_frames(opts):
+    """One write per stage; consume old frames instead of repeating the write."""
+    import sensor, time
+    stages = []
+    identity = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+    grey = [0.33] * 9
+    red = [1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    def stage(name, matrix, delay=0):
+        sensor.set_isp('ccm', enable=True, matrix=matrix)
+        # Deliberately leave completed buffers queued; elapsed time is no flush.
+        if delay:
+            time.sleep_ms(delay)
+        started = time.ticks_ms()
+        frames = []
+        for index in range(8):
+            sample = isp_frame_sample(sensor.snapshot())
+            sample.update(frame=index + 1, ms=time.ticks_diff(time.ticks_ms(), started))
+            frames.append(sample)
+        result = dict(name=name, writes=1, frames=frames, readback=sensor.get_isp('ccm'))
+        stages.append(result)
+        return frames
+
+    try:
+        sensor.reset()
+        sensor.set_pixformat(sensor.RGB565)
+        sensor.set_framesize(sensor.QVGA)
+        sensor.skip_frames(time=1000)
+        if sensor.get_ipa() is None or sensor.get_isp('ccm') is None:
+            raise RuntimeError('ESP_ERR_NOT_SUPPORTED: manual ISP CCM unavailable')
+        # Automatic controller ownership must reject manual writes explicitly.
+        sensor.set_ipa(True)
+        try:
+            sensor.set_isp('ccm', enable=True, matrix=grey)
+        except OSError as exc:
+            ownership_error = str(exc)
+            assert 'disable IPA before setting ISP parameters' in ownership_error, 'unexpected manual-write ownership error: ' + ownership_error
+        else:
+            raise RuntimeError('manual CCM write accepted while IPA owns tuning')
+        sensor.set_ipa(False)
+        sensor.set_isp('wb', enable=False)
+        sensor.skip_frames(n=3)
+        for name, matrix, delay, expect_grey in (('red', red, 0, False), ('grey_after_sleep', grey, 2000, True), ('red_again', red, 0, False), ('grey_again', grey, 0, True)):
+            frames = stage(name, matrix, delay)
+            # Never require the first captured frame to be from the new tuning.
+            for sample in frames[-3:]:
+                if expect_grey:
+                    assert sample['saturation'] < 0.15, 'single CCM write did not produce grey frames after consumption'
+                else:
+                    assert sample['saturation'] > 0.8, 'single CCM write did not produce red frames after consumption'
+                    assert sample['rgb'][0] > 4 * max(1, sample['rgb'][1], sample['rgb'][2]), 'CCM red output has wrong channels'
+        sensor.set_isp('wb', enable=True, rg=1.5, bg=0.75)
+        before = stage('explicit_wb', identity)
+        wb_before = sensor.get_isp('wb')
+        after = stage('ccm_preserves_explicit_wb', identity)
+        wb_after = sensor.get_isp('wb')
+        assert wb_before == wb_after, 'CCM write changed explicit WB driver configuration'
+        for channel in (0, 2):
+            ratios = [sum(s['rgb'][channel] for s in samples[-3:]) / max(1, sum(s['rgb'][1] for s in samples[-3:])) for samples in (before, after)]
+            assert abs(ratios[0] - ratios[1]) < 0.2, 'CCM write changed rendered explicit WB on stationary target'
+        return dict(sensorId=sensor.get_id(), stages=stages, wbBefore=wb_before, wbAfter=wb_after,
+                    frameBudget=8, ownershipError=ownership_error,
+                    note='Driver readback is not a frame acknowledgement; sensor-internal AWB is not measured')
+    finally:
+        sensor.shutdown()
+
+
+def isp_heap_sample():
+    import gc, esp32
+    gc.collect()
+    result = {}
+    for name, caps in (('dma', 1 << 3), ('psram', 1 << 10), ('internal', (1 << 11) | (1 << 2))):
+        heaps = esp32.idf_heap_info(caps)
+        result[name] = dict(free=sum(item[1] for item in heaps), largest=max([item[2] for item in heaps] or [0]))
+    return result
+
+
+def isp_release_camera_lcd(lcd):
+    import sensor, gc
+    # A display cleanup failure must not strand the camera's DMA/LSC resources.
+    try:
+        if lcd is not None:
+            lcd.deinit()
+    finally:
+        try:
+            sensor.shutdown()
+        finally:
+            gc.collect()
+
+
+def isp_lsc_display(opts):
+    """LSC changes and CCM bursts during the original canvas/LCD preview path."""
+    import sensor, display, image, time, gc
+    lcd = None
+    canvas = None
+    frame = None
+    sensor.shutdown()
+    before = isp_heap_sample()
+    result = {}
+    try:
+        sensor.reset()
+        sensor.set_pixformat(sensor.RGB565)
+        sensor.set_framesize(sensor.QVGA)
+        sensor.skip_frames(n=3)
+        if sensor.get_ipa() is None or sensor.get_isp('lsc') is None:
+            raise RuntimeError('ESP_ERR_NOT_SUPPORTED: manual ISP LSC unavailable')
+        sensor.set_ipa(False)
+        lsc = sensor.get_isp('lsc')
+        count = lsc['lsc_gain_size']
+        assert count > 1, 'invalid LSC table size'
+        ramp = [1.0 - 0.5 * (i / (count - 1)) ** 2 for i in range(count)]
+        matrix = sensor.get_isp('ccm')['matrix']
+        lcd = display.Display()
+        canvas = image.Image(lcd.width(), lcd.height(), image.RGB565)
+        scale = min(lcd.width() / 320, lcd.height() / 240)
+        x = int((lcd.width() - 320 * scale) / 2)
+        y = int((lcd.height() - 240 * scale) / 2)
+
+        def write_frame():
+            frame = sensor.snapshot()
+            canvas.draw_image(frame, x, y, x_scale=scale, y_scale=scale)
+            lcd.write(canvas)
+
+        # Warm both persistent LSC banks and the display's reusable DMA staging.
+        for _ in range(2):
+            sensor.set_isp('lsc', enable=True, gain_r=ramp, gain_gr=ramp, gain_gb=ramp, gain_b=ramp)
+            write_frame()
+            sensor.set_isp('lsc', enable=False)
+            write_frame()
+        active = isp_heap_sample()
+        samples = []
+        frames = max(80, opts['frames'])
+        sample_every = max(40, (frames + 9) // 10)
+        started = time.ticks_ms()
+        switches = 0
+        for index in range(frames):
+            if index % 20 == 0:
+                sensor.set_isp('lsc', enable=(switches % 2 == 0), gain_r=ramp, gain_gr=ramp, gain_gb=ramp, gain_b=ramp)
+                switches += 1
+            sensor.set_isp('ccm', enable=True, matrix=matrix)
+            sensor.set_isp('ccm', enable=True, matrix=matrix)
+            write_frame()
+            if (index + 1) % sample_every == 0 or index + 1 == frames:
+                samples.append(dict(frame=index + 1, heap=isp_heap_sample()))
+        after = isp_heap_sample()
+        for name in active:
+            assert after[name]['free'] >= active[name]['free'] - 4096, 'ISP/LCD pressure lost ' + name + ' heap'
+            assert after[name]['largest'] >= active[name]['largest'] - 4096, 'ISP/LCD pressure fragmented ' + name + ' heap'
+        # Rejected parameters must leave preview usable; do not induce OOM.
+        try:
+            sensor.set_isp('lsc', enable=True, gain_r=[1.0], gain_gr=ramp, gain_gb=ramp, gain_b=ramp)
+        except ValueError:
+            pass
+        else:
+            raise RuntimeError('invalid LSC table accepted')
+        write_frame()
+        result = dict(sensorId=sensor.get_id(), frames=frames, ccmWrites=2 * frames, lscSwitches=switches,
+                      gainCount=count, elapsedMs=time.ticks_diff(time.ticks_ms(), started),
+                      before=before, active=active, samples=samples, after=after,
+                      rejectedWriteRecovered=True, note='Software preview and allocation evidence; physical LCD requires observation')
+    finally:
+        try:
+            isp_release_camera_lcd(lcd)
+        finally:
+            lcd = None
+            canvas = None
+            frame = None
+            gc.collect()
+    result['released'] = isp_heap_sample()
+    for name in before:
+        assert result['released'][name]['free'] >= before[name]['free'] - 4096, 'ISP/LCD cleanup leaked ' + name + ' heap'
+    # Prove that normal cleanup permits another camera/LCD lifetime.
+    try:
+        sensor.reset()
+        sensor.set_pixformat(sensor.RGB565)
+        sensor.set_framesize(sensor.QVGA)
+        lcd = display.Display()
+        lcd.write(sensor.snapshot(), fit=True)
+        result['restartRecovered'] = True
+    finally:
+        isp_release_camera_lcd(lcd)
+    result['afterRestartRelease'] = isp_heap_sample()
+    return result
+
+
 def memory(opts):
     import esp32
     heaps = esp32.idf_heap_info(esp32.HEAP_DATA)
@@ -679,7 +883,8 @@ def run_check(name, opts):
                      image_copy_to_fb=image_copy_to_fb,
                      image_transform_argument=image_transform_argument,
                      sensor_snapshot_buffer=sensor_snapshot_buffer,
-                     memory_policy=memory_policy, espdl_inference=espdl_inference)
+                     memory_policy=memory_policy, espdl_inference=espdl_inference,
+                     isp_ccm_frames=isp_ccm_frames, isp_lsc_display=isp_lsc_display)
     try:
         data = functions[name](opts)
         result = dict(name=name, status='PASS', data=data)

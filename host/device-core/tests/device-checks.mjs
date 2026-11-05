@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { EV_REPL_INPUT_MAX_BYTES, evReplExecInputBytes } from '../src/evrepl.js'
 import { validateJpegImage } from '../src/jpeg_validate.js'
 
-export const DEVICE_CHECKS = Object.freeze(['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation', 'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream', 'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy', 'espdl_inference'])
+export const DEVICE_CHECKS = Object.freeze(['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation', 'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream', 'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy', 'espdl_inference', 'isp_ccm_frames', 'isp_lsc_display'])
 // The npm package ships tests without models; repository checkouts use the bundled face detector.
 export const DEFAULT_ESPDL_SHA256 = '04eec2220adbf642a843c953817fb219a06c094aedb76c181ba2a958c65201dc'
 export const DEFAULT_ESPDL_MODEL = fileURLToPath(new URL('../../../models/espdet/pico/face/espdet_pico_224_224_face.espdl', import.meta.url))

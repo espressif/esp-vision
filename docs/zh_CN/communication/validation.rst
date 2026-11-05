@@ -73,12 +73,25 @@
    npm --prefix host/device-core run test:hardware -- --serial <USB-OTG-port> --role usb --checks identity,camera,display
    npm --prefix host/device-core run test:hardware -- --tcp <device-ipv4>:3232 --checks identity,memory,camera
 
-``--checks`` 接受 ``all`` 或逗号分隔的检查名。摄像头/显示检查包括 ``identity``、``memory``、``camera``、``framesizes``、``pixformats``、``orientation``、``ipa_stats``、``snapshot_rate``、``preview``、``image_ops``、``display``、``display_stream``、``camera_display_lifecycle``、``image_copy_to_fb``、``image_transform_argument``、``sensor_snapshot_buffer``、``memory_policy`` 和 ``espdl_inference``。``all`` 选择完整检查集，不表示所有板卡都具备对应硬件；报告应明确区分通过、失败与缺少能力的跳过，不能将跳过算作已通过。初次实验只测试当前硬件，最终提交才由 CI 运行完整固件矩阵。
+``--checks`` 接受 ``all`` 或逗号分隔的检查名。摄像头/显示检查包括 ``identity``、``memory``、``camera``、``framesizes``、``pixformats``、``orientation``、``ipa_stats``、``snapshot_rate``、``preview``、``image_ops``、``display``、``display_stream``、``camera_display_lifecycle``、``image_copy_to_fb``、``image_transform_argument``、``sensor_snapshot_buffer``、``memory_policy``、``espdl_inference``、``isp_ccm_frames`` 和 ``isp_lsc_display``。``all`` 选择完整检查集，不表示所有板卡都具备对应硬件；报告应明确区分通过、失败与缺少能力的跳过，不能将跳过算作已通过。初次实验只测试当前硬件，最终提交才由 CI 运行完整固件矩阵。
+
+ISP 图像与内存检查
+~~~~~~~~~~~~~~~~~~
+
+调查 ISP 时使用静止且有足够照明的目标，并指定准确板型和实际安装的固件版本：
+
+.. code-block:: console
+
+   npm --prefix host/device-core run test:hardware -- --serial <USB-OTG-port> --role usb --checks isp_ccm_frames,isp_lsc_display --expect-board ESP32_P4X_EYE --expect-firmware-version <installed-version> --frames 400 --require-all
+
+``isp_ccm_frames`` 对受控的红色/灰度 CCM 矩阵各单写一次，记录连续八张实际图像的帧序号、耗时、RGB 总和及平均饱和度。其中一次灰度采集故意在写入后休眠两秒：第一张仍可能来自旧缓冲，但持续消费后应在有限序列内看到新效果。检查还验证 IPA 占用时拒绝手动写入，以及重写单位 CCM 后显式 ISP 白平衡增益的读回值和实际 RGB 比例保持一致。比例对照要求目标静止，不测量或冻结传感器内部自动白平衡。亮度足够的采样点少于十六个时，检查会以效果不可观测失败，不将暗图当作 CCM 生效证据。
+
+``isp_lsc_display`` 使用 QVGA RGB565、驱动报告的 LSC 表长度和原报告从 1.0 到 0.5 的二次增益曲线，将摄像头图像居中绘制到全屏 canvas 后调用 ``lcd.write()``。预热两个 LSC 表存储区和显示暂存区后至少执行八十帧（``--frames`` 可增加帧数），每帧双写 CCM，每二十帧切换 LSC。报告包含 DMA/内部/PSRAM 的空闲量与最大连续块、非法表被拒绝后恢复显示、资源释放及新一轮摄像头/LCD 初始化。内存历史最多保留十个采样点，避免观测记录持续增长。小幅内存容差允许无关分配；长时间测试应结合完整序列检查趋势。这属于软件图像与资源证据；判断物理面板是否仍花屏，需要在 LSC 切换时观察真实 LCD，检查通过或软件截图均不能单独证明。当前固件通过也不等于已经查明旧固件报告的根因。
 
 CI target test 契约
 ~~~~~~~~~~~~~~~~~~~
 
-当前 CI 硬件门禁使用 ESP-IDF v5.5.6，在 P4 Function EV Board 上执行全部十八项运行时检查。CI 同时保存摄像头 JPEG 与 LCD 测试图案 JPEG，并将截图尺寸与活动显示对象核对。所有选中项必须通过（``--require-all``），不支持能力的 SKIP 也会使该板卡门禁失败。摄像头模式循环仅容忍明确的不支持错误；内存分配失败、超时及非预期的模式切换错误都会使检查失败。这只验证所选开发板与 IDF 组合，不代表编译矩阵中的其它板卡。驱动会将 ``--expect-board`` 和下载构建的 ``project_description.json`` 中的精确 ``project_version`` 同时传给启动探测与完整套件，在执行 Python、摄像头和显示检查前拒绝错误板型或旧固件。
+CI 硬件门禁使用 ESP-IDF v5.5.6，在 P4 Function EV Board 上执行显式选定的 18 项运行时检查，包括 ``espdl_inference``。两项 ISP 检查保留为照亮的静止目标上的单独人工验收；新增注册检查不会静默扩大无人值守 CI 套件。CI 同时保存摄像头 JPEG 与 LCD 测试图案 JPEG，并将截图尺寸与活动显示对象核对。所有选中项必须通过（``--require-all``），不支持能力的 SKIP 也会使该板卡门禁失败。摄像头模式循环仅容忍明确的不支持错误；内存分配失败、超时及非预期的模式切换错误都会使检查失败。这只验证所选开发板与 IDF 组合，不代表编译矩阵中的其它板卡。驱动会将 ``--expect-board`` 和下载构建的 ``project_description.json`` 中的精确 ``project_version`` 同时传给启动探测与完整套件，在执行 Python、摄像头和显示检查前拒绝错误板型或旧固件。
 
 运行时辅助脚本通过有界的 ``python.execute()`` 调用装载到独立 RAM 命名空间。每条编码后命令都满足固件声明的 ``replInputMax`` （最多 511 字节）；更长的请求会触发 Device Core 的临时文件执行路径。成功、失败或取消后都会释放辅助命名空间和 LCD 资源，因此内存、摄像头和显示检查不依赖可写文件系统。
 

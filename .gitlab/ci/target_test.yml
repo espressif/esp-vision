@@ -36,7 +36,7 @@
     - mkdir -p logs
     - |
       python3 tools/ci/flash_and_test.py --board "$BOARD" \
-        --checks all \
+        --checks identity,memory,camera,framesizes,pixformats,orientation,ipa_stats,snapshot_rate,preview,image_ops,display,display_stream,camera_display_lifecycle,image_copy_to_fb,image_transform_argument,sensor_snapshot_buffer,memory_policy,espdl_inference \
         --require-all \
         --log "logs/$BOARD-$IDF_LABEL-target-test.log" \
         --output "logs/$BOARD-$IDF_LABEL-frame.jpg" \
