@@ -19,6 +19,8 @@
 
 #define ESP_VISION_STORAGE_FLASH_PATH "/flash"
 #define ESP_VISION_STORAGE_FLASH_ALIAS "/flash"
+#define ESP_VISION_STORAGE_FLASH_LABEL "ESP_FLASH"
+#define ESP_VISION_STORAGE_SDCARD_LABEL "ESP_SDCARD"
 
 /* Each medium is optional. Boards may defer either automatic mount while
  * retaining the non-destructive storage.retry() operation. */
@@ -52,6 +54,10 @@
 #define ESP_VISION_STORAGE_BLOCK_SIZE (512U)
 
 esp_err_t esp_vision_storage_init(void);
+/* Automatic-mount default only: preserve nonempty labels and writer ownership.
+ * Failure is diagnostic, never permission to format or abandon a mounted FAT. */
+esp_err_t esp_vision_storage_set_default_label(esp_vision_storage_volume_t volume,
+                                               const char *drive, const char *label);
 void esp_vision_storage_mount_micropython(void);
 
 bool esp_vision_storage_flash_is_mounted(void);

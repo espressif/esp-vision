@@ -6,6 +6,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Default unlabeled automatically mounted FAT volumes and MSC LUN names to `ESP_FLASH` / `ESP_SDCARD`, preserving custom labels, board-specific USB MSC interface strings and writer ownership without formatting; add a bilingual USB interface/configuration and disk-naming chapter explaining Windows volume names, and align storage acceptance with the explicit initialization policy.
 - Add independent board policies `ESP_VISION_STORAGE_FLASH_FORMAT_IF_NO_FILESYSTEM` (default `1`) and `ESP_VISION_STORAGE_SD_FORMAT_IF_NO_FILESYSTEM` (default `0`) to initialize internal `ffat` or opt-in SD only on `FR_NO_FILESYSTEM`; keep mount-only retries, writer/handle guards and raw SD FatFs diagnostics. Flash initialization may erase unrecognized/foreign contents; SD preserves them by default.
 - Add the Python `/flash` alias and matching native uploads, independent default-on board policies for Flash/SD automatic mounting, and documented fixed USB MSC slots for optional volumes.
 - Add real-frame ISP regressions for single CCM writes, explicit white-balance preservation and IPA ownership, plus LSC switching with CCM write bursts during camera/canvas/LCD preview, DMA/internal/PSRAM heap measurements and cleanup/restart recovery.

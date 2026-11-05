@@ -35,6 +35,15 @@ static bool flash_present, sd_present;
 static esp_err_t flash_result, sd_result;
 static bool flash_policy, sd_policy;
 static const char *mount_paths[3], *base_paths[3];
+static const char s_flash_drive[] = "0:", s_sdcard_drive[] = "1:";
+
+esp_err_t esp_vision_storage_set_default_label(esp_vision_storage_volume_t volume,
+                                               const char *drive, const char *label)
+{
+    assert(strcmp(drive, volume == ESP_VISION_STORAGE_VOLUME_FLASH ? "0:" : "1:") == 0);
+    assert(strcmp(label, volume == ESP_VISION_STORAGE_VOLUME_FLASH ? "ESP_FLASH" : "ESP_SDCARD") == 0);
+    return ESP_OK;
+}
 
 static void *xSemaphoreCreateMutexStatic(void *buffer)
 {

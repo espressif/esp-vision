@@ -515,6 +515,11 @@ static void test_unmounted_flash_cannot_accept_host_files(void)
 
 int main(int argc, char **argv)
 {
+    uint8_t vendor[8], product[16], revision[4];
+    tud_msc_inquiry_cb(0, vendor, product, revision);
+    assert(memcmp(product, "ESP_FLASH       ", sizeof(product)) == 0);
+    tud_msc_inquiry_cb(1, vendor, product, revision);
+    assert(memcmp(product, "ESP_SDCARD      ", sizeof(product)) == 0);
     assert(argc == 2);
     if (strcmp(argv[1], "transition") == 0) {
         test_real_service_vfs_transition_drains_open_call_and_handle();

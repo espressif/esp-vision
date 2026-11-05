@@ -219,6 +219,7 @@ target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_ROOT}/platform/sdcard.c
     ${ESP_VISION_ROOT}/platform/storage.c
     ${ESP_VISION_ROOT}/platform/storage_provision.c
+    ${ESP_VISION_ROOT}/platform/storage_label.c
     ${ESP_VISION_ROOT}/platform/storage_vfs.c
     ${ESP_VISION_ROOT}/platform/lcd_touch.c
     ${ESP_VISION_ROOT}/platform/storage_writer_msc.c

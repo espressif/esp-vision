@@ -878,7 +878,14 @@ esp_err_t esp_vision_storage_sdcard_try_mount(void)
 
 esp_err_t esp_vision_storage_sdcard_auto_mount(void)
 {
-    return esp_vision_storage_sdcard_try_mount_policy(ESP_VISION_STORAGE_SD_FORMAT_IF_NO_FILESYSTEM);
+    esp_err_t ret = esp_vision_storage_sdcard_try_mount_policy(ESP_VISION_STORAGE_SD_FORMAT_IF_NO_FILESYSTEM);
+#if MICROPY_HW_ENABLE_SDCARD && SOC_SDMMC_HOST_SUPPORTED
+    if (ret == ESP_OK && s_sdcard_mounted) {
+        (void)esp_vision_storage_set_default_label(ESP_VISION_STORAGE_VOLUME_SD, s_sdcard_drive,
+                                                   ESP_VISION_STORAGE_SDCARD_LABEL);
+    }
+#endif
+    return ret;
 }
 
 esp_err_t esp_vision_storage_init(void)
@@ -921,6 +928,10 @@ esp_err_t esp_vision_storage_init(void)
     esp_err_t flash_ret = s_flash_mutex == NULL ? ESP_ERR_NO_MEM : ESP_OK;
     if (s_flash_mutex != NULL && ESP_VISION_STORAGE_AUTO_MOUNT_FLASH) {
         flash_ret = esp_vision_storage_register_flash_vfs(false, ESP_VISION_STORAGE_FLASH_FORMAT_IF_NO_FILESYSTEM);
+        if (flash_ret == ESP_OK && s_flash_mounted) {
+            (void)esp_vision_storage_set_default_label(ESP_VISION_STORAGE_VOLUME_FLASH, s_flash_drive,
+                                                       ESP_VISION_STORAGE_FLASH_LABEL);
+        }
     }
 
 #if MICROPY_HW_ENABLE_SDCARD && SOC_SDMMC_HOST_SUPPORTED

@@ -9,6 +9,8 @@
 #include <stdint.h>
 typedef unsigned int UINT;
 typedef unsigned char BYTE;
+typedef char TCHAR;
+typedef uint32_t DWORD;
 typedef struct {
     int mounted;
 } FATFS;
@@ -31,4 +33,6 @@ typedef struct {
 #define FM_SFD 0x08
 FRESULT f_mount(FATFS *filesystem, const char *drive, BYTE immediate);
 FRESULT f_mkfs(const char *drive, const MKFS_PARM *options, void *work, UINT size);
+FRESULT f_getlabel(const TCHAR *drive, TCHAR *label, DWORD *serial);
+FRESULT f_setlabel(const TCHAR *label);
 #endif
