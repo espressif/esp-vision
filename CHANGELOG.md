@@ -20,6 +20,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Export source-bound WorkBuddy Expert test candidates as MR/branch CI artifacts; publish fixed tag-version Expert ZIPs and checksums to the Generic Package Registry with GitLab Release attachment links only after protected firmware release qualification, independently of npm publication.
 - Add a reproducible Node.js WorkBuddy Expert ZIP builder with bilingual Agent/Skill metadata, the original CLI and license closure, Knowledge MCP dependency, portable resource paths, and a 512-pixel official-brand avatar; keep the legacy WorkBuddy installer and published npm version unchanged.
 - Added a repository security policy defining ESP-VISION's development and DIY scope, exclusion from the Espressif Bug Bounty Program, private security reporting, and the trusted-network requirements of unauthenticated EV-MUX TCP debugging, with English and Chinese README notices and communication-guide warnings.
+- Add strict ESP-DL inference hardware acceptance with a SHA-256-verified ESPDet model in a temporary read-only RAM VFS, real camera inference, repeatability/output checks, transfer/latency measurements and identity-scoped cleanup after uncertain mount results; persistent Flash/SD acceptance remains independent.
 
 ### Changed
 
@@ -64,6 +65,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 ### Fixed
 
 - Diagnose failed CLI serial setup with bounded checks of the selected Python/pyserial environment after cleanup, preserve busy/access-denied and runtime I/O distinctions, and document Windows `--python py` setup without automatic installation or retries. Clarify camera versus LCD capture in real help and bilingual CLI documentation, including firmware-dependent camera drawing semantics.
+- Make ESP-DL HIL uploads acknowledge the nonce and committed offset, safely replay only the latest identical block after at most two timeout recoveries, and require semantic mount/cleanup acknowledgements instead of treating printed Python exceptions as success; retain existing deadlines and strict model/inference assertions.
 
 - Reuse an existing connection to the requested SSID in the MJPEG and Cloud AI examples, reject a different connected network, and wait within the existing retry budget for managed WiFi connection attempts or EBUSY instead of repeatedly disabling STA.
 - Fix the English WebREPL support heading underline so HTML and PDF documentation builds pass the Sphinx warning gate.

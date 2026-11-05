@@ -7,7 +7,7 @@ export { tcpTransport, serialTransport } from '../src/node_transport.js'
 import { createDevice } from '../src/index.js'
 import { DEVICE_CHECKS, runDeviceChecks, saveJpeg } from './device-checks.mjs'
 
-export const usage = 'Usage: npm run test:hardware -- (--tcp HOST[:PORT] | --serial PATH) [--role usj|usb|uart] [--python PYTHON] [--expect-board BOARD] [--expect-firmware-version VERSION] [--write] [--capture] [--checks all|CSV] [--require-all] [--frames N] [--framesize QVGA] [--pixformat RGB565] [--quality 60] [--frame-timeout SECONDS] [--display-hold SECONDS] [--output CAMERA.jpg] [--screen-output LCD.jpg] [--timeout MILLISECONDS]'
+export const usage = 'Usage: npm run test:hardware -- (--tcp HOST[:PORT] | --serial PATH) [--role usj|usb|uart] [--python PYTHON] [--expect-board BOARD] [--expect-firmware-version VERSION] [--write] [--capture] [--checks all|CSV] [--require-all] [--frames N] [--framesize QVGA] [--pixformat RGB565] [--quality 60] [--frame-timeout SECONDS] [--display-hold SECONDS] [--output CAMERA.jpg] [--screen-output LCD.jpg] [--model MODEL.espdl] [--model-sha256 HEX] [--timeout MILLISECONDS]'
 const fail = (code, message) => Object.assign(new Error(message), { code })
 
 export function parseArgs(args) {
@@ -17,7 +17,7 @@ export function parseArgs(args) {
     const option = args[index]
     if (option === '--help') return { help: true }
     if (['--write', '--capture', '--require-all'].includes(option)) { options[option === '--require-all' ? 'requireAll' : option.slice(2)] = true; continue }
-    if (!['--tcp', '--serial', '--role', '--python', '--timeout', '--checks', '--screen-output', '--output', '--frames', '--display-hold', '--framesize', '--pixformat', '--quality', '--frame-timeout', '--expect-board', '--expect-firmware-version'].includes(option)) throw fail('ARGUMENT', 'Unknown argument')
+    if (!['--tcp', '--serial', '--role', '--python', '--timeout', '--checks', '--screen-output', '--output', '--frames', '--display-hold', '--framesize', '--pixformat', '--quality', '--frame-timeout', '--expect-board', '--expect-firmware-version', '--model', '--model-sha256'].includes(option)) throw fail('ARGUMENT', 'Unknown argument')
     const value = args[++index]
     if (!value || value.startsWith('--')) throw fail('ARGUMENT', 'Missing argument value')
     const key = option.slice(2).replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase())
@@ -37,6 +37,7 @@ export function parseArgs(args) {
   if (!Number.isFinite(options.frameTimeout) || options.frameTimeout <= 0 || options.frameTimeout > 120) throw fail('ARGUMENT', 'Frame timeout must be positive and at most 120 seconds')
   if (!Number.isFinite(options.displayHold) || options.displayHold < 0 || options.displayHold > 60) throw fail('ARGUMENT', 'Display hold must be 0 to 60 seconds')
   if (![options.framesize, options.pixformat].every(value => /^[A-Z][A-Z0-9_]{0,30}$/.test(value))) throw fail('ARGUMENT', 'Sensor settings must be uppercase constant names')
+  if (options.modelSha256 && !/^[a-f0-9]{64}$/.test(options.modelSha256)) throw fail('ARGUMENT', 'Model SHA-256 must be 64 lowercase hexadecimal characters')
   if (options.output && !options.checks.includes('camera')) options.capture = true
   options.timeout = Number(options.timeout)
   if (!Number.isSafeInteger(options.timeout) || options.timeout < 1000 || options.timeout > 600000) throw fail('ARGUMENT', 'Timeout must be 1000 to 600000 milliseconds')

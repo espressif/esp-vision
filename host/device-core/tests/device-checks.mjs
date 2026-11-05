@@ -2,10 +2,15 @@
 // Application-level HIL checks. All device I/O goes through createDevice's API.
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
 import { EV_REPL_INPUT_MAX_BYTES, evReplExecInputBytes } from '../src/evrepl.js'
 import { validateJpegImage } from '../src/jpeg_validate.js'
 
-export const DEVICE_CHECKS = Object.freeze(['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation', 'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream', 'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy'])
+export const DEVICE_CHECKS = Object.freeze(['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation', 'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream', 'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy', 'espdl_inference'])
+// The npm package ships tests without models; repository checkouts use the bundled face detector.
+export const DEFAULT_ESPDL_SHA256 = '04eec2220adbf642a843c953817fb219a06c094aedb76c181ba2a958c65201dc'
+export const DEFAULT_ESPDL_MODEL = fileURLToPath(new URL('../../../models/espdet/pico/face/espdet_pico_224_224_face.espdl', import.meta.url))
 const MARKER = '__EVDEVICECHECK__'
 const failure = (code, message) => Object.assign(new Error(message), { code })
 const unsupported = error => error?.code === 'UNSUPPORTED_OPERATION' || /ESP_ERR_NOT_SUPPORTED|ESP_ERR_NOT_FOUND|no module named|ENODEV/i.test(error?.message ?? '')
@@ -44,7 +49,7 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
   const results = [], namespace = `_evhil_${nonce}`
   let loaded = false, namespaceStarted = false, loadError = null, inputLimit = EV_REPL_INPUT_MAX_BYTES
   const parameters = { frames: options.frames, framesize: options.framesize, pixformat: options.pixformat, displayHold: options.displayHold, screenCapture: Boolean(options.screenOutput) }
-  const timeoutFor = name => 1000 * (name === 'display' ? 30 + options.displayHold * 3 : name === 'camera_display_lifecycle' ? options.frameTimeout + 80 : name === 'memory_policy' ? options.frameTimeout + 60 : name === 'sensor_snapshot_buffer' ? options.frameTimeout + 40 : name === 'image_copy_to_fb' ? 30 : name === 'ipa_stats' ? options.frameTimeout + 40 : options.frameTimeout + Math.max(30, options.frames * (name === 'display_stream' ? 2 : 1)))
+  const timeoutFor = name => 1000 * (name === 'display' ? 30 + options.displayHold * 3 : name === 'camera_display_lifecycle' ? options.frameTimeout + 80 : name === 'memory_policy' ? options.frameTimeout + 60 : name === 'sensor_snapshot_buffer' ? options.frameTimeout + 40 : name === 'image_copy_to_fb' ? 30 : name === 'espdl_inference' ? options.frameTimeout + 60 + options.frames * 2 : name === 'ipa_stats' ? options.frameTimeout + 40 : options.frameTimeout + Math.max(30, options.frames * (name === 'display_stream' ? 2 : 1)))
   const execute = async (source, timeout = 10000, operationSignal = signal) => {
     // Larger python.execute() requests use temporary files in Device Core.
     // Keep fixtures in RAM by respecting the actual encoded REPL-line budget.
@@ -52,6 +57,34 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
     const result = await device.python.execute({ source, timeout, maxOutputChars: 16384, signal: operationSignal })
     if (result.ok === false || result.outputTruncated) throw failure('PYTHON_CHECK', 'Device Python check did not complete')
     return result.output
+  }
+  const acknowledged = (output, operation, expected) => {
+    let reply
+    try {
+      const line = output.trim()
+      if (!line.startsWith('__EVHILACK__')) throw new Error()
+      reply = JSON.parse(line.slice('__EVHILACK__'.length))
+    } catch { throw failure('MODEL_ACK_INVALID', 'Missing or malformed hardware fixture acknowledgement') }
+    // Python dictionaries need not preserve the host's insertion order.
+    if (!Array.isArray(reply) || reply.length !== 3 || reply[0] !== nonce || reply[1] !== operation || !reply[2] || typeof reply[2] !== 'object' || Array.isArray(reply[2]) ||
+        Object.keys(reply[2]).length !== Object.keys(expected).length || Object.entries(expected).some(([key, value]) => reply[2][key] !== value)) {
+      throw failure('MODEL_ACK_INVALID', 'Hardware fixture acknowledgement does not match the operation')
+    }
+  }
+  const modelSource = (operation, args) => `${namespace}['model_command'](${JSON.stringify(operation)}${args.length ? ',' + args.map(value => JSON.stringify(value)).join(',') : ''})`
+  const modelCall = async (operation, args, expected, { retry = false, timeout = 10000, operationSignal = signal } = {}) => {
+    for (let attempt = 1; ; attempt++) {
+      cancelled(operationSignal)
+      try {
+        // Re-enter the public API for a fresh source variable and its existing
+        // Ctrl-C + exec('1') synchronization. Never replay an SDK += line.
+        acknowledged(await execute(modelSource(operation, args), timeout, operationSignal), operation, expected)
+        return attempt - 1
+      } catch (error) {
+        cancelled(operationSignal)
+        if (!retry || error.code !== 'TIMEOUT' || attempt === 3) throw error
+      }
+    }
   }
   const load = async () => {
     if (loaded) return
@@ -62,7 +95,7 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
       if (Number.isSafeInteger(advertised) && advertised > 0) inputLimit = Math.min(inputLimit, advertised)
       const source = await readFile(new URL('./fixtures/device-checks.py', import.meta.url), 'utf8')
       namespaceStarted = true
-      await execute(`${namespace}={'_source':[]}`)
+      await execute(`${namespace}={'_source':[],'_fixture_nonce':${JSON.stringify(nonce)}}`)
       const append = chunk => `${namespace}['_source'].append(${JSON.stringify(chunk)})`
       let chunk = ''
       for (const character of source) {
@@ -78,14 +111,57 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
       loaded = true
     } catch (error) { loadError = error; throw error }
   }
-  const invoke = async name => {
+  const invoke = async (name, extra = {}) => {
     await load()
-    const output = await execute(`${namespace}['run_check'](${JSON.stringify(name)},${JSON.stringify(JSON.stringify(parameters))})`, timeoutFor(name))
+    const selected = name === 'espdl_inference' ? { frames: parameters.frames, framesize: parameters.framesize, ...extra } : { ...parameters, ...extra }
+    const output = await execute(`${namespace}['run_check'](${JSON.stringify(name)},${JSON.stringify(JSON.stringify(selected))})`, timeoutFor(name))
     return parseCheckResult(output, name)
   }
   const requirePass = result => {
     if (result.status !== 'PASS') throw Object.assign(failure(result.status === 'SKIP' ? 'UNSUPPORTED_OPERATION' : 'DEVICE_CHECK_FAILED', result.error.message), { checkResult: result })
     return result.data
+  }
+  // ESPDet accepts VFS streams, including a read-only BytesIO-backed mount.
+  // Keep inference acceptance independent of persistent storage provisioning.
+  const espdlInference = async () => {
+    let model
+    try { model = new Uint8Array(await readFile(options.model ?? DEFAULT_ESPDL_MODEL)) }
+    catch (error) { throw failure('MODEL_UNAVAILABLE', `Cannot read ESP-DL model: ${error.code ?? 'read failed'}`) }
+    if (!model.length || model.length > 2 * 1024 * 1024) throw failure('MODEL_INVALID', 'ESP-DL acceptance model must be 1 byte to 2 MiB')
+    const sha256 = createHash('sha256').update(model).digest('hex')
+    const expected = options.modelSha256 ?? (options.model ? null : DEFAULT_ESPDL_SHA256)
+    if (expected && expected !== sha256) throw failure('MODEL_HASH_MISMATCH', 'ESP-DL model differs from the expected SHA-256')
+    await load()
+    const path = `/evhil_${nonce}`
+    let started = false, chunks = 0, retries = 0
+    const retryOffsets = []
+    const transferStarted = Date.now()
+    try {
+      started = true
+      await modelCall('begin', [nonce, model.length, path], { size: model.length, offset: 0, path })
+      const append = (chunk, offset) => modelSource('append', [offset, Buffer.from(chunk).toString('base64')])
+      // Base64 carries binary model bytes without the temporary-file execution
+      // path or a second host protocol implementation. Honor the live limit.
+      const chunkBytes = Math.floor((inputLimit - evReplExecInputBytes(append([], model.length))) / 4) * 3
+      if (chunkBytes < 3) throw failure('REPL_INPUT_LIMIT', 'Device REPL input limit cannot load the inference model')
+      for (let offset = 0; offset < model.length; offset += chunkBytes) {
+        cancelled(signal)
+        const chunk = model.subarray(offset, offset + chunkBytes), end = offset + chunk.length
+        const recovered = await modelCall('append', [offset, Buffer.from(chunk).toString('base64')], { offset, end, bytes: chunk.length, current: end }, { retry: true })
+        retries += recovered
+        if (recovered) retryOffsets.push({ offset, retries: recovered })
+        chunks++
+      }
+      await modelCall('mount', [sha256], { path, bytes: model.length, sha256 })
+      const modelTransferMs = Date.now() - transferStarted
+      const data = requirePass(await invoke('espdl_inference', { modelPath: `${path}/model.espdl` }))
+      return { ...data, modelBytes: model.length, modelSha256: sha256, modelStorage: 'ram-vfs', modelChunks: chunks, modelTransferMs, modelRetries: retries, modelRetryOffsets: retryOffsets }
+    } finally {
+      if (started) {
+        try { await modelCall('close', [], { bytes: 0, offset: 0, mounted: false }, { timeout: 5000, operationSignal: AbortSignal.timeout(6000) }) }
+        catch { throw failure('MODEL_CLEANUP_FAILED', 'Could not release the temporary RAM model mount') }
+      }
+    }
   }
   const record = result => { results.push(result); report({ check: result.name, ...result, name: undefined }) }
   try {
@@ -119,6 +195,8 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
             if (!count) throw failure('PREVIEW_EMPTY', 'No preview frame arrived')
             data.received = count
           } finally { unsubscribe() }
+        } else if (name === 'espdl_inference') {
+          data = await espdlInference()
         } else {
           const response = await invoke(name)
           if (name === 'ipa_stats' && response.status === 'SKIP') {
@@ -137,7 +215,7 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
         result = { name, status: 'PASS', data }
       } catch (error) {
         cancelled(signal)
-        const skip = unsupported(error) && !options.requireAll && !(name === 'display' && options.screenOutput)
+        const skip = (unsupported(error) || error.code === 'MODEL_UNAVAILABLE') && !options.requireAll && !(name === 'display' && options.screenOutput)
         result = { name, status: skip ? 'SKIP' : 'FAIL', error: { code: error.code ?? 'DEVICE_CHECK_FAILED', message: String(error.message ?? 'Device check failed').slice(0, 240) } }
       } finally {
         if (name === 'display' && loaded) {
@@ -152,7 +230,11 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
     const cleanupSignal = AbortSignal.timeout(10000)
     let cleanupError
     if (namespaceStarted) {
-      try { await execute(`if ${JSON.stringify(namespace)} in globals():\n ${namespace}.get('close_display',lambda:None)()\n del ${namespace}`, 5000, cleanupSignal) }
+      try {
+        await execute(`if ${JSON.stringify(namespace)} in globals():\n ${namespace}.get('close_display',lambda:None)()\n ${namespace}.get('close_model',lambda:None)()\n del ${namespace}`, 5000, cleanupSignal)
+        const marker = '__EVHILACK__' + JSON.stringify([nonce, 'cleanup', { absent: true }])
+        acknowledged(await execute(`assert ${JSON.stringify(namespace)} not in globals();print(${JSON.stringify(marker)})`, 5000, cleanupSignal), 'cleanup', { absent: true })
+      }
       catch (error) { cleanupError = error }
     }
     if (cleanupError) record({ name: 'fixture-cleanup', status: 'FAIL', error: { code: 'FIXTURE_CLEANUP_FAILED', message: 'Could not release the hardware fixture namespace' } })

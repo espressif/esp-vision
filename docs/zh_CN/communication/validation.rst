@@ -73,14 +73,20 @@
    npm --prefix host/device-core run test:hardware -- --serial <USB-OTG-port> --role usb --checks identity,camera,display
    npm --prefix host/device-core run test:hardware -- --tcp <device-ipv4>:3232 --checks identity,memory,camera
 
-``--checks`` 接受 ``all`` 或逗号分隔的检查名。摄像头/显示检查包括 ``identity``、``memory``、``camera``、``framesizes``、``pixformats``、``orientation``、``ipa_stats``、``snapshot_rate``、``preview``、``image_ops``、``display``、``display_stream``、``camera_display_lifecycle``、``image_copy_to_fb``、``image_transform_argument``、``sensor_snapshot_buffer`` 和 ``memory_policy``。``all`` 选择完整检查集，不表示所有板卡都具备对应硬件；报告应明确区分通过、失败与缺少能力的跳过，不能将跳过算作已通过。初次实验只测试当前硬件，最终提交才由 CI 运行完整固件矩阵。
+``--checks`` 接受 ``all`` 或逗号分隔的检查名。摄像头/显示检查包括 ``identity``、``memory``、``camera``、``framesizes``、``pixformats``、``orientation``、``ipa_stats``、``snapshot_rate``、``preview``、``image_ops``、``display``、``display_stream``、``camera_display_lifecycle``、``image_copy_to_fb``、``image_transform_argument``、``sensor_snapshot_buffer``、``memory_policy`` 和 ``espdl_inference``。``all`` 选择完整检查集，不表示所有板卡都具备对应硬件；报告应明确区分通过、失败与缺少能力的跳过，不能将跳过算作已通过。初次实验只测试当前硬件，最终提交才由 CI 运行完整固件矩阵。
 
 CI target test 契约
 ~~~~~~~~~~~~~~~~~~~
 
-当前 CI 硬件门禁使用 ESP-IDF v5.5.6，在 P4 Function EV Board 上执行全部十六项运行时检查。CI 同时保存摄像头 JPEG 与 LCD 测试图案 JPEG，并将截图尺寸与活动显示对象核对。所有选中项必须通过（``--require-all``），不支持能力的 SKIP 也会使该板卡门禁失败。摄像头模式循环仅容忍明确的不支持错误；内存分配失败、超时及非预期的模式切换错误都会使检查失败。这只验证所选开发板与 IDF 组合，不代表编译矩阵中的其它板卡。驱动会将 ``--expect-board`` 和下载构建的 ``project_description.json`` 中的精确 ``project_version`` 同时传给启动探测与完整套件，在执行 Python、摄像头和显示检查前拒绝错误板型或旧固件。
+当前 CI 硬件门禁使用 ESP-IDF v5.5.6，在 P4 Function EV Board 上执行全部十八项运行时检查。CI 同时保存摄像头 JPEG 与 LCD 测试图案 JPEG，并将截图尺寸与活动显示对象核对。所有选中项必须通过（``--require-all``），不支持能力的 SKIP 也会使该板卡门禁失败。摄像头模式循环仅容忍明确的不支持错误；内存分配失败、超时及非预期的模式切换错误都会使检查失败。这只验证所选开发板与 IDF 组合，不代表编译矩阵中的其它板卡。驱动会将 ``--expect-board`` 和下载构建的 ``project_description.json`` 中的精确 ``project_version`` 同时传给启动探测与完整套件，在执行 Python、摄像头和显示检查前拒绝错误板型或旧固件。
 
 运行时辅助脚本通过有界的 ``python.execute()`` 调用装载到独立 RAM 命名空间。每条编码后命令都满足固件声明的 ``replInputMax`` （最多 511 字节）；更长的请求会触发 Device Core 的临时文件执行路径。成功、失败或取消后都会释放辅助命名空间和 LCD 资源，因此内存、摄像头和显示检查不依赖可写文件系统。
+
+``espdl_inference`` 通过有界的公共 ``python.execute()`` 调用，将仓库自带的 495,840 字节 ESPDet Pico Face 模型装入只读 RAM VFS，在主机和设备两端验证 SHA-256，再通过真实 ``espdl.ESPDet`` 对 RGB565 摄像头图像推理。检查同一复制帧的结果可重复性、检测元组结构、检测框与图像重叠、置信度/类别范围及正的推理耗时；报告包含模型 SHA-256、传输分块数/耗时、加载耗时、帧数/检测数及平均/最慢推理延迟。镜头内没有人脸时允许空检测结果；这项合理性检查不代表模型准确率或性能指标已达标。无论成功、失败或取消，都会释放模型、RAM 挂载及摄像头，不读写 Flash/SD 文件，也不取得 MSC writer 租约。
+
+模型上传通过命名空间 nonce 和准确的已提交字节偏移确认完成。只有超时分块允许重试，每块最多调用三次公共执行接口；重放只接受最近一个字节完全相同的分块。数据冲突或乱序、确认缺失或错误以及取消均立即失败。报告包含 ``modelRetries`` 和 ``modelRetryOffsets``。挂载、模型清理及最终命名空间不存在均要求显式确认或读回，不能将打印 Python 异常后执行包装器返回成功当作操作成功。各命令与整体的现有超时保持不变。
+
+默认模型 SHA-256 为 ``04eec2220adbf642a843c953817fb219a06c094aedb76c181ba2a958c65201dc``。``--model MODEL.espdl`` 可以选择兼容的 ESPDet 模型（至多 2 MiB），并通过 ``--model-sha256 HEX`` 固定预期字节。已安装的 npm 包不携带模型资源，需要显式提供 ``--model``。模型缺失只会跳过可选验收，在 ``--require-all`` 下仍失败。严格推理验收要求摄像头和 ESP-DL 能力，与持久化存储是否可用无关。
 
 存储单独取证。身份检查会报告各卷的存在、挂载及写入状态；运行时通过不代表文件上传可用。在已准备好文件系统的板卡上使用 ``--write``，显式要求 Flash 已挂载且可写，执行唯一临时文件的二进制写入与读回，并仅清理测试自己的文件。未挂载或不可用的存储会使该项以 ``STORAGE_UNAVAILABLE`` 失败。CI 和硬件 CLI 都不会格式化存储、通过擦除数据掩盖挂载失败，或用 SD 卡代替 Flash。
 

@@ -230,7 +230,7 @@ class FirmwarePublicationGateTests(unittest.TestCase):
 
         check_registry = (ROOT / "host/device-core/tests/device-checks.mjs").read_text()
         for check in ("camera_display_lifecycle", "image_copy_to_fb", "image_transform_argument",
-                      "sensor_snapshot_buffer", "memory_policy"):
+                      "sensor_snapshot_buffer", "memory_policy", "espdl_inference"):
             with self.subTest(check=check):
                 self.assertIn(f"'{check}'", check_registry)
 

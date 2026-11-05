@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile, mkdtemp, rm } from 'node:fs/promises'
+import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { EV_REPL_INPUT_MAX_BYTES, evReplExecInputBytes } from '../src/evrepl.js'
 import { tmpdir } from 'node:os'
+import { existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { parseArgs } from './hardware-check.mjs'
-import { DEVICE_CHECKS, parseCheckResult, runDeviceChecks, saveJpeg } from './device-checks.mjs'
+import { DEFAULT_ESPDL_MODEL, DEFAULT_ESPDL_SHA256, DEVICE_CHECKS, parseCheckResult, runDeviceChecks, saveJpeg } from './device-checks.mjs'
 import { jpegFixture } from './jpeg-fixtures.mjs'
 
 function devicePeer({ results = {}, board = 'TEST', screenFails = false } = {}) {
   const files = new Map(), calls = [], listeners = new Map()
+  let modelNonce, modelBytes, modelPath, modelOffset = 0
   return {
     calls, files, listeners,
     async inspect({ fields }) { calls.push(['inspect', fields]); return { identity: { board, firmwareVersion: 'test' }, capabilities: { protocol: { evMuxVersion: 4 }, features: ['storage.writer.lease'], limits: { replInputMax: EV_REPL_INPUT_MAX_BYTES } }, runtime: { vmReady: true }, storage: { flash: { present: true, mounted: false, writable: false } } } },
@@ -21,6 +24,26 @@ function devicePeer({ results = {}, board = 'TEST', screenFails = false } = {}) 
     }),
     python: { async execute({ source }) {
       calls.push(['execute', source])
+      if (source.includes("={'_source':[],'_fixture_nonce':")) modelNonce = JSON.parse(source.slice(source.indexOf("'_fixture_nonce':") + 17, -1))
+      const model = /\['model_command'\]\((.*)\)$/.exec(source)
+      if (model) {
+        const [operation, ...args] = JSON.parse('[' + model[1] + ']')
+        let data
+        if (operation === 'begin') {
+          ;[modelNonce, modelBytes, modelPath] = args
+          modelOffset = 0
+          data = { size: modelBytes, offset: 0, path: modelPath }
+        } else if (operation === 'append') {
+          const [offset, encoded] = args, bytes = Buffer.from(encoded, 'base64').length
+          modelOffset = offset + bytes
+          data = { offset, end: modelOffset, bytes, current: modelOffset }
+        } else if (operation === 'mount') data = { path: modelPath, bytes: modelBytes, sha256: args[0] }
+        else data = { bytes: 0, offset: 0, mounted: false }
+        return { ok: true, output: '__EVHILACK__' + JSON.stringify([modelNonce, operation, data]) }
+      }
+      if (source.startsWith('assert ') && source.includes('__EVHILACK__')) {
+        return { ok: true, output: JSON.parse(source.slice(source.indexOf(';print(') + 7, -1)) }
+      }
       const name = /\['run_check'\]\("([a-z_]+)"/.exec(source)?.[1]
       if (!name) return { ok: true, output: '' }
       const result = results[name] ?? { name, status: 'PASS', data: { width: 240, height: 320 } }
@@ -153,4 +176,220 @@ test('P4 issue regressions are included in the strict target-check path', async 
   await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', required.join(','), '--require-all']),
     { nonce: 'issue910', report: value => reports.push(value) })
   assert.deepEqual(reports.at(-1), { check: 'summary', passed: required.length, failed: 0, skipped: 0 })
+})
+
+test('ESP-DL inference streams a model into RAM, respects the live REPL limit and never touches persistent storage', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'esp-vision-model-'))
+  const model = join(directory, 'model.espdl'), bytes = Buffer.from(Array.from({ length: 1024 }, (_, index) => index & 255))
+  try {
+    await writeFile(model, bytes)
+    const device = devicePeer(), reports = [], inspect = device.inspect
+    device.inspect = async request => {
+      assert.ok(!request.fields.includes('storage'))
+      const info = await inspect(request)
+      info.capabilities.limits.replInputMax = 256
+      return info
+    }
+    await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', model, '--require-all']), { nonce: 'abc123', report: value => reports.push(value) })
+    const commands = device.calls.filter(call => call[0] === 'execute').map(call => call[1])
+    assert.ok(commands.every(source => evReplExecInputBytes(source) <= 256))
+    const uploaded = commands.filter(source => source.includes("['model_command'](\"append\",")).map(source => Buffer.from(JSON.parse('[' + source.slice(source.indexOf('](') + 2, -1) + ']')[2], 'base64'))
+    assert.deepEqual(Buffer.concat(uploaded), bytes)
+    assert.ok(commands.some(source => source.includes("['model_command'](\"mount\",\"" + createHash('sha256').update(bytes).digest('hex'))))
+    assert.ok(commands.some(source => source.includes('modelPath\\\":\\\"/evhil_abc123/model.espdl')))
+    assert.ok(commands.some(source => source.includes("['model_command'](\"close\")")))
+    assert.equal(reports.find(result => result.check === 'espdl_inference').data.modelBytes, bytes.length)
+    assert.equal(reports.find(result => result.check === 'espdl_inference').data.modelStorage, 'ram-vfs')
+    assert.equal(device.files.size, 0)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+test('missing ESP-DL model skips only optional acceptance and malformed expected hashes are rejected', async () => {
+  assert.throws(() => parseArgs(['--tcp', 'test', '--model-sha256', 'bad']), { code: 'ARGUMENT' })
+  for (const strict of [false, true]) {
+    const device = devicePeer(), results = []
+    const run = runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', join(tmpdir(), 'missing-esp-vision.espdl'), ...(strict ? ['--require-all'] : [])]), { nonce: 'abc123', report: value => results.push(value) })
+    if (strict) await assert.rejects(run, { code: 'DEVICE_CHECKS_FAILED' })
+    else await run
+    assert.equal(results.find(result => result.check === 'espdl_inference').status, strict ? 'FAIL' : 'SKIP')
+    assert.ok(!device.calls.some(call => call[0] === 'execute'))
+  }
+})
+
+test('ESP-DL model hash mismatch is rejected before device mutation', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'esp-vision-model-'))
+  try {
+    const model = join(directory, 'model.espdl'), device = devicePeer(), reports = []
+    await writeFile(model, Buffer.from([1, 2, 3]))
+    await assert.rejects(runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', model, '--model-sha256', '0'.repeat(64)]), { nonce: 'abc123', report: value => reports.push(value) }), { code: 'DEVICE_CHECKS_FAILED' })
+    assert.equal(reports.find(result => result.check === 'espdl_inference').error.code, 'MODEL_HASH_MISMATCH')
+    assert.equal(device.calls.length, 0)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+test('partial model upload, inference failure and cleanup failure cannot report success', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'esp-vision-model-'))
+  try {
+    const model = join(directory, 'model.espdl')
+    await writeFile(model, Buffer.alloc(1024))
+    for (const stage of ['append_model', 'espdl_inference', 'close_model']) {
+      const device = devicePeer(), execute = device.python.execute, reports = []
+      device.python.execute = async request => {
+        if (request.source.includes(`['model_command']("${stage.replace('_model', '')}"`) || (stage === 'espdl_inference' && request.source.includes("['run_check'](\"espdl_inference\""))) {
+          device.calls.push(['failed-execute', request.source])
+          throw new Error('injected failure')
+        }
+        return execute(request)
+      }
+      await assert.rejects(runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', model, '--require-all']), { nonce: 'abc123', report: value => reports.push(value) }), { code: 'DEVICE_CHECKS_FAILED' })
+      assert.equal(reports.find(result => result.check === 'espdl_inference').status, 'FAIL')
+      assert.ok(device.calls.some(call => call[1]?.includes("['model_command'](\"close\")")))
+      assert.ok(device.calls.some(call => call[1]?.includes(".get('close_model',lambda:None)()")))
+    }
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+test('model transfer cancellation releases RAM resources with an independent cleanup signal', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'esp-vision-model-'))
+  try {
+    const model = join(directory, 'model.espdl'), device = devicePeer(), execute = device.python.execute, controller = new AbortController()
+    await writeFile(model, Buffer.alloc(1024))
+    let cleaned = false
+    device.python.execute = async request => {
+      if (request.source.includes("['model_command'](\"append\",")) controller.abort(new Error('cancelled transfer'))
+      if (request.source.includes("['model_command'](\"close\")")) { assert.equal(request.signal.aborted, false); cleaned = true }
+      return execute(request)
+    }
+    await assert.rejects(runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', model]), { signal: controller.signal, nonce: 'abc123', report() {} }), /cancelled transfer/)
+    assert.equal(cleaned, true)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+// Installed npm packages run these tests without the repository's models directory.
+async function modelCase(callback, size = 1024) {
+  const directory = await mkdtemp(join(tmpdir(), 'esp-vision-model-ack-'))
+  try {
+    const model = join(directory, 'model.espdl'), bytes = typeof size === 'number' ? Buffer.alloc(size, 42) : Buffer.from(size)
+    await writeFile(model, bytes)
+    await callback({ model, bytes, device: devicePeer(), reports: [] })
+  } finally { await rm(directory, { recursive: true, force: true }) }
+}
+
+test('model upload retries a complete public execute only for uncertain TIMEOUT and reports recovery', async () => {
+  for (const executed of [false, true]) await modelCase(async ({ model, device, reports }) => {
+    const execute = device.python.execute, attempts = []
+    let first = true
+    device.python.execute = async request => {
+      if (request.source.includes('[\'model_command\']("append",')) {
+        attempts.push(request.source)
+        if (first) {
+          first = false
+          if (executed) await execute(request)
+          throw Object.assign(new Error('uncertain acknowledgement'), { code: 'TIMEOUT' })
+        }
+      }
+      return execute(request)
+    }
+    await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', model, '--require-all']), { nonce: 'acktest', report: value => reports.push(value) })
+    assert.equal(attempts[0], attempts[1])
+    const data = reports.find(result => result.check === 'espdl_inference').data
+    assert.equal(data.modelRetries, 1)
+    assert.deepEqual(data.modelRetryOffsets, [{ offset: 0, retries: 1 }])
+    assert.equal(attempts.length, data.modelChunks + 1)
+  })
+})
+
+test('model upload limits timeout attempts to three and never retries cancellation or semantic errors', async () => {
+  for (const mode of ['timeout', 'error', 'abort']) await modelCase(async ({ model, device, reports }) => {
+    const execute = device.python.execute, controller = new AbortController()
+    let attempts = 0
+    device.python.execute = async request => {
+      if (request.source.includes('[\'model_command\']("append",')) {
+        attempts++
+        const error = Object.assign(new Error(mode), { code: mode === 'error' ? 'DATA_CONFLICT' : 'TIMEOUT' })
+        if (mode === 'abort') controller.abort(error)
+        throw error
+      }
+      return execute(request)
+    }
+    await assert.rejects(runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', model, '--require-all']), { signal: controller.signal, nonce: 'acktest', report: value => reports.push(value) }))
+    assert.equal(attempts, mode === 'timeout' ? 3 : 1)
+  })
+})
+
+test('every model operation requires a semantic ACK even when Python prints an exception with ok true', async () => {
+  for (const operation of ['begin', 'append', 'mount', 'close', 'cleanup']) await modelCase(async ({ model, device, reports }) => {
+    const execute = device.python.execute
+    let attempts = 0
+    device.python.execute = async request => {
+      if (request.source.includes(`['model_command']("${operation}"`) || (operation === 'cleanup' && request.source.startsWith('assert '))) {
+        attempts++
+        return { ok: true, output: 'Traceback (most recent call last):\nOSError: injected failure\n' }
+      }
+      return execute(request)
+    }
+    await assert.rejects(runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', model, '--require-all']), { nonce: 'acktest', report: value => reports.push(value) }), { code: 'DEVICE_CHECKS_FAILED' })
+    assert.equal(attempts, 1)
+    assert.ok(reports.some(result => result.status === 'FAIL'))
+  })
+})
+
+test('upload ACK rejects stale nonce, wrong offset, duplicate markers and malformed output without retry', async () => {
+  for (const invalid of ['nonce', 'offset', 'duplicate', 'malformed']) await modelCase(async ({ model, device, reports }) => {
+    const execute = device.python.execute
+    let attempts = 0
+    device.python.execute = async request => {
+      const response = await execute(request)
+      if (request.source.includes('[\'model_command\']("append",')) {
+        attempts++
+        const ack = JSON.parse(response.output.slice('__EVHILACK__'.length))
+        if (invalid === 'nonce') ack[0] = 'stale'
+        if (invalid === 'offset') ack[2].current++
+        response.output = '__EVHILACK__' + JSON.stringify(ack)
+        if (invalid === 'duplicate') response.output += '\n' + response.output
+        if (invalid === 'malformed') response.output = '__EVHILACK__broken'
+      }
+      return response
+    }
+    await assert.rejects(runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', model]), { nonce: 'acktest', report: value => reports.push(value) }), { code: 'DEVICE_CHECKS_FAILED' })
+    assert.equal(attempts, 1)
+    assert.equal(reports.find(result => result.check === 'espdl_inference').error.code, 'MODEL_ACK_INVALID')
+  })
+})
+
+test('begin timeout before its body preserves the original error and still acknowledges empty cleanup', async () => {
+  await modelCase(async ({ model, device, reports }) => {
+    const execute = device.python.execute
+    device.python.execute = async request => {
+      if (request.source.includes('[\'model_command\']("begin",')) throw Object.assign(new Error('begin preparation timeout'), { code: 'TIMEOUT' })
+      return execute(request)
+    }
+    await assert.rejects(runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', model]), { nonce: 'acktest', report: value => reports.push(value) }), { code: 'DEVICE_CHECKS_FAILED' })
+    assert.equal(reports.find(result => result.check === 'espdl_inference').error.code, 'TIMEOUT')
+    assert.equal(reports.at(-1).failed, 1)
+  })
+})
+
+test('full-sized model upload reserves the largest offset and final block within both live REPL budgets', async () => {
+  const modelBytes = existsSync(DEFAULT_ESPDL_MODEL) ? await readFile(DEFAULT_ESPDL_MODEL) : Buffer.alloc(495840, 42)
+  for (const limit of [256, 511]) await modelCase(async ({ model, device, reports, bytes }) => {
+    const inspect = device.inspect
+    device.inspect = async request => { const result = await inspect(request); result.capabilities.limits.replInputMax = limit; return result }
+    try { await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'espdl_inference', '--model', model]), { nonce: '0123456789abcdef', report: value => reports.push(value) }) }
+    catch { assert.fail(JSON.stringify({ limit, reports })) }
+    const commands = device.calls.filter(call => call[0] === 'execute').map(call => call[1])
+    assert.ok(commands.every(source => evReplExecInputBytes(source) <= limit))
+    const chunks = commands.filter(source => source.includes('[\'model_command\']("append",')).map(source => JSON.parse('[' + source.slice(source.indexOf('](') + 2, -1) + ']'))
+    let offset = 0
+    for (const [, actualOffset, encoded] of chunks) { assert.equal(actualOffset, offset); offset += Buffer.from(encoded, 'base64').length }
+    assert.equal(offset, bytes.length)
+    assert.deepEqual(Buffer.concat(chunks.map(chunk => Buffer.from(chunk[2], 'base64'))), bytes)
+    assert.equal(reports.find(result => result.check === 'espdl_inference').data.modelChunks, limit === 511 ? 1517 : 3673)
+  }, modelBytes)
+})
+
+test('repository checkouts provide the default ESP-DL model', { skip: !existsSync(new URL('../../../models/', import.meta.url)) }, async () => {
+  const bytes = await readFile(DEFAULT_ESPDL_MODEL)
+  assert.equal(bytes.length, 495840)
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), DEFAULT_ESPDL_SHA256)
 })

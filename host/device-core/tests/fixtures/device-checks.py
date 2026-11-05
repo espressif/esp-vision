@@ -496,6 +496,157 @@ def memory_policy(opts):
 
 
 
+_model_bytes = None
+_model_offset = 0
+_model_path = None
+_model_vfs = None
+_model_nonce = None
+
+
+class ModelVfs:
+    """A single read-only RAM file; no Flash/SD volume or writer is touched."""
+    def mount(self, readonly, mkfs):
+        pass
+
+    def umount(self):
+        pass
+
+    def stat(self, path):
+        if path not in ('/', '/model.espdl'):
+            raise OSError(2)
+        return (0x4000 if path == '/' else 0x8000, 0, 0, 0, 0, 0, len(_model_bytes), 0, 0, 0)
+
+    def open(self, path, mode):
+        import io
+        if path != '/model.espdl' or mode not in ('r', 'rb'):
+            raise OSError(13)
+        return io.BytesIO(_model_bytes)
+
+
+def begin_model(nonce, size, path):
+    global _model_bytes, _model_offset, _model_path, _model_nonce
+    assert _model_bytes is None and _model_path is None, 'model already active'
+    assert isinstance(nonce, str) and nonce, 'invalid model nonce'
+    assert 0 < size <= 2 * 1024 * 1024, 'model size out of bounds'
+    _model_nonce = nonce
+    _model_bytes = bytearray(size)
+    _model_offset = 0
+    _model_path = path
+    return dict(size=len(_model_bytes), offset=_model_offset, path=_model_path)
+
+
+def append_model(offset, encoded):
+    import binascii
+    global _model_offset
+    chunk = binascii.a2b_base64(encoded)
+    end = offset + len(chunk)
+    assert isinstance(offset, int) and offset >= 0 and chunk, 'invalid model chunk'
+    assert _model_bytes is not None and end <= len(_model_bytes), 'model upload overflow'
+    if offset == _model_offset:
+        # An interrupt between copying and committing leaves the same offset;
+        # replay safely overwrites the same slice before committing it.
+        _model_bytes[offset:end] = chunk
+        _model_offset = end
+    else:
+        assert _model_offset == end, 'model chunk out of order'
+        assert _model_bytes[offset:end] == chunk, 'model chunk conflict'
+    return dict(offset=offset, end=end, bytes=len(chunk), current=_model_offset)
+
+
+def mount_model(expected):
+    import binascii, hashlib, vfs
+    global _model_vfs
+    assert _model_bytes is not None and _model_offset == len(_model_bytes), 'incomplete model upload'
+    actual = binascii.hexlify(hashlib.sha256(_model_bytes).digest()).decode()
+    assert actual == expected, 'model SHA-256 mismatch'
+    # MicroPython refuses an already mounted path; never unmount another VFS.
+    _model_vfs = ModelVfs()
+    vfs.mount(_model_vfs, _model_path, readonly=True)
+    assert any(filesystem is _model_vfs and path == _model_path for filesystem, path in vfs.mount()), 'model mount missing'
+    return dict(path=_model_path, bytes=len(_model_bytes), sha256=actual)
+
+
+def close_model():
+    import gc, vfs
+    global _model_bytes, _model_offset, _model_path, _model_vfs, _model_nonce
+    # A cancelled mount may have completed before the host observed its result.
+    # Match object identity, so an uncertain call never unmounts another VFS.
+    if _model_vfs is not None:
+        for filesystem, _ in vfs.mount():
+            if filesystem is _model_vfs:
+                vfs.umount(_model_vfs)
+        assert not any(filesystem is _model_vfs for filesystem, _ in vfs.mount()), 'model still mounted'
+        _model_vfs = None
+    _model_bytes = None
+    _model_offset = 0
+    _model_path = None
+    _model_nonce = None
+    gc.collect()
+    return dict(bytes=0, offset=_model_offset, mounted=False)
+
+
+def model_command(operation, *args):
+    import json
+    assert operation in ('begin', 'append', 'mount', 'close'), 'invalid model operation'
+    nonce = globals()['_fixture_nonce']
+    assert _model_nonce is None or _model_nonce == nonce, 'model nonce conflict'
+    if operation == 'begin':
+        assert args[0] == nonce, 'model nonce conflict'
+    result = globals()[operation + '_model'](*args)
+    # A caught/printed Python exception must never look like a semantic ACK.
+    print('__EVHILACK__' + json.dumps([nonce, operation, result]))
+
+
+def espdl_inference(opts):
+    """Load the SHA-256-verified RAM model and run real camera inference."""
+    import espdl, sensor, time
+    det = None
+    frame = None
+    try:
+        sensor.reset()
+        sensor.set_pixformat(sensor.RGB565)
+        sensor.set_framesize(getattr(sensor, opts['framesize']))
+        sensor.skip_frames(n=3)
+        started = time.ticks_ms()
+        det = espdl.ESPDet(opts['modelPath'], score=0.3, nms=0.7)
+        load_ms = time.ticks_diff(time.ticks_ms(), started)
+        frame = sensor.snapshot().copy()
+        width, height = frame.width(), frame.height()
+
+        def checked(results):
+            assert isinstance(results, list), 'detect() did not return a list'
+            for item in results:
+                assert len(item) == 6, 'malformed detection tuple'
+                x, y, w, h, score, category = item
+                assert w > 0 and h > 0, 'empty detection box'
+                assert x < width and y < height and x + w > 0 and y + h > 0, 'detection box outside the frame'
+                assert 0.0 <= score <= 1.0, 'detection score outside 0..1'
+                assert category >= 0, 'negative detection category'
+            return results
+
+        first = checked(det.detect(frame))
+        assert first == checked(det.detect(frame)), 'inference differs for the same input frame'
+        detections, total_us, worst_us = 0, 0, 0
+        for _ in range(opts['frames']):
+            img = sensor.snapshot()
+            start = time.ticks_us()
+            results = det.detect(img)
+            elapsed = time.ticks_diff(time.ticks_us(), start)
+            detections += len(checked(results))
+            total_us += elapsed
+            worst_us = max(worst_us, elapsed)
+        assert total_us > 0, 'implausible inference time'
+        return dict(width=width, height=height, loadMs=load_ms, frames=opts['frames'], detections=detections,
+                    meanMs=total_us // opts['frames'] / 1000, worstMs=worst_us / 1000)
+    finally:
+        try:
+            if det is not None:
+                det.deinit()
+        finally:
+            frame = None
+            sensor.shutdown()
+
+
 def memory(opts):
     import esp32
     heaps = esp32.idf_heap_info(esp32.HEAP_DATA)
@@ -528,7 +679,7 @@ def run_check(name, opts):
                      image_copy_to_fb=image_copy_to_fb,
                      image_transform_argument=image_transform_argument,
                      sensor_snapshot_buffer=sensor_snapshot_buffer,
-                     memory_policy=memory_policy)
+                     memory_policy=memory_policy, espdl_inference=espdl_inference)
     try:
         data = functions[name](opts)
         result = dict(name=name, status='PASS', data=data)
