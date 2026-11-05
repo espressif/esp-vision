@@ -10,22 +10,22 @@ export function openNodeRom({ port, python = defaultPython, signal } = {}, depen
   if (!port) throw new TypeError('Firmware update requires a local --port')
   const lifecycle = new AbortController()
   signal = signal ? AbortSignal.any([signal, lifecycle.signal]) : lifecycle.signal
-  let child, input, pending, sequence = 0, closed = false, initializing = false, romReady = false
+  let child, input, pending, sequence = 0, closed = false, initializing = false, romReady = false, stubReady = false
   const fail = code => Object.assign(new Error(code === 'ESPTOOL_UNAVAILABLE' ? 'Install Python esptool==5.6.0 for the built-in flasher' : 'ROM operation failed'), { code })
   const reject = code => { if (pending) { clearTimeout(pending.timer); pending.reject(fail(code)); pending = null } }
-  function rpc(method, args = []) {
+  function rpc(method, args = [], timeout = 180000) {
     if (closed) return Promise.reject(fail('ROM_CLOSED'))
     if (!child || (method !== 'initialize' && !romReady)) return Promise.reject(fail('ROM_NOT_INITIALIZED'))
     if (pending) return Promise.reject(fail('ROM_BUSY'))
     return new Promise((resolve, rejectPromise) => {
       const id = ++sequence
-      pending = { id, resolve, reject: rejectPromise, timer: setTimeout(() => { reject('ROM_TIMEOUT'); void loader.disconnect() }, 180000) }
+      pending = { id, resolve, reject: rejectPromise, timer: setTimeout(() => { reject('ROM_TIMEOUT'); void loader.disconnect() }, timeout) }
       child.stdin.write(JSON.stringify({ id, method, args }) + '\n', error => { if (error) reject('ROM_IO_FAILED') })
     })
   }
   async function closeProcess() {
     const process = child
-    child = null; romReady = false; reject('ROM_CLOSED'); input?.close(); input = null
+    child = null; romReady = stubReady = false; reject('ROM_CLOSED'); input?.close(); input = null
     if (!process || process.exitCode !== null) return
     await new Promise(resolve => {
       const timer = setTimeout(() => { process.kill(); resolve() }, 2000)
@@ -97,7 +97,35 @@ export function openNodeRom({ port, python = defaultPython, signal } = {}, depen
     },
     flashId: () => rpc('flashId'),
     getSecurityInfo: () => rpc('security'),
-    async runStub() { await rpc('stub'); return loader },
+    get IS_STUB() { return romReady && stubReady },
+    async runStub() {
+      stubReady = false
+      try {
+        const result = await rpc('stub')
+        if (result?.stubRunning !== true) throw fail('ROM_STUB_REQUIRED')
+        stubReady = true
+        return loader
+      } catch (error) { await loader.disconnect(); throw error }
+    },
+    async eraseRegion(address, size) {
+      if (!Number.isSafeInteger(address) || address < 0 || address % 4096 !== 0
+          || !Number.isSafeInteger(size) || size <= 0 || size > 0xffffffff || size % 4096 !== 0
+          || address + size > 0x100000000) throw new RangeError('ROM erase requires a positive, sector-aligned 32-bit address range')
+      if (closed) throw fail('ROM_CLOSED')
+      if (!romReady) throw fail('ROM_NOT_INITIALIZED')
+      if (!stubReady) throw fail('ROM_STUB_REQUIRED')
+      const cancelled = () => { reject('CANCELLED'); void loader.disconnect() }
+      signal.addEventListener('abort', cancelled, { once: true })
+      try {
+        signal.throwIfAborted()
+        // esptool 5.6.0 permits 40 seconds per decimal MB. Large FFAT regions
+        // must not inherit the shorter generic RPC timeout.
+        await rpc('eraseRegion', [address, size], Math.max(180000, Math.ceil(size / 1000000 * 40000) + 30000))
+        signal.throwIfAborted()
+        if (closed || !stubReady) throw fail('ROM_CLOSED')
+      } catch (error) { await loader.disconnect(); throw error }
+      finally { signal.removeEventListener('abort', cancelled) }
+    },
     async readFlash(offset, bytes, progress, options) {
       if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(bytes) || bytes <= 0 || bytes > 0xffffffff
           || offset + bytes > 0x100000000) throw new RangeError('ROM read requires a positive 32-bit address range')

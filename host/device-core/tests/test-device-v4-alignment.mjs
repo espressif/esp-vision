@@ -10,6 +10,37 @@ function fixture(options = {}) {
   return new DeviceSession({ transport: { async writeBytes() {} }, EvMuxParser, makeEvMuxFrame, EvRepl, ...options })
 }
 
+async function flushMicrotasks() {
+  for (let i = 0; i < 20; i++) await Promise.resolve()
+}
+
+async function advance(t, ms) {
+  t.mock.timers.tick(ms)
+  await flushMicrotasks()
+}
+
+function startupFixture(t, { signal, progressMs = 12000, totalMs = 12000 } = {}) {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+  const stats = { writes: 0, requests: 0, disconnects: 0, settled: false, firstRequestAt: null }
+  const diagnostics = []
+  const session = fixture({
+    transport: { async writeBytes() { stats.writes += 1 }, async disconnect() { stats.disconnects += 1 } },
+    handlers: { diagnostic: event => diagnostics.push(event) },
+  })
+  session.parser.setLimits({ frameProgressTimeoutMs: progressMs, frameTotalTimeoutMs: totalMs })
+  session.rpc = async () => {
+    stats.requests += 1
+    stats.firstRequestAt = Date.now()
+    throw new Error('first request reached')
+  }
+  const result = session.negotiate({ role: 'usb', signal }).then(
+    () => { throw new Error('unexpected successful fixture negotiation') },
+    error => { stats.settled = true; return error },
+  )
+  t.after(() => { session.close(); session.parser.reset() })
+  return { session, stats, diagnostics, result }
+}
+
 test('Unicode Python is ASCII on the wire and length preflight includes escapes', async () => {
   let command
   const repl = new EvRepl({ writeEvmux() {} })
@@ -73,16 +104,239 @@ test('startup drain parses split frames without adopting old sessions', async ()
   session.close()
 })
 
-test('unfinished startup frames close the transport before any request', async () => {
-  let session, writes = 0, disconnects = 0
-  session = fixture({
-    transport: { async writeBytes() { writes += 1 }, async disconnect() { disconnects += 1 } },
-    sleep: async () => { session.feedBytes(new TextEncoder().encode('\x1eEVMUX/1 h=100 p=0 c=00000000\r\n{')) },
+test('startup waits for a valid frame split across 299/301 ms without accepting old sessions', async t => {
+  const f = startupFixture(t)
+  const frame = makeEvMuxFrame({ channel: 'user.rpc', type: 'event', method: 'hello',
+    sessionId: 'a'.repeat(32), vmEpoch: 9,
+    payload: JSON.stringify({ evMuxVersion: 4, session: { id: 'a'.repeat(32), vmEpoch: 9 }, vmEpoch: 9 }) })
+  await advance(t, 299)
+  f.session.feedBytes(frame.subarray(0, 20))
+  await advance(t, 1)
+  assert.equal(f.stats.settled, false)
+  assert.equal(f.stats.requests, 0)
+  assert.equal(f.session.draining, true)
+  assert.equal(f.session.sessionId, null)
+  assert.equal(f.session.vmEpoch, null)
+  const snapshot = f.session.parser.getDiagnostics()
+  assert.equal(snapshot.partialFrame.startedAt, 299)
+  snapshot.partialFrame.totalDeadline = 0
+  assert.equal(f.session.parser.getDiagnostics().partialFrame.totalDeadline, 12299)
+  await advance(t, 1)
+  const staleLog = makeEvMuxFrame({ channel: 'log.idf', payload: 'old startup text' })
+  f.session.feedBytes(Buffer.concat([frame.subarray(20), staleLog]))
+  assert.match((await f.result).message, /first request reached/)
+  assert.equal(f.stats.firstRequestAt, 301)
+  assert.equal(f.stats.disconnects, 0)
+  assert.equal(f.session.sessionId, null)
+  assert.equal(f.session.vmEpoch, null)
+  assert.equal(f.session.parser.getDiagnostics().droppedFrames, 2)
+  assert.equal(f.session.parser.getDiagnostics().bufferedBytes, 0)
+  assert.equal(f.session.startupDrainWait, null)
+  assert.equal(f.session.draining, false)
+})
+
+test('a frame complete before 300 ms adds no startup wait', async t => {
+  const f = startupFixture(t)
+  await advance(t, 299)
+  f.session.feedBytes(makeEvMuxFrame({ channel: 'log.idf', payload: 'complete' }))
+  await advance(t, 1)
+  assert.match((await f.result).message, /first request reached/)
+  assert.equal(f.stats.firstRequestAt, 300)
+  assert.equal(f.session.startupDrainWait, null)
+  assert.equal(f.diagnostics.some(event => event.event === 'negotiate.startup_frame_wait'), false)
+})
+
+for (const [kind, makePartial] of [
+  ['header', frame => frame.subarray(0, 20)],
+  ['body', frame => frame.subarray(0, -1)],
+]) {
+  test(`a truncated startup ${kind} times out before any request, even after the parser empties it`, async t => {
+    const f = startupFixture(t, { progressMs: 500, totalMs: 2000 })
+    const frame = makeEvMuxFrame({ channel: 'user.rpc', type: 'event', method: 'hello', payload: '{}' })
+    await advance(t, 299)
+    f.session.feedBytes(makePartial(frame))
+    await advance(t, 1)
+    assert.equal(f.session.draining, true)
+    assert.equal(f.stats.requests, 0)
+    await advance(t, 498)
+    assert.equal(f.stats.settled, false)
+    await advance(t, 1)
+    assert.equal((await f.result).code, 'SERIAL_STARTUP_INCOMPLETE_FRAME')
+    assert.equal(f.stats.requests, 0)
+    assert.equal(f.stats.writes, 0)
+    assert.equal(f.stats.disconnects, 1)
+    assert.equal(f.session.state, 'disconnected')
+    assert.equal(f.session.startupDrainWait, null)
+    const error = f.diagnostics.find(event => event.event === 'negotiate.startup_incomplete')
+    assert.equal(error.parser.incompleteFrameTimeouts, 1)
+    assert.equal(error.parser.bufferedBytes, 0)
   })
-  await assert.rejects(session.negotiate({ drainMs: 300 }), error => error.code === 'SERIAL_STARTUP_INCOMPLETE_FRAME')
-  assert.equal(writes, 0)
+}
+
+test('successive coalesced startup frames cannot extend the initial partial-frame deadline', async t => {
+  const f = startupFixture(t, { progressMs: 1000, totalMs: 500 })
+  const frame = makeEvMuxFrame({ channel: 'log.idf', payload: 'ongoing output' })
+  await advance(t, 299)
+  f.session.feedBytes(frame.subarray(0, 20))
+  await advance(t, 1)
+  await advance(t, 1)
+  f.session.feedBytes(Buffer.concat([frame.subarray(20), frame.subarray(0, 20)]))
+  await advance(t, 299)
+  f.session.feedBytes(Buffer.concat([frame.subarray(20), frame.subarray(0, 20)]))
+  await advance(t, 198)
+  assert.equal(f.stats.settled, false)
+  assert.equal(f.session.draining, true)
+  assert.equal(f.stats.requests, 0)
+  await advance(t, 1)
+  assert.equal((await f.result).code, 'SERIAL_STARTUP_INCOMPLETE_FRAME')
+  assert.equal(Date.now(), 799)
+  assert.equal(f.stats.requests, 0)
+  assert.equal(f.stats.writes, 0)
+  assert.equal(f.stats.disconnects, 1)
+  const error = f.diagnostics.find(event => event.event === 'negotiate.startup_incomplete')
+  assert.equal(error.parser.partialFrame.startedAt, 600)
+  assert.equal(error.parser.incompleteFrameTimeouts, 0)
+})
+
+test('back-to-back adapter notifications cannot send hello between a completed tail and another prefix', async t => {
+  const f = startupFixture(t)
+  const frame = makeEvMuxFrame({ channel: 'log.idf', payload: 'adjacent chunks' })
+  await advance(t, 299)
+  f.session.feedBytes(frame.subarray(0, 20))
+  await advance(t, 1)
+  await advance(t, 1)
+  f.session.feedBytes(frame.subarray(20))
+  f.session.feedBytes(frame.subarray(0, 20))
+  await flushMicrotasks()
+  assert.equal(f.stats.requests, 0)
+  assert.equal(f.session.draining, true)
+  assert.notEqual(f.session.startupDrainWait, null)
+  await advance(t, 1)
+  f.session.feedBytes(frame.subarray(20))
+  assert.match((await f.result).message, /first request reached/)
+  assert.equal(f.stats.firstRequestAt, 302)
+  assert.equal(f.session.startupDrainWait, null)
+})
+
+test('actual startup progress refreshes the idle budget within the fixed total deadline', async t => {
+  const f = startupFixture(t, { progressMs: 100, totalMs: 2000 })
+  const frame = makeEvMuxFrame({ channel: 'log.idf', payload: 'progress' })
+  await advance(t, 299)
+  f.session.feedBytes(frame.subarray(0, 20))
+  await advance(t, 1)
+  await advance(t, 50)
+  f.session.feedBytes(frame.subarray(20, 21))
+  await advance(t, 99)
+  assert.equal(f.stats.settled, false)
+  await advance(t, 1)
+  assert.equal((await f.result).code, 'SERIAL_STARTUP_INCOMPLETE_FRAME')
+  assert.equal(Date.now(), 450)
+  assert.equal(f.stats.requests, 0)
+  assert.equal(f.stats.disconnects, 1)
+})
+
+test('a receive timeout inside the initial 300 ms cannot become an empty successful drain', async t => {
+  const f = startupFixture(t, { progressMs: 100, totalMs: 1000 })
+  await advance(t, 1)
+  f.session.feedBytes(new TextEncoder().encode('\x1eEVMUX/1 h='))
+  await advance(t, 100)
+  assert.equal(f.session.parser.hasPartialFrame(), false)
+  assert.equal(f.session.parser.getDiagnostics().incompleteFrameTimeouts, 1)
+  await advance(t, 199)
+  assert.equal((await f.result).code, 'SERIAL_STARTUP_INCOMPLETE_FRAME')
+  assert.equal(f.stats.requests, 0)
+  assert.equal(f.stats.writes, 0)
+  assert.equal(f.stats.disconnects, 1)
+})
+
+test('a complete tail received after an expired idle budget cannot bypass the queued timeout', async t => {
+  const f = startupFixture(t, { progressMs: 100, totalMs: 2000 })
+  const frame = makeEvMuxFrame({ channel: 'log.idf', payload: 'late tail' })
+  await advance(t, 299)
+  f.session.feedBytes(frame.subarray(0, 20))
+  await advance(t, 1)
+  // Model a busy event loop: the wall clock passes the idle deadline before
+  // either timer callback runs, then an already queued read delivers the tail.
+  t.mock.timers.setTime(400)
+  f.session.feedBytes(frame.subarray(20))
+  assert.equal((await f.result).code, 'SERIAL_STARTUP_INCOMPLETE_FRAME')
+  assert.equal(f.stats.requests, 0)
+  assert.equal(f.stats.writes, 0)
+  assert.equal(f.stats.disconnects, 1)
+})
+
+test('dripping bytes of one startup frame cannot extend its total budget', async t => {
+  const f = startupFixture(t, { progressMs: 150, totalMs: 400 })
+  const frame = makeEvMuxFrame({ channel: 'log.idf', payload: 'progress' })
+  await advance(t, 299)
+  f.session.feedBytes(frame.subarray(0, 20))
+  await advance(t, 1)
+  for (let i = 0; i < 3; i++) {
+    await advance(t, 100)
+    f.session.feedBytes(frame.subarray(20 + i, 21 + i))
+  }
+  await advance(t, 98)
+  assert.equal(f.stats.settled, false)
+  await advance(t, 1)
+  assert.equal((await f.result).code, 'SERIAL_STARTUP_INCOMPLETE_FRAME')
+  assert.equal(Date.now(), 699)
+  assert.equal(f.stats.requests, 0)
+  assert.equal(f.stats.writes, 0)
+  assert.equal(f.stats.disconnects, 1)
+})
+
+for (const action of ['cancel', 'close']) {
+  test(`${action} promptly clears the startup boundary waiter without sending a request`, async t => {
+    const controller = new AbortController()
+    const f = startupFixture(t, { signal: controller.signal })
+    await advance(t, 299)
+    f.session.feedBytes(new TextEncoder().encode('\x1eEVMUX/1 h='))
+    await advance(t, 1)
+    assert.notEqual(f.session.startupDrainWait, null)
+    const reason = new Error(`test ${action}`)
+    if (action === 'cancel') controller.abort(reason)
+    else f.session.close(reason)
+    assert.equal(await f.result, reason)
+    assert.equal(f.session.startupDrainWait, null)
+    assert.equal(f.session.draining, false)
+    assert.equal(f.session.negotiateController, null)
+    await advance(t, 13000)
+    assert.equal(f.stats.requests, 0)
+    assert.equal(f.stats.writes, 0)
+    assert.equal(f.diagnostics.some(event => event.event === 'negotiate.startup_incomplete'), false)
+  })
+}
+
+test('injected legacy parsers keep the conservative incomplete-frame failure without private budget methods', async () => {
+  class LegacyParser {
+    constructor(handlers) { this.parser = new EvMuxParser(handlers) }
+    feedBytes(bytes) { this.parser.feedBytes(bytes) }
+    hasPartialFrame() { return this.parser.hasPartialFrame() }
+    reset() { this.parser.reset() }
+  }
+  let session, disconnects = 0, requests = 0
+  session = fixture({
+    EvMuxParser: LegacyParser,
+    transport: { async writeBytes() {}, async disconnect() { disconnects += 1 } },
+    sleep: async () => session.feedBytes(new TextEncoder().encode('\x1eEVMUX/1 h=')),
+  })
+  session.rpc = async () => { requests += 1; throw new Error('unexpected request') }
+  await assert.rejects(session.negotiate(), error => error.code === 'SERIAL_STARTUP_INCOMPLETE_FRAME')
+  assert.equal(requests, 0)
   assert.equal(disconnects, 1)
-  assert.equal(session.state, 'disconnected')
+  assert.equal(session.startupDrainWait, null)
+  session.close()
+})
+
+test('injected parsers without optional startup diagnostics or boundary methods remain supported', async () => {
+  class MinimalParser extends EvMuxParser {
+    constructor(handlers) { super(handlers); this.hasPartialFrame = undefined; this.getDiagnostics = undefined }
+  }
+  const session = fixture({ EvMuxParser: MinimalParser, sleep: async () => {} })
+  session.rpc = async () => { throw new Error('first request reached') }
+  await assert.rejects(session.negotiate(), /first request reached/)
+  session.close()
+  session.parser.reset()
 })
 
 test('plain console tails do not fail drain and TCP does not wait for drain', async () => {

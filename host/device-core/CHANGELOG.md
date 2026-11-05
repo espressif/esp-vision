@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.0
+
+### Fixed
+
+- Allow a serial frame split across the initial 300 ms startup drain to finish within the parser's existing progress/total budgets while rejecting old frames and sending no hello. Freeze the total deadline across successive frames, fail when the parser discards an incomplete frame on timeout, and cancel boundary waits on abort or close; retain conservative failure for injected older parsers without receive-budget support. Add payload-free partial-frame timing/timeout diagnostics and regressions for split/coalesced startup data, bounded progress and cleanup.
+
+### Changed
+
+- Expose the browser ROM adapter's canonical factory `chipMac`, matching Node, and accept a strictly validated optional `expectedMac` before any port access. Bind initialization and baud recovery to that MAC as well as chip family/revision; mismatches preserve `ROM_IDENTITY_CHANGED` and close the adapter before another stub, erase or write. Keep initial manually selected ROM usage compatible when the option is omitted.
+
+- Clear and verify the S31 LP download latch at its own target address after programming, preserving unrelated bits before reset so software ROM entry can return to the application.
+
+- Explicit complete installation clears internal FAT filesystem files, including scripts and models, before writing firmware; application updates retain their existing data-preserving behavior. Hosts must explain this deletion before selecting install mode. Complete images may also replace NVS configuration; SD cards are not erased.
+- Require complete installations to derive the unencrypted writable `ffat` range from the hash-approved ESP partition table, verify layout/MD5, application bounds, chip/security and flash capacity, then erase and verify that exact range before any firmware write. Unsupported layouts/adapters, erase/read errors and cancellation before writing fail without reset or automatic retry.
+- Add `eraseRegion(address, size)` to the built-in browser/Node ROM stubs, using fixed official esptool primitives with sector-aligned bounds. Custom full-install adapters need the same capability; application-only adapters do not.
+- Bind installation qualification to private metadata/data snapshots. Cancellation is honored during erase and erased-range verification; once firmware writing starts, the existing complete-verification/reset policy remains in force.
+
 ## 0.6.1
 
 ### Fixed

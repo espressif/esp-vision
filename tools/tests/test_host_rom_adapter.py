@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 import base64
+import contextlib
 from collections import deque
 import hashlib
 import importlib.util
@@ -31,11 +32,14 @@ class HostRomAdapterTests(unittest.TestCase):
         esp = SimpleNamespace(CHIP_NAME='ESP32-P4', IS_STUB=stub, get_chip_revision=lambda: 302,
                               read_mac=lambda: bytes.fromhex('e8f60ae75642'),
                               get_security_info=lambda: {'flags': 0, 'flash_crypt_cnt': 0},
+                              secure_download_mode=False, get_flash_encryption_enabled=lambda: False,
+                              get_secure_boot_enabled=lambda: False, uses_key_manager_for_flash_encryption=lambda: False,
+                              erase_region=Mock(),
                               change_baud=lambda value: calls.append(('baud', value)),
                               read_flash=lambda *_: b'AB', hard_reset=lambda: calls.append('reset'))
 
         esp.FLASH_SECTOR_SIZE = 4096
-        esp.ESP_CMDS = {'READ_FLASH': 0xd2}
+        esp.ESP_CMDS = {'READ_FLASH': 0xd2, 'ERASE_REGION': 0xd1}
         esp.check_command = Mock(return_value=0)
 
         def read_flash(offset, length):
@@ -97,9 +101,15 @@ class HostRomAdapterTests(unittest.TestCase):
             self.assertEqual(options, {'flash_mode': 'keep', 'flash_freq': 'keep', 'flash_size': 'keep', 'compress': True})
             calls.append('write')
 
+        def erase_region(loader, address, size, *, force):
+            self.assertIs(loader, esp)
+            self.assertIs(force, False)
+            calls.append(('erase', address, size))
+            return loader.erase_region(address, size)
+
         tool = SimpleNamespace(__version__='5.6.0', detect_chip=Mock(side_effect=detect_chip),
                                run_stub=run_stub, attach_flash=lambda _: calls.append('attach'),
-                               write_flash=write_flash)
+                               write_flash=write_flash, erase_region=erase_region)
         comports = Mock(return_value=list(descriptors), side_effect=enumeration_error)
         modules = {'esptool': tool, 'serial': SimpleNamespace(serial_for_url=serial_for_url),
                    'serial.tools': SimpleNamespace(), 'serial.tools.list_ports': SimpleNamespace(comports=comports)}
@@ -286,6 +296,73 @@ class HostRomAdapterTests(unittest.TestCase):
             with self.subTest(offset=offset, length=length), self.assertRaises(ValueError):
                 MODULE._read_flash(fixture.esp, offset, length)
         fixture.esp.check_command.assert_not_called()
+
+    def test_region_erase_rpc_uses_only_the_external_official_region_api(self):
+        fixture = self.fixture()
+        responses = self.run_process(fixture, [('initialize', []), ('stub', []),
+            ('eraseRegion', [0x710000, 0x8f0000])])
+        self.assertTrue(all('error' not in response for response in responses))
+        self.assertEqual(responses[1]['result'], {'stubRunning': True})
+        fixture.esp.erase_region.assert_called_once_with(0x710000, 0x8f0000)
+        self.assertEqual(fixture.calls[-2:], [('erase', 0x710000, 0x8f0000), ('close', 1)])
+        self.assertNotIn('write', fixture.calls)
+
+    def test_region_erase_rejects_non_stub_or_malformed_ranges_before_external_erase(self):
+        fixture = self.fixture()
+        with self.assertRaisesRegex(RuntimeError, 'flasher stub'):
+            MODULE._erase_region(fixture.tool, fixture.esp, 0x710000, 4096)
+        fixture.esp.IS_STUB = True
+        for address, size in [(-4096, 4096), (1, 4096), (0, 0), (0, 1), (0, 0x100000000),
+                              (0xfffff000, 8192), (True, 4096), (0, True), (0x100000000, 4096)]:
+            with self.subTest(address=address, size=size), self.assertRaises(ValueError):
+                MODULE._erase_region(fixture.tool, fixture.esp, address, size)
+        fixture.esp.erase_region.assert_not_called()
+        fixture.esp.check_command.assert_not_called()
+
+    def test_region_erase_failure_closes_the_port_and_seals_later_write_or_erase_requests(self):
+        fixture = self.fixture(stub=True)
+        fixture.esp.erase_region.side_effect = OSError('USB detached during erase')
+        responses = self.run_process(fixture, [('initialize', []), ('eraseRegion', [0x710000, 4096]),
+            ('write', [65536, 'QUI=']), ('eraseRegion', [0x710000, 4096])])
+        self.assertEqual(responses[1]['error'], 'ROM_OPERATION_FAILED')
+        self.assertEqual(responses[1]['detail'], 'USB detached during erase')
+        for response in responses[2:]:
+            self.assertEqual(response['error'], 'ROM_OPERATION_FAILED')
+            self.assertIn('start a fresh ROM session', response['detail'])
+        fixture.esp.erase_region.assert_called_once_with(0x710000, 4096)
+        self.assertNotIn('write', fixture.calls)
+        self.assertEqual(fixture.calls.count(('close', 1)), 1)
+
+    def test_missing_stub_handshake_cannot_report_stub_success_or_erase(self):
+        fixture = self.fixture()
+        fixture.tool.run_stub = lambda esp: esp
+        responses = self.run_process(fixture, [('initialize', []), ('stub', []), ('eraseRegion', [0x710000, 4096])])
+        self.assertIn('validated flasher stub', responses[1]['detail'])
+        self.assertIn('initialized flasher stub', responses[2]['detail'])
+        fixture.esp.erase_region.assert_not_called()
+
+
+@unittest.skipUnless(ESPLoader is not None, 'Install external esptool==5.6.0 for real upstream erase regressions')
+class UpstreamRegionEraseTests(unittest.TestCase):
+    def test_real_upstream_region_command_has_the_exact_range_opcode_and_scaled_timeout(self):
+        self.assertEqual(REAL_ESPTOOL.__version__, '5.6.0')
+        fixture = HostRomAdapterTests.fixture(self, stub=True)
+        fixture.esp.erase_region = ESPLoader.erase_region.__get__(fixture.esp)
+        with contextlib.redirect_stdout(io.StringIO()):
+            MODULE._erase_region(REAL_ESPTOOL, fixture.esp, 0x710000, 0x8f0000)
+        call = fixture.esp.check_command.call_args
+        self.assertEqual(call.args, ('erase region', 0xd1, struct.pack('<II', 0x710000, 0x8f0000)))
+        self.assertEqual(call.kwargs, {'timeout': max(3, 40 * (0x8f0000 / 1e6))})
+        self.assertEqual(fixture.esp.check_command.call_count, 1)
+
+    def test_real_upstream_security_checks_block_region_erase_without_force(self):
+        self.assertEqual(REAL_ESPTOOL.__version__, '5.6.0')
+        for feature in ['get_flash_encryption_enabled', 'get_secure_boot_enabled']:
+            fixture = HostRomAdapterTests.fixture(self, stub=True)
+            setattr(fixture.esp, feature, lambda: True)
+            with self.subTest(feature=feature), self.assertRaisesRegex(Exception, 'Active security features'):
+                MODULE._erase_region(REAL_ESPTOOL, fixture.esp, 0x710000, 4096)
+            fixture.esp.erase_region.assert_not_called()
 
 
 @unittest.skipUnless(ESPLoader is not None, 'Install external esptool==5.6.0 for real upstream reader regressions')

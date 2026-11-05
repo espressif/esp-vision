@@ -122,12 +122,25 @@ def _read_flash(esp, offset, length, options=None):
                     esp.FLASH_SECTOR_SIZE = old_block
 
 
+def _erase_region(esptool, esp, address, size):
+    """Erase only the qualified range through the external official command."""
+    if type(address) is not int or address < 0 or address % 4096 or type(size) is not int or size <= 0 or size > 0xffffffff or size % 4096 or address + size > 0x100000000:
+        raise ValueError('ROM erase requires a positive, sector-aligned 32-bit address range')
+    if not getattr(esp, 'IS_STUB', False):
+        raise RuntimeError('Flash region erase requires an initialized flasher stub')
+    if getattr(esp, 'FLASH_SECTOR_SIZE', None) != 4096 or not callable(getattr(esp, 'erase_region', None)):
+        raise RuntimeError('Unsupported esptool stub region erase; use esptool==5.6.0')
+    # Do not use force: the official command also checks active security state.
+    esptool.erase_region(esp, address, size, force=False)
+
+
 def main():
     with contextlib.redirect_stdout(sys.stderr):
         import esptool
     if esptool.__version__ != '5.6.0':
         raise RuntimeError('Install esptool==5.6.0 for the verified bounded Flash reader')
     esp = None
+    erase_failed = False
     families = {'ESP32-P4': 0x3280, 'ESP32-S3': 0x3253, 'ESP32-S31': 0x3231}
     try:
         for line in sys.stdin:
@@ -136,6 +149,8 @@ def main():
                 with contextlib.redirect_stdout(sys.stderr):
                     method, args = request['method'], request.get('args', [])
                     result = None
+                    if erase_failed:
+                        raise RuntimeError('Flash region erase failed; start a fresh ROM session')
                     if method != 'initialize' and esp is None:
                         raise RuntimeError('Initialize the ROM adapter before issuing operations')
                     if method == 'initialize':
@@ -158,12 +173,17 @@ def main():
                         result = {'flags': security['flags'], 'flashCryptCnt': security['flash_crypt_cnt']}
                     elif method == 'stub':
                         esp = esptool.run_stub(esp)
+                        if not esp.IS_STUB:
+                            raise RuntimeError('A validated flasher stub is required')
                         esptool.attach_flash(esp)
                         esp.change_baud(460800)
+                        result = {'stubRunning': True}
                     elif method == 'flashId':
                         result = esp.flash_id()
                     elif method == 'read':
                         result = base64.b64encode(_read_flash(esp, *args)).decode('ascii')
+                    elif method == 'eraseRegion':
+                        _erase_region(esptool, esp, *args)
                     elif method == 'write':
                         offset, encoded = args
                         data = base64.b64decode(encoded, validate=True)
@@ -178,9 +198,14 @@ def main():
                         raise ValueError('Unknown ROM adapter method')
                 print(json.dumps({'id': request['id'], 'result': result}), flush=True)
             except Exception as error:
+                if request['method'] == 'eraseRegion':
+                    erase_failed = True
+                    with contextlib.suppress(Exception):
+                        if esp is not None and esp._port.is_open:
+                            esp._port.close()
                 print(json.dumps({'id': request['id'], 'error': 'ROM_OPERATION_FAILED', 'method': request['method'], 'detail': str(error)}), flush=True)
     finally:
-        if esp is not None:
+        if esp is not None and esp._port.is_open:
             esp._port.close()
 
 

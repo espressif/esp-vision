@@ -50,12 +50,13 @@ try {
     async setSignals() { throw new Error('OTG must not require UART control signals') },
   })
   try {
-    prototype.detectChip = async function () { detects++; await this.transport.connect(115200); this.chip = { CHIP_NAME: 'ESP32-S31', getChipRevision: async () => 0 } }
+    prototype.detectChip = async function () { detects++; await this.transport.connect(115200); this.chip = { CHIP_NAME: 'ESP32-S31', getChipRevision: async () => 0, readMac: async () => '30:ed:a0:ed:a1:b0' } }
     prototype.getSecurityInfo = async () => ({ flags: 0, flashCryptCnt: 0 })
-    const controller = new AbortController(), loader = context.DeviceCore.openBrowserRom({ port: fakePort(), signal: controller.signal })
+    const controller = new AbortController(), loader = context.DeviceCore.openBrowserRom({ port: fakePort(), signal: controller.signal, expectedMac: '30EDA0EDA1B0' })
+    assert.equal(loader.chipMac, null)
     const first = loader.initialize()
     assert.equal(loader.initialize(), first)
-    await first; controller.abort()
+    await first; assert.equal(loader.chipMac, '30eda0eda1b0'); controller.abort()
     assert.equal(closes, 0, 'abort after initialization preserves ongoing flash')
     await loader.disconnect(); await loader.disconnect()
     assert.equal(closes, 1); assert.equal(detects, 1)
@@ -73,6 +74,18 @@ try {
     cancelled.abort(); await assert.rejects(starting, { name: 'AbortError' })
     finishOpen(); await new Promise(resolve => setTimeout(resolve, 5))
     assert.equal(closes, 3); assert.equal(waitingPort.readable, null)
+    prototype.runStub = async function () { this.IS_STUB = true }
+    let finishErase
+    prototype.checkCommand = () => new Promise(resolve => { finishErase = resolve })
+    const eraseCancel = new AbortController(), erasePort = fakePort()
+    const eraseLoader = context.DeviceCore.openBrowserRom({ port: erasePort, signal: eraseCancel.signal })
+    await eraseLoader.initialize(); const eraseStub = await eraseLoader.runStub()
+    const erasing = eraseStub.eraseRegion(0x710000, 4096)
+    const failedErase = assert.rejects(erasing, { name: 'AbortError' })
+    eraseCancel.abort(); await failedErase
+    finishErase(0)
+    assert.equal(closes, 4); assert.equal(erasePort.readable, null)
+    await assert.rejects(eraseStub.eraseRegion(0x710000, 4096))
     const data = new Uint8Array([0xe9, 1, 2, 3]), table = new Uint8Array([4, 5])
     const hash = async bytes => Array.from(new Uint8Array(await webcrypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('')
     const release = { board: 'BOARD', version: 'browser-test', image: {
@@ -102,10 +115,16 @@ try {
       this.transport.buffer = new Uint8Array([...frame(bytes), ...frame(digest)])
       return 0
     }
+    const wrongPort = fakePort(), wrong = context.DeviceCore.openBrowserRom({ port: wrongPort, expectedMac: '30eda0eda1b1' })
+    const beforeStubs = stubs, beforeWrites = writes
+    await assert.rejects(wrong.initialize(), { code: 'ROM_IDENTITY_CHANGED' })
+    assert.equal(wrong.chipMac, null); assert.equal(wrongPort.readable, null)
+    await assert.rejects(async () => wrong.runStub(), { code: 'ROM_CLOSED' })
+    assert.equal(stubs, beforeStubs); assert.equal(writes, beforeWrites)
     const updatePort = fakePort(), openUpdate = updatePort.open
     updatePort.open = async function (...args) { await openUpdate.apply(this, args); this.writable = { getWriter: () => ({ async write() {}, releaseLock() {} }) } }
     const beforeCloses = closes
-    const updated = await device.firmware.update({ ...request, signal: writing.signal, openLoader: ({ signal }) => context.DeviceCore.openBrowserRom({ port: updatePort, signal }) })
+    const updated = await device.firmware.update({ ...request, signal: writing.signal, openLoader: ({ signal }) => context.DeviceCore.openBrowserRom({ port: updatePort, signal, expectedMac: '30eda0eda1b0' }) })
     assert.equal(updated.verified, true); assert.equal(updated.needsReset, false)
     assert.equal(stubs, 1); assert.equal(writes, 1); assert.equal(resets, 4)
     assert.equal(closes, beforeCloses + 1)

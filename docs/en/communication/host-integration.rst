@@ -51,7 +51,7 @@ Why serial startup drain runs only once
 
 Opening USB serial may reveal old complete/partial frames, tracebacks and IDF startup text; it does not trigger a discovery hello. ``serial.flush()`` normally waits for host TX rather than reading/clearing device replies.
 
-At connection startup Core receives and processes startup bytes through the same parser for a target 300 ms; this does not establish a business session. An incomplete header/body at the end of this window fails the connection with a structured error and cleanup rather than truncating bytes and immediately sending commands.
+At connection startup Core receives and processes startup bytes through the same parser for a target 300 ms; this does not establish a business session. If a possible incomplete header/body crosses that window, Core continues receiving within the parser's remaining progress and total frame budgets (both default to 12 seconds). It keeps rejecting startup frames and sends no hello until parsing reaches a complete frame boundary. The total deadline is fixed when this extra wait begins; successive frames cannot extend it. Cancellation, disconnection or an expired receive budget fails the connection and cleans up. A parser timeout that discards an incomplete frame is a failure, not a completed boundary; Core never flushes or truncates buffered bytes to manufacture success.
 
 Drain reduces observed old data; it neither proves every device/USB/host buffer empty nor diagnoses USB completion failures. Never clear input before every subsequent request, losing keepalive/preview/replies.
 
@@ -62,8 +62,8 @@ Drain reduces observed old data; it neither proves every device/USB/host buffer 
      node_height = 60;
      orientation = portrait;
      open [label = "open serial once"];
-     drain [label = "300 ms bounded read\none parser across chunks"];
-     test [label = "no incomplete header/body"];
+     drain [label = "300 ms initial read\none parser across chunks"];
+     test [label = "finish partial frame\nfixed receive deadline"];
      hello [label = "new correlated hello/acquire"];
      work [label = "continuous reader\nnever flush per request"];
      open -> drain -> test -> hello -> work;
@@ -150,7 +150,7 @@ Host timeout budgets must remain distinct
 
 * Discovery/capabilities: reference correlated RPC default about 6 seconds.
 * Keepalive: about 3 seconds per request, within firmware total lease.
-* Serial startup drain: target 300 ms, once on initial connection.
+* Serial startup drain: target 300 ms, once on initial connection; a crossing partial frame may finish within its remaining receive budgets, without extending the fixed total deadline.
 * Host RX frame assembly: reference budget about 12 seconds, allowing multi-second TCP read gaps.
 * Device RX: approximately 3/10 seconds idle/frame; opposite direction from host large-image reception.
 * VM queue: expires around 5 seconds; longer host waits do not enlarge it.

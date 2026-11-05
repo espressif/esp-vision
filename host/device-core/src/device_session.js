@@ -343,6 +343,7 @@ export class DeviceSession {
     this.vmReadinessProbeActive = false
     this.pendingRpc = new Map()
     this.draining = false
+    this.startupDrainWait = null
     this.lastDebugImage = null
     this.runCapture = null
     this.runStarting = false
@@ -690,6 +691,7 @@ export class DeviceSession {
 
   feedBytes(bytes) {
     this.parser.feedBytes(bytes)
+    this.startupDrainWait?.check()
   }
 
   feedText(text) {
@@ -1031,6 +1033,62 @@ export class DeviceSession {
     return tracked
   }
 
+  _startupFrameError(reason) {
+    this._diagnostic('negotiate.startup_incomplete', { reason, parser: this.parser.getDiagnostics?.() })
+    return Object.assign(new Error('Incomplete EV-MUX frame at end of startup drain'), {
+      code: 'SERIAL_STARTUP_INCOMPLETE_FRAME',
+    })
+  }
+
+  _waitForStartupFrameBoundary(signal, timeoutCount, initial, totalDeadline) {
+    this._diagnostic('negotiate.startup_frame_wait', { parser: this.parser.getDiagnostics?.() })
+    return new Promise((resolve, reject) => {
+      let timer = null
+      let settled = false
+      let receiveDeadline = Math.min(totalDeadline, initial.progressDeadline)
+      const finish = (error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', abort)
+        if (this.startupDrainWait === waiter) this.startupDrainWait = null
+        if (error) reject(error)
+        else resolve()
+      }
+      const abort = () => finish(abortError(signal))
+      const check = () => {
+        if (settled) return
+        clearTimeout(timer)
+        if (signal?.aborted) { abort(); return }
+        // A parser timeout may have emptied the buffer before this callback.
+        // Discarding an unfinished frame is never a completed startup boundary.
+        if ((this.parser.getDiagnostics?.()?.incompleteFrameTimeouts ?? 0) !== timeoutCount) {
+          finish(this._startupFrameError('receive_timeout'))
+          return
+        }
+        if (Date.now() >= receiveDeadline) {
+          finish(this._startupFrameError('receive_timeout'))
+          return
+        }
+        if (!this.parser.hasPartialFrame?.()) { finish(); return }
+        const current = this.parser._partialFrameBudget?.()
+        if (!Number.isFinite(current?.totalDeadline) || !Number.isFinite(current?.progressDeadline)) {
+          finish(this._startupFrameError('receive_budget_unavailable'))
+          return
+        }
+        // New frames in a coalesced chunk must not extend the original bound.
+        receiveDeadline = Math.min(totalDeadline, current.totalDeadline, current.progressDeadline)
+        const remaining = receiveDeadline - Date.now()
+        if (remaining <= 0) { finish(this._startupFrameError('receive_timeout')); return }
+        timer = setTimeout(() => finish(this._startupFrameError('receive_timeout')), remaining)
+      }
+      const waiter = { check, fail: finish }
+      this.startupDrainWait = waiter
+      signal?.addEventListener('abort', abort, { once: true })
+      check()
+    })
+  }
+
   async _negotiate({ role = 'unknown', drainMs = 300, signal = null, acquire = true, probeRepl = true, expectedDevice = null, autoBaud = true } = {}) {
     this.role = role
     this.state = 'negotiating'
@@ -1039,23 +1097,40 @@ export class DeviceSession {
     // Unclaimed TCP sockets expire in three seconds: acquire immediately.
     if (role === 'tcp') drainMs = 0
     if (drainMs > 0) {
+      const timeoutCount = this.parser.getDiagnostics?.()?.incompleteFrameTimeouts ?? 0
       this.draining = true
       try {
         await awaitWithSignal(this.sleep(drainMs), signal)
+        if (signal?.aborted) throw abortError(signal)
+        if ((this.parser.getDiagnostics?.()?.incompleteFrameTimeouts ?? 0) !== timeoutCount) {
+          throw this._startupFrameError('receive_timeout')
+        }
+        let totalDeadline = null
+        while (this.parser.hasPartialFrame?.()) {
+          const initial = this.parser._partialFrameBudget?.()
+          if (!Number.isFinite(initial?.totalDeadline) || !Number.isFinite(initial?.progressDeadline)) {
+            throw this._startupFrameError('receive_budget_unavailable')
+          }
+          totalDeadline ??= initial.totalDeadline
+          await this._waitForStartupFrameBoundary(signal, timeoutCount, initial, totalDeadline)
+          // An adapter may synchronously deliver another chunk before the
+          // resolved boundary promise resumes this negotiation continuation.
+          if ((this.parser.getDiagnostics?.()?.incompleteFrameTimeouts ?? 0) !== timeoutCount) {
+            throw this._startupFrameError('receive_timeout')
+          }
+        }
+      } catch (error) {
+        if (error.code === 'SERIAL_STARTUP_INCOMPLETE_FRAME') {
+          this.close(error)
+          this.parser.reset()
+          await this.transport.disconnect?.()
+        }
+        throw error
       } finally {
         this.draining = false
       }
     }
     if (signal?.aborted) throw abortError(signal)
-    if (drainMs > 0 && this.parser.hasPartialFrame?.()) {
-      const error = Object.assign(new Error('Incomplete EV-MUX frame at end of startup drain'), {
-        code: 'SERIAL_STARTUP_INCOMPLETE_FRAME',
-      })
-      this.close(error)
-      this.parser.reset()
-      await this.transport.disconnect?.()
-      throw error
-    }
 
     let capabilities
     let discovery
@@ -1843,6 +1918,7 @@ export class DeviceSession {
 
   close(error = new Error('connection closed')) {
     this.negotiateController?.abort(error)
+    this.startupDrainWait?.fail(error)
     this.draining = false
     clearTimeout(this.keepaliveTimer)
     this.keepaliveTimer = null

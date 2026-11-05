@@ -19,11 +19,12 @@
 | Visibility | Public; installation needs no npm login |
 | Source location | `host/device-core` in the ESP-VISION firmware repository |
 
-This source targets **0.6.0**, a minor release after 0.5.1. The **0.6.x** package line is SDK-only: the management CLI lives in `@esp-vision/device-cli`, and Python execution/file reads have no aggregate deadline unless configured. Declare a minor-locked dependency and use a lockfile to record the resolved patch and integrity; verify the chosen version exists in the public registry before installing. For unpublished source changes, use a tarball packed from an exact reviewed source commit. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
+This source targets **0.7.0**, an unpublished minor release after 0.6.1. Device Core is SDK-only: the management CLI lives in `@esp-vision/device-cli`, and Python execution/file reads have no aggregate deadline unless configured. Declare a minor-locked dependency and use a lockfile to record the resolved patch and integrity; verify the chosen version exists in the public registry before installing. For unpublished source changes, use a tarball packed from an exact reviewed source commit. CI authenticates with the protected `NPM_PUBLISH_TOKEN` and verifies that `npm whoami` returns `esp-vision` before publishing. Tokens are not part of this package or its documentation.
 
 ```sh
-npm view @esp-vision/device-core@0.6.0 version dist.integrity
-npm install '@esp-vision/device-core@~0.6.0' --registry=https://registry.npmjs.org/
+# Published example; the pending 0.7.0 APIs require a candidate tarball.
+npm view @esp-vision/device-core@0.6.1 version dist.integrity
+npm install '@esp-vision/device-core@~0.6.1' --registry=https://registry.npmjs.org/
 ```
 
 A source version, dry run or open merge request does not publish a package. CLI and Plugin bundles keep their own versions and embedded Core bytes; publishing Core alone does not update those installed tools.
@@ -141,7 +142,9 @@ To validate before npm publication, check out an exact reviewed commit, run `npm
 
 ### Browser ROM flashing
 
-`@esp-vision/device-core/browser` exports `openBrowserRom({ port, logger?, signal?, interface?, baudRate?, onStatus? })`. Construction is passive; `initialize()` lazily loads the official `esptool-js@0.7.1` backend and synchronizes at 115200. Use a browser bundler such as webpack, Vite or esbuild to include the chip stubs. The root and `/node` entry points do not load browser modules. No Python installation or consumer-side dependency patch is needed.
+`@esp-vision/device-core/browser` exports `openBrowserRom({ port, logger?, signal?, interface?, baudRate?, onStatus?, expectedMac? })`. Construction is passive; `initialize()` lazily loads the official `esptool-js@0.7.1` backend and synchronizes at 115200. Use a browser bundler such as webpack, Vite or esbuild to include the chip stubs. The root and `/node` entry points do not load browser modules. No Python installation or consumer-side dependency patch is needed.
+
+The candidate 0.7.0 browser adapter exposes `chipMac`, using the same 12 lowercase hexadecimal factory-MAC representation as the Node adapter. It is `null` before identity qualification. The browser reads it through the official chip's `readMac(loader)` primitive, without duplicating eFuse layouts. Pass the verified factory MAC of the selected runtime as `expectedMac` when handing that device to ROM, for example a validated `machine.unique_id()` known to match that board's factory MAC. The host must establish this source; an arbitrary legacy `deviceId` or USB VID/PID does not establish the association. If it cannot verify that value, use an explicitly user-selected manual ROM workflow rather than infer an automatic association. The option accepts exactly 12 hexadecimal characters, normalizes uppercase and rejects separators, whitespace, `null` and other types synchronously before opening a port. A mismatch returns `ROM_IDENTITY_CHANGED`, closes the adapter and cannot start a stub, erase or write. An unreadable/malformed MAC response returns `ROM_IDENTITY_INVALID`. Without the option, manually selecting an initial ROM remains supported; all later synchronization/recovery still binds the original family, revision and MAC, rejecting a different same-model device without rebinding.
 
 `interface` accepts `auto` (default), `uart`, `usb-otg` and `usb-jtag`. Auto detection distinguishes known USB-UART bridge descriptors from Espressif OTG and Serial/JTAG; ambiguous custom descriptors stay conservative and can be identified explicitly. A ready OTG ROM is synchronized without toggling DTR/RTS. A detached or re-enumerated device requires selecting its current download port again; the SDK never treats a stale port object as a recovered session.
 

@@ -4,19 +4,20 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createDevice } from '../src/index.js'
 import { firmwareSha256 } from '../src/firmware.js'
+import { partitionTable } from './firmware-fixtures.mjs'
 
 async function fixture() {
   const full = new Uint8Array(0x11000).fill(0xff), appOffset = 0x10000, appLength = 4, calls = []
-  full.set([0xe9, 1, 2, 3], 0x2000); full.set([0xaa, 0x50, 4, 5], 0x8000); full.set([0xe9, 6, 7, 8], appOffset)
-  const segment = async offset => ({ offset, bytes: 4, sha256: await firmwareSha256(full.subarray(offset, offset + 4)) })
+  full.set([0xe9, 1, 2, 3], 0x2000); full.set(partitionTable(), 0x8000); full.set([0xe9, 6, 7, 8], appOffset)
+  const segment = async (offset, size = 4) => ({ offset, bytes: size, sha256: await firmwareSha256(full.subarray(offset, offset + size)) })
   const source = { url: 'https://example.test/full.bin', bytes: full.length, sha256: await firmwareSha256(full), offset: appOffset }
   const release = { board: 'BOARD', version: 'new', image: {
-    evMuxVersion: 4, chipFamily: 0x3280, chipRevision: 302, ...(await segment(appOffset)), partitionSize: 4096,
-    partitionTable: await segment(0x8000), url: source.url, source,
+    evMuxVersion: 4, chipFamily: 0x3280, chipRevision: 302, ...(await segment(appOffset)), partitionSize: 0x10000,
+    partitionTable: await segment(0x8000, 0xc00), url: source.url, source,
   }, install: { url: source.url, offset: 0, bytes: full.length, sha256: source.sha256, flashSize: 0x1000000,
     chipRevisionMin: 302, chipRevisionMax: 302, bootloader: await segment(0x2000) } }
-  const flash = new Uint8Array(full.length).fill(0x5a)
-  flash.set(full.subarray(0x8000, 0x8004), 0x8000)
+  const flash = new Uint8Array(0x41000).fill(0x5a)
+  flash.set(full.subarray(0x8000, 0x8c00), 0x8000)
   const before = flash.slice()
   const loader = {
     chipFamily: 0x3280, chipRevision: 302,
@@ -24,6 +25,7 @@ async function fixture() {
     async getSecurityInfo() { return { flags: 0, flashCryptCnt: 0 } },
     async runStub() { calls.push('stub'); return loader },
     async flashId() { return 0x1840ef },
+    async eraseRegion(offset, size) { calls.push(['erase', offset, size]); flash.fill(0xff, offset, offset + size) },
     async flashData(buffer, progress, offset) { calls.push(['write', offset, buffer.byteLength]); flash.set(new Uint8Array(buffer), offset); progress(buffer.byteLength, buffer.byteLength) },
     async readFlash(offset, bytes) { return flash.slice(offset, offset + bytes) },
     async readRegister() { return 0 },
@@ -89,7 +91,8 @@ test('downloaded full BIN enforces approved length during streaming before openi
 test('single BIN explicit install writes the complete container without slicing it', async () => {
   const f = await fixture()
   assert.equal((await f.device.firmware.update({ ...f.request, data: f.full, mode: 'install' })).verified, true)
-  assert.deepEqual(f.flash, f.full)
+  assert.deepEqual(f.flash.slice(0, f.full.length), f.full)
+  assert.ok(f.flash.subarray(0x20000).every(value => value === 0xff))
   assert.deepEqual(f.calls.find(call => Array.isArray(call) && call[0] === 'write'), ['write', 0, f.full.length])
 })
 test('single BIN application update still refuses changed partition layouts with no install fallback', async () => {

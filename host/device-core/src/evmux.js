@@ -108,6 +108,7 @@ export class EvMuxParser {
         this.frameTotalTimeoutMs = 12000
         this.partialFrame = null
         this.partialFrameTimer = null
+        this.incompleteFrameTimeouts = 0
     }
 
     setLimits({ metadataMax, payloadMax, frameProgressTimeoutMs, frameTotalTimeoutMs } = {}) {
@@ -152,6 +153,7 @@ export class EvMuxParser {
                 return
             }
             this._clearPartialFrame()
+            this.incompleteFrameTimeouts += 1
             this.buffer = new Uint8Array(0)
             this.rawTextDecoder = new TextDecoder('utf-8', { fatal: false })
             this.replTextDecoders = {
@@ -180,6 +182,17 @@ export class EvMuxParser {
         this.droppedFrames = 0
         this.invalidImageFrames = 0
         this.lastChannel = null
+        this.incompleteFrameTimeouts = 0
+    }
+
+    _partialFrameBudget() {
+        if (!this.partialFrame) return null
+        return {
+            startedAt: this.partialFrame.startedAt,
+            lastProgressAt: this.partialFrame.lastProgressAt,
+            progressDeadline: this.partialFrame.lastProgressAt + this.frameProgressTimeoutMs,
+            totalDeadline: this.partialFrame.startedAt + this.frameTotalTimeoutMs,
+        }
     }
 
     getDiagnostics() {
@@ -192,6 +205,8 @@ export class EvMuxParser {
             droppedFrames: this.droppedFrames,
             invalidImageFrames: this.invalidImageFrames,
             lastChannel: this.lastChannel,
+            partialFrame: this._partialFrameBudget(),
+            incompleteFrameTimeouts: this.incompleteFrameTimeouts,
         }
     }
 

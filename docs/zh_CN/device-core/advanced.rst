@@ -30,7 +30,7 @@ EvMuxParser
     清除输入缓冲、不完整帧定时器与统计。
 
 ``EvMuxParser.getDiagnostics()``
-    返回 active/rxBytes/rxChunks/bufferedBytes/frames/droppedFrames/lastChannel。
+    返回 active/rxBytes/rxChunks/bufferedBytes/frames/droppedFrames/invalidImageFrames/lastChannel、incompleteFrameTimeouts，以及独立的 partialFrame 时间快照（null 或以毫秒表示的 startedAt/lastProgressAt/progressDeadline/totalDeadline）。诊断不包含帧载荷，reset 会清除计数和半帧状态。
 
 ``EvMuxParser.hasPartialFrame()``
     判断缓冲中是否存在可能的不完整帧。
@@ -243,7 +243,7 @@ DeviceSession
 ``DeviceSession.close(error = new Error('connection closed'))``
     拒绝待处理工作，重置会话状态/定时器；物理连接由宿主关闭。
 
-可读取的协商状态包括 state、role、identity、capabilities、sessionId、vmEpoch、vmReady、limits、parser、repl；应通过会话方法更新，不直接赋值。``negotiate`` 选项为 role="unknown"、drainMs=300、acquire=true、probeRepl=true、expectedDevice=null、signal=null，TCP 跳过启动 drain。``control`` 接受 stop/soft-reset/hard-reset/bootloader 字符串，不是应用对象的请求结构。底层网络修改返回 accepted ACK，应用 configure 才会等到对应事务完成。使用 typed run trial 时要求 operation_id 为 UUIDv4、source_path 不超过 512 个 UTF-8 字节、source_hash 为 64 位小写 SHA-256，并要求固件声明 launcher trial/typed-runner 能力；trial 不能与 inlineCompletion 组合。
+可读取的协商状态包括 state、role、identity、capabilities、sessionId、vmEpoch、vmReady、limits、parser、repl；应通过会话方法更新，不直接赋值。``negotiate`` 选项为 role="unknown"、drainMs=300、acquire=true、probeRepl=true、expectedDevice=null、signal=null，TCP 跳过启动 drain。串口可在 parser 剩余接收预算内补齐跨窗口的半帧，期间继续拒绝旧帧，后续新帧不能延长最初半帧的总截止时间。注入的旧 parser 若不支持接收预算，则保留半帧连接失败的保守行为，不进行无界等待。``control`` 接受 stop/soft-reset/hard-reset/bootloader 字符串，不是应用对象的请求结构。底层网络修改返回 accepted ACK，应用 configure 才会等到对应事务完成。使用 typed run trial 时要求 operation_id 为 UUIDv4、source_path 不超过 512 个 UTF-8 字节、source_hash 为 64 位小写 SHA-256，并要求固件声明 launcher trial/typed-runner 能力；trial 不能与 inlineCompletion 组合。
 
 EV_MUX_DEFAULT_LIMITS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1215,10 +1215,24 @@ bindSessionDeviceActions
 @esp-vision/device-core/firmware
 ----------------------------------------------------------------
 
+按地址操作 ROM Flash
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+公开的 ``openNodeRom`` 和 ``openBrowserRom`` 适配器也支持自行管理 Flash 布局的调用方。先 ``initialize()``，核对选中芯片/修订版及 ``getSecurityInfo()``，再 ``runStub()``；只在 stub 就绪后操作，并在清理中 ``disconnect()``。以下操作按地址执行，不限定为 FAT 分区：
+
+* ``stub.eraseRegion(address, size)`` 擦除调用方给定范围，起始地址和正长度须按 4096 字节对齐，且在 32 位地址空间内。
+* ``stub.flashData(arrayBuffer, onProgress, offset)`` 通过官方烧录器把给定字节写到指定地址。
+* ``stub.readFlash(offset, byteCount, onProgress?, options?)`` 读取指定范围。``options`` 可指定 ``chunkSize``、``blockSize``（1024 或 4096）、``maxInFlight``；大范围校验应以不超过 65536 字节分段、1024 字节包和单个未确认包循环读取。
+* ``stub.flashId()`` 返回整数 JEDEC ID，位 16–23 为容量指数，不是容量字节数；调用方须核对范围不超过实际 Flash，并负责分区选择、范围重叠判断、数据哈希及读回校验。
+
+跨 Node/浏览器使用时，每个适配器实例应只调用一次 ``flashData()``。浏览器适配器会以 ``ROM_WRITE_REUSE`` 拒绝第二次调用并关闭会话。多段数据应合并为一个连续 payload，并明确间隙内容；或每次写入前重新建立并校验 ROM 会话。结果不确定时，不要重放写操作。
+
+自定义分区工具可以直接组合这些通用操作。``FirmwareFlashSession`` 在其上提供受认可镜像的完整安装/应用更新、完整校验与芯片复位处理。Core 0.7.0 增加的是此前缺失的跨平台范围擦除能力，以及完整安装清理内部 FAT 的行为变化；没有新增写死的 FAT 地址。安装流程解析受认可的分区表，因此仅移动分区地址不需要再次发布 Core。只更新应用仍保留用户文件。
+
 FirmwareFlashSession
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``new FirmwareFlashSession(loader, image, { reset = () => loader.hardReset(), mode = 'update' } = {})``
+``new FirmwareFlashSession(loader, image, { reset = () => loader.hardReset(), mode = 'update', signal? } = {})``
 
 ROM 烧写器适配，与 EV-MUX 运行态会话分开，每个实例只使用一次。state 为 idle → connecting → connected → flashing → verified → closed，失败可经 error → closed；flash 最终会断开，单凭 closed 不能判定校验成功。
 
@@ -1231,10 +1245,10 @@ ROM 烧写器适配，与 EV-MUX 运行态会话分开，每个实例只使用�
 ``FirmwareFlashSession.disconnect()``
     关闭 loader 一次，重复调用不重复关闭。
 
-镜像描述包含 evMuxVersion=4、bytes、offset、partitionSize、sha256、chipFamily、chipRevision、partitionTable:{offset,bytes,sha256}。须提供可信构建元数据与精确 Uint8Array；默认模式不执行整片擦除或分区迁移。注入的 loader 提供 initialize()、chipFamily/chipRevision、getSecurityInfo()、runStub(true)、hardReset()、disconnect()；stub 提供 flashData()、readFlash()、readRegister()、writeRegister()。内置 P4 正常启动锁存处理。读回校验通过后的复位失败由 onPhase 提示，不会撤销校验或自动重写。
+镜像描述包含 evMuxVersion=4、bytes、offset、partitionSize、sha256、chipFamily、chipRevision、partitionTable:{offset,bytes,sha256}。须提供可信构建元数据与精确 Uint8Array；默认模式不执行整片擦除或分区迁移。注入的 loader 提供 initialize()、chipFamily/chipRevision、getSecurityInfo()、runStub(true)、hardReset()、disconnect()；stub 提供 flashData()、readFlash()、readRegister()、writeRegister()。内置 P4/S31 正常启动锁存处理，使用各芯片自己的寄存器地址。读回校验通过后的复位失败由 onPhase 提示，不会撤销校验或自动重写。
 
 
-``mode: 'install'`` 使用完整合并镜像描述：原应用元数据放在 application 中，bytes/offset=0/sha256/flashSize/bootloader 描述完整镜像，partitionTable 保持原结构；芯片修订范围须同时覆盖 bootloader 与应用。安装跳过旧分区表匹配，要求返回的 stub 提供 flashId()，返回整数 JEDEC ID，位 16–23 为容量指数。现有应用更新适配器无需修改；内置 Node 适配器及官网 Web Serial loader 提供该方法。完整安装的数据覆盖语义见 :doc:`api`。
+``mode: 'install'`` 使用完整合并镜像描述：原应用元数据放在 application 中，bytes/offset=0/sha256/flashSize/bootloader 描述完整镜像，partitionTable 保持原结构；芯片修订范围须同时覆盖 bootloader 与应用。安装跳过旧分区表匹配，要求返回的 stub 提供 flashId()，返回整数 JEDEC ID，位 16–23 为容量指数。从 Core 0.7.0 起，完整安装还要求该 stub 提供 ``eraseRegion(address, size)`` 和 ``readFlash``。范围由通过校验的真实分区表解析得到，起点和正长度须按 4096 字节对齐；擦除在写固件前完成。Core 以最多 65536 字节一段、单个未确认 1024 字节包的有界读取校验所有擦后字节。缺能力返回 FIRMWARE_ERASE_UNSUPPORTED；布局无效返回 FIRMWARE_PARTITION_INVALID 或 FIRMWARE_FATFS_UNAVAILABLE；擦后读取非 FF 或不完整返回 FIRMWARE_ERASE_VERIFY_FAILED。不重试、不整片擦除、不备份、不自动恢复。只更新应用的现有适配器无需修改；内置浏览器和 Node ROM 适配器均实现此合同。完整安装删除语义见 :doc:`api`。
 
 ``firmwareMode(mode = 'update')`` 校验并返回 update/install，其他值抛出 TypeError。``validateFirmwareImage(image, bytes, { mode = 'update' } = {})`` 在 install 模式下还会校验嵌入的 bootloader、分区表和应用范围及哈希。
 
@@ -1346,8 +1360,10 @@ FirmwareFlashSession.flash 返回值
 @esp-vision/device-core/browser
 ------------------------------------------------------------------
 
-``openBrowserRom({ port, logger = {}, signal? })``
-    SDK 0.6.0 包含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载官方 ``esptool-js@0.7.1``，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、完整回读和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化，不中断已开始的写入与回读。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块，根与 Node 入口也不加载浏览器后端。
+``openBrowserRom({ port, logger = {}, signal?, expectedMac? })``
+    SDK 0.6.0 包含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载官方 ``esptool-js@0.7.1``，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、完整回读和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化和范围擦除；Core 还在擦后回读及开始写固件前检查取消。固件写入一旦开始，仍按原策略完成校验与复位。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块，根与 Node 入口也不加载浏览器后端。
+
+    Core 0.7.0 另提供 ``chipMac``：资格确认前为 ``null``，之后为与 Node 适配器一致的 12 位小写十六进制 factory MAC，由固定版本官方芯片的 ``readMac(loader)`` 原语读取。可选 ``expectedMac`` 只接受恰好 12 位十六进制字符（大写归一为小写）；分隔符、空白、``null`` 及非字符串值会在访问端口前同步拒绝。宿主须获取选中运行态设备经过核验的 factory MAC，例如已验证与该板 factory MAC 一致的 ``machine.unique_id()``；任意历史 ``deviceId`` 或 USB VID/PID 都不能证明这种关联。无法核验时应使用用户明确选择的手动 ROM 流程，不能推测自动关联。首次不匹配，或恢复同步发现芯片家族、修订、MAC 改变时，返回 ROM_IDENTITY_CHANGED、关闭适配器，不再启动另一个 stub、擦除或写入；MAC 返回值不完整时返回 ROM_IDENTITY_INVALID。USB-OTG 保留这些错误码，不替换成手动下载提示。不传此选项仍支持手动选择首次 ROM，但后续同步继续绑定首次设备。
 
 @esp-vision/device-core/firmware 发布读取器（0.5.1）
 ------------------------------------------------------
