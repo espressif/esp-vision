@@ -74,18 +74,26 @@ test('SLIP keeps a valid packet after boot noise, trailing packets and escaped b
   transport.buffer = new Uint8Array([0xc0, 0xdb, 0x47, 0xc0])
   await assert.rejects(transport.read(100), { code: 'ROM_SLIP_ESCAPE' })
 })
-test('SLIP preserves state across partial incoming chunks and has a total packet deadline', async () => {
+test('SLIP preserves state across partial incoming chunks and has a total packet deadline', async t => {
+  // Drive wall time explicitly: a busy CI runner can suspend this process for
+  // longer than the receive budget between real timer callbacks.
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 })
   const transport = transportFixture()
   transport.buffer = new Uint8Array([0xc0, 1, 0xdb])
-  const later = setTimeout(() => { transport.buffer = new Uint8Array([0xdc, 2, 0xc0]) }, 5)
-  try { assert.deepEqual(await transport.read(100), new Uint8Array([1, 0xc0, 2])) } finally { clearTimeout(later) }
+  setTimeout(() => { transport.buffer = new Uint8Array([0xdc, 2, 0xc0]) }, 5)
+  const partial = transport.read(100)
+  t.mock.timers.tick(5)
+  assert.deepEqual(await partial, new Uint8Array([1, 0xc0, 2]))
   transport.buffer = new Uint8Array([0xc0, 1])
-  await assert.rejects(transport.read(15), { code: 'ROM_READ_TIMEOUT' })
+  const expired = assert.rejects(transport.read(15), { code: 'ROM_READ_TIMEOUT' })
+  t.mock.timers.tick(15)
+  await expired
   transport.device.readable = null
   await assert.rejects(transport.read(100), { code: 'ROM_PORT_LOST' })
   transport.device.writable = null
   await assert.rejects(transport.write(new Uint8Array()), { code: 'ROM_PORT_LOST' })
 })
+
 function readFixture({ data = new Uint8Array([1, 2, 3]), packets, digest = romMd5(data), delay = 0 } = {}) {
   const received = [], reads = [...(packets ?? [data]), digest]
   const loader = { IS_STUB: true, ESP_READ_FLASH: 0xd2, transport: { baudrate: 2000000,
