@@ -134,6 +134,33 @@ def _erase_region(esptool, esp, address, size):
     esptool.erase_region(esp, address, size, force=False)
 
 
+def _write_flash(esptool, esp, offset, data):
+    """Return the exact range digest already checked by official write_flash."""
+    original_md5 = esp.flash_md5sum
+    missing = object()
+    previous = vars(esp).get('flash_md5sum', missing)
+    receipt = None
+
+    def checked_md5(address, size):
+        nonlocal receipt
+        digest = original_md5(address, size)
+        if address == offset and size == len(data):
+            receipt = {'algorithm': 'md5', 'offset': address, 'bytes': size, 'digest': digest}
+        return digest
+
+    esp.flash_md5sum = checked_md5
+    try:
+        # The official writer compares this digest and rejects on mismatch.
+        esptool.write_flash(esp, [(offset, data)], flash_mode='keep', flash_freq='keep', flash_size='keep', compress=True)
+    finally:
+        if previous is missing:
+            del esp.flash_md5sum
+        else:
+            esp.flash_md5sum = previous
+    # Unaligned writes may be padded; retain exact-byte Core readback then.
+    return receipt
+
+
 def main():
     with contextlib.redirect_stdout(sys.stderr):
         import esptool
@@ -187,7 +214,7 @@ def main():
                     elif method == 'write':
                         offset, encoded = args
                         data = base64.b64decode(encoded, validate=True)
-                        esptool.write_flash(esp, [(offset, data)], flash_mode='keep', flash_freq='keep', flash_size='keep', compress=True)
+                        result = _write_flash(esptool, esp, offset, data)
                     elif method == 'readRegister':
                         result = esp.read_reg(args[0])
                     elif method == 'writeRegister':

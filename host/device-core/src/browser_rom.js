@@ -4,6 +4,7 @@
 import { ESPLoader, Transport } from 'esptool-js'
 import { browserRomCompatibility, browserTransportCompatibility, readBrowserFlash, romError, romWords } from './browser_rom_compat.js'
 import { normalizeExpectedMac } from './rom_identity.js'
+import { romMd5Hex } from './rom_md5.js'
 
 export const ROM_UART_BAUD_RATES = Object.freeze([2000000, 1500000, 921600, 460800, 115200])
 const families = { 'ESP32-S3': 0x3253, 'ESP32-P4': 0x3280, 'ESP32-S31': 0x3231 }
@@ -213,10 +214,20 @@ export function createOfficialBrowserLoader({ ESPLoader: Loader, Transport: Seri
       return operation(async () => {
         if (writing) throw romError('ROM_WRITE_REUSE', 'Start a fresh download session before another firmware write')
         writing = true
+        let receipt
         status({ phase: 'writing', interface: kind, baudRate: kind === 'uart' ? transport.baudrate : null, compress: true })
         await loader.writeFlash({ fileArray: [{ data: new Uint8Array(data), address }], flashMode: 'keep', flashFreq: 'keep', flashSize: 'keep', eraseAll: false, compress: true,
+          calculateMD5Hash(bytes) {
+            const digest = romMd5Hex(bytes)
+            receipt = { algorithm: 'md5', offset: address, bytes: bytes.length, digest }
+            return digest
+          },
           reportProgress: (_file, written, total) => progress?.(written, total),
         })
+        if (!receipt) throw romError('ROM_WRITE_VERIFY_MISSING', 'Official esptool did not verify the written image')
+        // Upstream pads short inputs to four bytes; legacy unaligned callers
+        // retain exact-length readback instead of receiving a mismatched receipt.
+        return receipt.bytes === data.byteLength ? receipt : undefined
       })
     },
   }

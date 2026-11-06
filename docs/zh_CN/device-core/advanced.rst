@@ -1229,6 +1229,8 @@ bindSessionDeviceActions
 
 自定义分区工具可以直接组合这些通用操作。``FirmwareFlashSession`` 在其上提供受认可镜像的完整安装/应用更新、完整校验与芯片复位处理。Core 0.7.0 增加的是此前缺失的跨平台范围擦除能力，以及完整安装清理内部 FAT 的行为变化；没有新增写死的 FAT 地址。安装流程解析受认可的分区表，因此仅移动分区地址不需要再次发布 Core。只更新应用仍保留用户文件。
 
+``stub.flashData()`` 仅在官方 esptool 已成功核对设备端整段摘要后，可返回 ``{ algorithm: 'md5', offset, bytes, digest }``；digest 为 32 位小写十六进制串。Core 将地址、长度和摘要与通过 SHA-256 校验的源数据比较；凭据无效或不匹配则拒绝，不复位、不重试。返回 null/undefined 时保留旧的完整回读。下载源和安装镜像内部各段仍必须通过 SHA-256 校验；MD5 用于检测烧写错误，不替代 SHA-256 的密码学保证。
+
 FirmwareFlashSession
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1245,10 +1247,10 @@ ROM 烧写器适配，与 EV-MUX 运行态会话分开，每个实例只使用�
 ``FirmwareFlashSession.disconnect()``
     关闭 loader 一次，重复调用不重复关闭。
 
-镜像描述包含 evMuxVersion=4、bytes、offset、partitionSize、sha256、chipFamily、chipRevision、partitionTable:{offset,bytes,sha256}。须提供可信构建元数据与精确 Uint8Array；默认模式不执行整片擦除或分区迁移。注入的 loader 提供 initialize()、chipFamily/chipRevision、getSecurityInfo()、runStub(true)、hardReset()、disconnect()；stub 提供 flashData()、readFlash()、readRegister()、writeRegister()。内置 P4/S31 正常启动锁存处理，使用各芯片自己的寄存器地址。读回校验通过后的复位失败由 onPhase 提示，不会撤销校验或自动重写。
+镜像描述包含 evMuxVersion=4、bytes、offset、partitionSize、sha256、chipFamily、chipRevision、partitionTable:{offset,bytes,sha256}。须提供可信构建元数据与精确 Uint8Array；默认模式不执行整片擦除或分区迁移。注入的 loader 提供 initialize()、chipFamily/chipRevision、getSecurityInfo()、runStub(true)、hardReset()、disconnect()；stub 提供 flashData()、readFlash()、readRegister()、writeRegister()。内置 P4/S31 正常启动锁存处理，使用各芯片自己的寄存器地址。写后校验通过后的复位失败由 onPhase 提示，不会撤销校验或自动重写。
 
 
-``mode: 'install'`` 使用完整合并镜像描述：原应用元数据放在 application 中，bytes/offset=0/sha256/flashSize/bootloader 描述完整镜像，partitionTable 保持原结构；芯片修订范围须同时覆盖 bootloader 与应用。安装跳过旧分区表匹配，要求返回的 stub 提供 flashId()，返回整数 JEDEC ID，位 16–23 为容量指数。从 Core 0.7.0 起，完整安装还要求该 stub 提供 ``eraseRegion(address, size)`` 和 ``readFlash``。范围由通过校验的真实分区表解析得到，起点和正长度须按 4096 字节对齐；擦除在写固件前完成。Core 以最多 65536 字节一段、单个未确认 1024 字节包的有界读取校验所有擦后字节。缺能力返回 FIRMWARE_ERASE_UNSUPPORTED；布局无效返回 FIRMWARE_PARTITION_INVALID 或 FIRMWARE_FATFS_UNAVAILABLE；擦后读取非 FF 或不完整返回 FIRMWARE_ERASE_VERIFY_FAILED。不重试、不整片擦除、不备份、不自动恢复。只更新应用的现有适配器无需修改；内置浏览器和 Node ROM 适配器均实现此合同。完整安装删除语义见 :doc:`api`。
+``mode: 'install'`` 使用已校验的完整镜像，从实际分区表解析可写、未加密的 ``ffat`` 范围；仍检查芯片/修订、安全模式、JEDEC 容量、范围和分区完整性。stub 提供 ``flashId()``、``eraseRegion(address, size)``、``flashData()`` 和 ``readFlash()``。先擦除按扇区对齐的 FFAT 范围，擦除命令成功即进入固件写入，不回读、抽查或计算擦后摘要。擦除失败或在写入前取消会拒绝，不复位、不重放。布局无效返回 FIRMWARE_PARTITION_INVALID 或 FIRMWARE_FATFS_UNAVAILABLE；缺能力返回 FIRMWARE_ERASE_UNSUPPORTED。不整片擦除、不备份、不自动恢复。删除语义见 :doc:`api`。
 
 ``firmwareMode(mode = 'update')`` 校验并返回 update/install，其他值抛出 TypeError。``validateFirmwareImage(image, bytes, { mode = 'update' } = {})`` 在 install 模式下还会校验嵌入的 bootloader、分区表和应用范围及哈希。
 
@@ -1287,6 +1289,8 @@ Promise<Uint8Array>，校验 v4、精确字节数、应用分区边界和 SHA-25
 ``inventory(options = {}, dependencies = {})``
     从串口枚举和局域网发现返回 ``{ devices, warnings, sourcesAvailable }``。默认只扫描，不连接；``probe: true`` 会连接每个候选。可用 ``timeout``、``interfaces``、``python``、``allPorts`` 和 ``signal`` 控制扫描。
 
+被动枚举原生 USB ROM 接口时返回 ``status: rom``、``identity: null``，不打开端口、不复位。主动 ``probe: true`` 检测先核对 ROM 出厂 MAC 和安全模式，清除对应芯片的软件强制下载标记，再尝试一次正常 SPI 启动；不加载 stub、不擦写或读取 Flash。只对 MAC 和物理 USB 位置均匹配的唯一端口重新进行运行态握手。``romProbe`` 记录 ``attempted``、``outcome``（``runtime``、``rom`` 或 ``no-runtime``）、目标身份及复位/清理诊断；设备已经回到运行态时不再复位。没有运行端口返回时标为 ``unidentified`` 并报告 ROM_RUNTIME_NOT_FOUND，重新返回 ROM 时仍标为 ``rom``，两者均不直接断言固件有无。应用不可启动时，安装前可能需要通过 BOOT/RESET 重新进入下载模式。只有成功的 ESP-VISION 握手才能确认固件身份；串口或会话占用返回 ``busy``。
+
 ``nodeAdapterAssets()``
     返回包含 ``serial`` 和 ``rom`` URL 的冻结对象，分别指向 ``node_serial.py`` 与 ``node_rom.py``。Node 打包器须将两个资源复制到已约定的打包入口旁路径。
 
@@ -1298,7 +1302,7 @@ Promise<Uint8Array>，校验 v4、精确字节数、应用分区边界和 SHA-25
 
 
 ``openNodeRom({ port, python?, signal? })``
-    返回内置 ROM 适配器，创建时不打开端口。用于 ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })``，安装与应用更新共用。需要独立安装 Python esptool==5.6.0，其 stub 读取请求与 ACK/MD5 解析器已经过兼容性验证；Unix 默认 python3，Windows 默认 python。Core 负责初始化、校验、写入/回读、复位与释放。SDK 0.3.0 新增，仅用于 Node；区别于运行态 serialTransport，也不是 TCP OTA。
+    返回内置 ROM 适配器，创建时不打开端口。用于 ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })``，安装与应用更新共用。需要独立安装 Python esptool==5.6.0，其 stub 读取请求与 ACK/MD5 解析器已经过兼容性验证；Unix 默认 python3，Windows 默认 python。Core 负责初始化、校验、写入及写后校验、复位与释放。SDK 0.3.0 新增，仅用于 Node；区别于运行态 serialTransport，也不是 TCP OTA。
 
 @esp-vision/device-core/discovery
 ------------------------------------------------------------------
@@ -1354,14 +1358,14 @@ createNodeDiscovery
 FirmwareFlashSession.flash 返回值
 ------------------------------------------
 
-回读校验后，flash 返回 ``{ verified: true, needsReset: boolean }``。复位失败时 needsReset 为 true；仅凭 closed 状态不能证明校验成功。应用通常使用 ``device.firmware.update()`` 完成发布目录校验与端口交接。
+写后校验后，flash 返回 ``{ verified: true, needsReset: boolean }``。复位失败时 needsReset 为 true；仅凭 closed 状态不能证明校验成功。应用通常使用 ``device.firmware.update()`` 完成发布目录校验与端口交接。
 
 
 @esp-vision/device-core/browser
 ------------------------------------------------------------------
 
 ``openBrowserRom({ port, logger = {}, signal?, expectedMac? })``
-    SDK 0.6.0 包含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载官方 ``esptool-js@0.7.1``，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、完整回读和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化和范围擦除；Core 还在擦后回读及开始写固件前检查取消。固件写入一旦开始，仍按原策略完成校验与复位。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块，根与 Node 入口也不加载浏览器后端。
+    SDK 0.6.0 包含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载官方 ``esptool-js@0.7.1``，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、写后校验和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化和范围擦除；Core 还在擦除后及开始写固件前检查取消。固件写入一旦开始，仍按原策略完成校验与复位。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块，根与 Node 入口也不加载浏览器后端。
 
     Core 0.7.0 另提供 ``chipMac``：资格确认前为 ``null``，之后为与 Node 适配器一致的 12 位小写十六进制 factory MAC，由固定版本官方芯片的 ``readMac(loader)`` 原语读取。可选 ``expectedMac`` 只接受恰好 12 位十六进制字符（大写归一为小写）；分隔符、空白、``null`` 及非字符串值会在访问端口前同步拒绝。宿主须获取选中运行态设备经过核验的 factory MAC，例如已验证与该板 factory MAC 一致的 ``machine.unique_id()``；任意历史 ``deviceId`` 或 USB VID/PID 都不能证明这种关联。无法核验时应使用用户明确选择的手动 ROM 流程，不能推测自动关联。首次不匹配，或恢复同步发现芯片家族、修订、MAC 改变时，返回 ROM_IDENTITY_CHANGED、关闭适配器，不再启动另一个 stub、擦除或写入；MAC 返回值不完整时返回 ROM_IDENTITY_INVALID。USB-OTG 保留这些错误码，不替换成手动下载提示。不传此选项仍支持手动选择首次 ROM，但后续同步继续绑定首次设备。
 

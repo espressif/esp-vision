@@ -28,7 +28,7 @@
    * - ``device.firmware.check(request)``
      - 检查开发板推荐固件版本。
    * - ``device.firmware.update(request)``
-     - 下载、校验、烧写并回读 application 镜像。
+     - 下载、校验、烧写并验证 application 镜像。
    * - ``device.capture(request)``
      - 获取摄像头或 LCD 的 JPEG。
    * - ``device.on(event, handler)``
@@ -327,9 +327,9 @@ device.on(event, handler)
 
 ``release`` 为检查结果中选择的条目。已连接设备必须匹配该开发板；未连接时必须通过 ``board`` 显式指定实际选择的开发板。``data`` 为 Uint8Array application bin；省略时下载 ``release.image.url``。Core 先校验尺寸和哈希，再释放 EV-MUX 连接，随后调用宿主的 ``openLoader({ signal })`` 获取 ROM 下载端口。宿主适配器负责串口/WebUSB 选择及 ROM 进入操作，Core 不实现网络 OTA，也不另造第二套进入下载模式的线上指令。即使通过 TCP 发现/查询设备，更新仍需要本地下载连接。
 
-loader 契约沿用 :doc:`advanced` 中的 FirmwareFlashSession。可选 ``reset(loader)`` 替代其 hard-reset 策略，``onProgress(percent)`` 报告包含回读在内的 0–100 进度，``onPhase(text)`` 报告阶段。默认 update 模式仅写 application 分区：写入前校验芯片/修订版本、安全状态及现有分区表，写入后完整回读并校验哈希。分区不匹配会拒绝；默认更新不做整片迁移，不擦除 NVS 或用户文件；显式完整安装见下文。
+loader 契约沿用 :doc:`advanced` 中的 FirmwareFlashSession。可选 ``reset(loader)`` 替代其 hard-reset 策略，``onProgress(percent)`` 报告包含写后校验在内的 0–100 进度，``onPhase(text)`` 报告阶段。默认 update 模式仅写 application 分区：写入前校验芯片/修订版本、安全状态及现有分区表，写入后由内置烧录器在设备端计算整段 MD5 并核对；不返回校验凭据的自定义烧录器保留完整回读和 SHA-256 校验。分区不匹配会拒绝；默认更新不做整片迁移，不擦除 NVS 或用户文件；显式完整安装见下文。
 
-完整回读校验成功后返回 ``{ verified: true, needsReset, version, board, reconnected: false }``。``needsReset: true`` 要求宿主提示用户物理复位。不自动重连 EV-MUX，也不宣称新版本已运行，须另行重连并查询固件版本。取消信号在下载、获取 loader 以及写入前有效；开始烧写后延迟取消，确保完成回读。失败会 reject 并关闭已获取的 loader，不承诺回滚。更新期间连接、其它设备操作及并发更新以 DEVICE_BUSY 拒绝。未知字段会拒绝。交接后设备保持断开，包括交接之后发生失败的情况。
+固件写后校验成功后返回 ``{ verified: true, needsReset, version, board, reconnected: false }``。``needsReset: true`` 要求宿主提示用户物理复位。不自动重连 EV-MUX，也不宣称新版本已运行，须另行重连并查询固件版本。取消信号在下载、获取 loader 以及写入前有效；开始烧写后延迟取消，确保完成写后校验。失败会 reject 并关闭已获取的 loader，不承诺回滚。更新期间连接、其它设备操作及并发更新以 DEVICE_BUSY 拒绝。未知字段会拒绝。交接后设备保持断开，包括交接之后发生失败的情况。
 
 .. code-block:: javascript
 
@@ -355,7 +355,7 @@ loader 契约沿用 :doc:`advanced` 中的 FirmwareFlashSession。可选 ``reset
 
 沿用 schemaVersion 1，发布条目新增可选 ``install: { offset: 0, bytes, flashSize, sha256, url, chipRevisionMin, chipRevisionMax, bootloader: { offset, bytes, sha256 } }``。flashSize 是布局要求的 Flash 容量（字节）；发布器取 bootloader 与应用芯片修订范围的交集。原有 image 仍是应用描述；安装会核验完整镜像中 bootloader、分区表和应用各自范围的哈希，范围必须有序、不重叠且不越界。发布流水线从现有合并镜像与实际 IDF 产物生成这些元数据；历史版本缺少合格安装元数据时不会推测兼容。
 
-``firmware.check({ mode: 'install', ... })`` 选择第一个具备安装元数据的版本，或精确选择指定版本。仅提供应用更新的版本仍显示在 releases 中，显式选择它安装时报 FIRMWARE_INSTALL_UNAVAILABLE；未知 mode 被拒绝。``firmware.update({ mode: 'install', ... })`` 在释放会话和获取 ROM 端口前校验镜像，并解析通过哈希校验的实际 ESP 分区表；检查边界、重叠、标签及存在的 MD5，要求匹配的应用分区，以及位于固件写入范围外、按扇区对齐、可写且未加密的 ``ffat`` data/FAT 分区。缺失或不支持的布局会拒绝，不会推测旧 ``vfs`` 就是 FAT。随后检查真实芯片、修订、安全状态及 JEDEC 实测容量，只擦除这个 ``ffat`` 范围，并通过有界回读确认所有字节均为 ``0xFF`` 后才写固件。擦除、回读失败或在这些阶段取消均不报告成功、不复位、不重放不确定操作。固件写入开始后沿用完成完整镜像校验和复位的策略；之后仍须重新连接并 inspect，确认文件系统已挂载且新固件实际运行。
+``firmware.check({ mode: 'install', ... })`` 选择第一个具备安装元数据的版本，或精确选择指定版本。仅提供应用更新的版本仍显示在 releases 中，显式选择它安装时报 FIRMWARE_INSTALL_UNAVAILABLE；未知 mode 被拒绝。``firmware.update({ mode: 'install', ... })`` 在释放会话和获取 ROM 端口前校验镜像，并解析通过哈希校验的实际 ESP 分区表；检查边界、重叠、标签及存在的 MD5，要求匹配的应用分区，以及位于固件写入范围外、按扇区对齐、可写且未加密的 ``ffat`` data/FAT 分区。缺失或不支持的布局会拒绝，不会推测旧 ``vfs`` 就是 FAT。随后检查真实芯片、修订、安全状态及 JEDEC 实测容量，只擦除这个 ``ffat`` 范围；擦除命令成功后直接写固件，不回读、抽查或计算擦后摘要。擦除失败或在写入前取消均不报告成功、不复位、不重放不确定操作。固件写入开始后沿用完成完整镜像校验和复位的策略；之后仍须重新连接并 inspect，确认文件系统已挂载且新固件实际运行。
 
 .. code-block:: javascript
 
@@ -409,6 +409,6 @@ SDK 0.5.1 已包含这些发布读取器。``loadOfficialFirmware`` 与 ``loadRe
 
 ``loadOfficialFirmware`` 在 manifest 快照外返回 ``publication``；可选 ``board`` 只在整份 manifest 校验后筛选返回的固件条目。``publication.releases`` 提供合格历史版本/板型引用；``website.releases`` 可以保留缺少合格元数据的旧版本下载列表，不能因为可以拼出 BIN URL 就开放烧录。网站从固定引用构建后，应直接将该引用交给 ``loadReleaseManifest`` 选择版本，使界面与固件始终来自同一快照。
 
-``layout: 'single-bin'`` 中每个 release 含 ``image.source: { url, bytes, sha256, offset }``；URL 同时等于 ``image.url`` 与完整镜像的 ``install.url``，长度/哈希等于 ``install.bytes/sha256``。``source.offset`` 等于 ``image.offset``，应用范围须在完整容器内；``image.bytes/sha256`` 仍仅描述应用。Core 一次下载整个 source，在获取 ROM 前拒绝长度/哈希/内部 bootloader、分区表或应用哈希不符，切出应用后复用设备安全、分区检查、写入与完整回读流程。分区布局变化仍拒绝默认升级，不自动改为安装。显式 ``mode: 'install'`` 写入并校验完整镜像；传入 ``data`` 也遵循描述，存在 ``image.source`` 时必须是完整容器，否则沿用原始应用 BIN。继续支持 ``legacy`` manifest 与旧应用独立描述。下载受合格精确长度及 256 MiB 上限约束，使用 HTTPS、拒绝重定向，暂不使用 HTTP Range。浏览器调用方无需自行下载、切片或实现校验。
+``layout: 'single-bin'`` 中每个 release 含 ``image.source: { url, bytes, sha256, offset }``；URL 同时等于 ``image.url`` 与完整镜像的 ``install.url``，长度/哈希等于 ``install.bytes/sha256``。``source.offset`` 等于 ``image.offset``，应用范围须在完整容器内；``image.bytes/sha256`` 仍仅描述应用。Core 一次下载整个 source，在获取 ROM 前拒绝长度/哈希/内部 bootloader、分区表或应用哈希不符，切出应用后复用设备安全、分区检查、写入与写后校验流程。分区布局变化仍拒绝默认升级，不自动改为安装。显式 ``mode: 'install'`` 写入并校验完整镜像；传入 ``data`` 也遵循描述，存在 ``image.source`` 时必须是完整容器，否则沿用原始应用 BIN。继续支持 ``legacy`` manifest 与旧应用独立描述。下载受合格精确长度及 256 MiB 上限约束，使用 HTTPS、拒绝重定向，暂不使用 HTTP Range。浏览器调用方无需自行下载、切片或实现校验。
 
 固定哈希的 manifest 和完整 BIN source 使用浏览器 HTTP 缓存（``cache: default``）；可变 config 与旧独立应用 BIN 保持 ``no-store``。固定资产在 fetch 阶段遇到 TypeError 时，仅一次 ``no-store`` 重试以恢复缺少 CORS 头的旧缓存。HTTP、读取响应、SHA-256 或元数据错误均不重试、不降级。

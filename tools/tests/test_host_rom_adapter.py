@@ -35,6 +35,7 @@ class HostRomAdapterTests(unittest.TestCase):
                               secure_download_mode=False, get_flash_encryption_enabled=lambda: False,
                               get_secure_boot_enabled=lambda: False, uses_key_manager_for_flash_encryption=lambda: False,
                               erase_region=Mock(),
+                              flash_md5sum=Mock(return_value=hashlib.md5(b'AB').hexdigest()),
                               change_baud=lambda value: calls.append(('baud', value)),
                               read_flash=lambda *_: b'AB', hard_reset=lambda: calls.append('reset'))
 
@@ -100,6 +101,7 @@ class HostRomAdapterTests(unittest.TestCase):
             self.assertIsInstance(files[0][1], bytes)
             self.assertEqual(options, {'flash_mode': 'keep', 'flash_freq': 'keep', 'flash_size': 'keep', 'compress': True})
             calls.append('write')
+            self.assertEqual(loader.flash_md5sum(65536, 2), hashlib.md5(b'AB').hexdigest())
 
         def erase_region(loader, address, size, *, force):
             self.assertIs(loader, esp)
@@ -139,6 +141,41 @@ class HostRomAdapterTests(unittest.TestCase):
                          'connectionMode': 'no-reset', 'stubRunning': False, 'chipMac': 'e8f60ae75642'})
         self.assertEqual(fixture.calls, [('open', 1), ('detect', 'no-reset', 1), ('stub', False),
                                         'attach', ('baud', 460800), 'write', 'reset', ('close', 1)])
+        self.assertEqual(responses[3]['result'], {'algorithm': 'md5', 'offset': 65536, 'bytes': 2,
+                                                'digest': hashlib.md5(b'AB').hexdigest()})
+        fixture.esp.flash_md5sum.assert_called_once_with(65536, 2)
+
+    def test_write_receipt_requires_the_exact_verified_range_and_restores_method(self):
+        for address, length in [(65536, 3), (65540, 2)]:
+            with self.subTest(address=address, length=length):
+                digest = Mock(return_value='1' * 32)
+                esp = SimpleNamespace(flash_md5sum=digest)
+                tool = SimpleNamespace(write_flash=lambda loader, *_args, **_kwargs: loader.flash_md5sum(address, length))
+                self.assertIsNone(MODULE._write_flash(tool, esp, 65536, b'AB'))
+                self.assertIs(esp.flash_md5sum, digest)
+                digest.assert_called_once_with(address, length)
+
+    def test_failed_official_write_cannot_return_a_receipt(self):
+        digest = Mock(return_value='1' * 32)
+        esp = SimpleNamespace(flash_md5sum=digest)
+
+        def failed_write(loader, *_args, **_kwargs):
+            loader.flash_md5sum(65536, 2)
+            raise RuntimeError('MD5 mismatch')
+
+        with self.assertRaisesRegex(RuntimeError, 'MD5 mismatch'):
+            MODULE._write_flash(SimpleNamespace(write_flash=failed_write), esp, 65536, b'AB')
+        self.assertIs(esp.flash_md5sum, digest)
+
+    def test_write_restores_an_inherited_md5_method_without_shadowing_it(self):
+        class Stub:
+            def flash_md5sum(self, address, size):
+                return hashlib.md5(b'AB').hexdigest()
+        esp = Stub()
+        tool = SimpleNamespace(write_flash=lambda loader, *_args, **_kwargs: loader.flash_md5sum(65536, 2))
+        result = MODULE._write_flash(tool, esp, 65536, b'AB')
+        self.assertEqual(result['digest'], hashlib.md5(b'AB').hexdigest())
+        self.assertNotIn('flash_md5sum', vars(esp))
 
     def test_existing_rom_on_native_usb_syncs_without_reset(self):
         fixture = self.fixture([self.descriptor(0x303a, 0x0012)])

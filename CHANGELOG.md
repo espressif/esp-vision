@@ -4,6 +4,17 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Changed
+
+- Prepare Device Core 0.7.1 as an independent npm patch release for faster complete installation and ROM-to-runtime firmware detection; retain the existing firmware and plugin release lifecycle.
+
+- Speed up complete firmware installation by trusting checked, partition-bounded FFAT erase commands without erased-range reads, and reuse official esptool whole-write MD5 verification receipts in Node/browser adapters instead of transferring firmware back to the host. Keep SHA-256 qualification before writing and full readback for custom adapters without receipts.
+
+### Fixed
+
+- Classify an occupied EV-MUX session as busy during firmware identification; USB descriptors, ROM responses and timeouts do not establish the presence or absence of ESP-VISION firmware.
+- Keep passive ROM enumeration non-opening; active firmware detection verifies the selected ROM MAC/security, attempts normal SPI boot once, then rebinds only its matching physical USB endpoint before the ESP-VISION handshake. Preserve unknown startup outcomes and require download re-entry when no runtime returns.
+
 ## [2026.11.06]
 
 This release adds S31 USB-OTG automatic ROM entry, verified complete installation and addressed Flash erase, negotiated UART communication, safe camera observation, shared USB/TCP preview, storage initialization policies, and validated camera/ISP/AI behavior. Firmware and npm package versions remain independent: application SDK Device Core 0.7.0, Device CLI 0.1.1 with bundled Core 0.5.1, Knowledge MCP 0.1.2 and Plugin 0.1.1.

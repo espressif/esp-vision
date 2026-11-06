@@ -155,7 +155,7 @@ function officialFixture({ failRates = [], usb = false, security = { flags: 0, f
       payload.push(0xc0, ...escaped, 0xc0); this.transport.buffer = new Uint8Array(payload); reads.push(length)
       return 0
     }
-    async writeFlash(options) { calls.push(['write', options.compress, options.eraseAll, options.fileArray[0].address]); if (failWrite) throw new Error('write interrupted'); options.reportProgress(0, 10, 10) }
+    async writeFlash(options) { calls.push(['write', options.compress, options.eraseAll, options.fileArray[0].address]); if (failWrite) throw new Error('write interrupted'); options.calculateMD5Hash(options.fileArray[0].data); options.reportProgress(0, 10, 10) }
   }
   const adapter = createOfficialBrowserLoader({ ESPLoader: FakeLoader, Transport: FakeTransport }, port, {}, { onStatus: event => events.push(event), signal, expectedMac })
   return { adapter, events, calls, port, loaders, opens, reads }
@@ -242,6 +242,17 @@ test('all high rates fail safely back to validated 115200', async () => {
   await f.adapter.initialize(); await f.adapter.runStub()
   assert.equal(f.adapter.baudRate, 115200)
   assert.deepEqual(f.events.filter(event => event.phase === 'baud-testing').map(event => event.baudRate), ROM_UART_BAUD_RATES)
+})
+
+test('browser official write enables device MD5 and returns an exact verified range receipt', async () => {
+  const f = officialFixture({ usb: true })
+  await f.adapter.initialize()
+  const stub = await f.adapter.runStub()
+  const bytes = new Uint8Array([0xe9, 1, 2, 3])
+  const result = await stub.flashData(bytes.buffer, () => {}, 0x10000)
+  assert.deepEqual(result, { algorithm: 'md5', offset: 0x10000, bytes: 4,
+    digest: createHash('md5').update(bytes).digest('hex') })
+  await f.adapter.disconnect()
 })
 test('port reopen that resets the board does not count as an initialized high-speed stub', async () => {
   const f = officialFixture({ reopenResets: true })

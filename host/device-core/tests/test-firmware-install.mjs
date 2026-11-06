@@ -10,7 +10,7 @@ test('blank device installs through ROM without an EV-MUX transport or existing 
   assert.equal(result.verified, true); assert.equal(result.reconnected, false)
   assert.deepEqual(f.flash.slice(0, f.data.length), f.data)
   assert.ok(f.flash.subarray(0x20000).every(value => value === 0xff))
-  assert.deepEqual(f.calls, ['open', 'initialize', 'stub', 'capacity', ['erase', 0x20000, 0x21000], ['read', 0x20000], ['read', 0x30000], ['read', 0x40000], ['write', 0], ['read', 0], ['read', 65536], 'reset', 'close'])
+  assert.deepEqual(f.calls, ['open', 'initialize', 'stub', 'capacity', ['erase', 0x20000, 0x21000], ['write', 0], ['read', 0], ['read', 65536], 'reset', 'close'])
   assert.equal(progress.at(-1), 100)
 })
 

@@ -6,7 +6,7 @@ import { EventEmitter } from 'node:events'
 import { PassThrough, Writable } from 'node:stream'
 import { openNodeRom } from '../src/node_rom.js'
 
-function fixture({ mac = 'e8f60ae75642', expected = mac, prepare, initializeError, operationError, readResult = 'QUI=', stubResult = { stubRunning: true }, holdErase = false } = {}) {
+function fixture({ mac = 'e8f60ae75642', expected = mac, prepare, initializeError, operationError, readResult = 'QUI=', stubResult = { stubRunning: true }, writeResult = null, holdErase = false } = {}) {
   const calls = [], requests = []
   const child = new EventEmitter()
   child.exitCode = null
@@ -22,7 +22,7 @@ function fixture({ mac = 'e8f60ae75642', expected = mac, prepare, initializeErro
         ? { id: request.id, error: 'ROM_OPERATION_FAILED', method: request.method, detail }
         : { id: request.id, result: request.method === 'initialize'
           ? { chipFamily: 0x3280, chipRevision: 302, chipMac: mac, connectionMode: 'no-reset' }
-          : request.method === 'read' ? readResult : request.method === 'stub' ? stubResult : null }) + '\n'))
+          : request.method === 'read' ? readResult : request.method === 'stub' ? stubResult : request.method === 'write' ? writeResult : null }) + '\n'))
       done()
     },
     final(done) { child.exitCode = 0; queueMicrotask(() => child.emit('exit', 0)); done() },
@@ -56,6 +56,16 @@ test('a ROM MAC mismatch closes the process and cannot be followed by a write', 
   await assert.rejects(loader.flashData(new Uint8Array([1]), () => {}, 65536), { code: 'ROM_CLOSED' })
   assert.deepEqual(f.requests.map(r => r.method), ['initialize'])
   assert.equal(f.child.exitCode, 0)
+})
+
+test('Node forwards the official write verification without another read or digest command', async () => {
+  const receipt = { algorithm: 'md5', offset: 65536, bytes: 2, digest: 'b86fc6b051f63d73de262d4c34e3a0a9' }
+  const f = fixture({ writeResult: receipt }), loader = openNodeRom({ port: '/dev/runtime' }, f.dependencies)
+  try {
+    await loader.initialize()
+    assert.deepEqual(await loader.flashData(new Uint8Array([65, 66]), () => {}, 65536), receipt)
+    assert.deepEqual(f.requests.map(request => request.method), ['initialize', 'write'])
+  } finally { await loader.disconnect() }
 })
 
 test('initialization is single use and never repeats a bootloader handoff', async () => {

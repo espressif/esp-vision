@@ -104,12 +104,14 @@ try {
     prototype.getSecurityInfo = async () => ({ flags: 0, flashCryptCnt: 0 })
     prototype.runStub = async function () { stubs++; this.IS_STUB = true }
     const writing = new AbortController()
-    prototype.writeFlash = async function (options) { assert.equal(options.compress, true); assert.equal(options.eraseAll, false); writes++; writing.abort(); options.reportProgress(0, 4, 4) }
+    prototype.writeFlash = async function (options) { assert.equal(options.compress, true); assert.equal(options.eraseAll, false); assert.equal(options.calculateMD5Hash(data), createHash('md5').update(data).digest('hex')); writes++; writing.abort(); options.reportProgress(0, 4, 4) }
     prototype.readReg = async () => 0
     prototype.writeReg = async () => { resets++ }
+    const readRanges = []
     prototype.checkCommand = async function (description, _opcode, packet) {
       assert.equal(description, 'read flash')
       const address = new DataView(packet.buffer).getUint32(0, true), bytes = address === 32768 ? table : data
+      readRanges.push(address)
       const digest = createHash('md5').update(bytes).digest()
       const frame = chunk => [0xc0, ...Array.from(chunk).flatMap(byte => byte === 0xc0 ? [0xdb, 0xdc] : byte === 0xdb ? [0xdb, 0xdd] : [byte]), 0xc0]
       this.transport.buffer = new Uint8Array([...frame(bytes), ...frame(digest)])
@@ -126,6 +128,7 @@ try {
     const beforeCloses = closes
     const updated = await device.firmware.update({ ...request, signal: writing.signal, openLoader: ({ signal }) => context.DeviceCore.openBrowserRom({ port: updatePort, signal, expectedMac: '30eda0eda1b0' }) })
     assert.equal(updated.verified, true); assert.equal(updated.needsReset, false)
+    assert.deepEqual(readRanges, [32768], 'only the existing partition table is read; no firmware bulk readback')
     assert.equal(stubs, 1); assert.equal(writes, 1); assert.equal(resets, 4)
     assert.equal(closes, beforeCloses + 1)
     const manifest = { schemaVersion: 1, version: 'browser-test', sourceCommit: 'a'.repeat(40), pipelineId: 1, layout: 'legacy',
@@ -143,5 +146,5 @@ try {
   assert.equal(dependency.version, '0.7.1'); assert.equal(dependency.license, 'Apache-2.0')
   assert.match(await readFile(join(root, 'node_modules/esptool-js/LICENSE'), 'utf8'), /Apache License/)
   await writeFile(join(temporary, 'browser.js'), code)
-  console.log(JSON.stringify({ browserBundle: true, dependency: dependency.version, bytes: code.length, passiveImports: true, p4AndS31Stubs: true, cleanupAndCancellation: true, coreSafetyChecks: true, compressedWrite: true, fullReadbackAndMd5: true }))
+  console.log(JSON.stringify({ browserBundle: true, dependency: dependency.version, bytes: code.length, passiveImports: true, p4AndS31Stubs: true, cleanupAndCancellation: true, coreSafetyChecks: true, compressedWrite: true, deviceMd5WithoutBulkReadback: true }))
 } finally { await rm(temporary, { recursive: true, force: true }) }
