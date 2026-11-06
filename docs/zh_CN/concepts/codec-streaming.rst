@@ -8,7 +8,9 @@
 静态图像编码：JPEG 与 PNG
 -------------------------
 
-:py:meth:`image.Image.to_jpeg`\ （及其别名 :py:meth:`image.Image.compress`\ ）把一帧 编码为 JPEG。JPEG 有损：``quality`` 关键字（1-100）在大小与画质之间权衡， ``subsampling`` 控制色度被压缩的程度（``JPEG_SUBSAMPLING_420`` 最小，``444`` 画质 最好）。带硬件 JPEG 编码器的板会进行硬件卸载，否则使用软件编码器 （``esp_new_jpeg``\ ）。:py:meth:`image.Image.to_png` 产生无损 PNG，体积更大但精确， 适合保存参考帧。
+:py:meth:`image.Image.to_jpeg`\ （及其别名 :py:meth:`image.Image.compress`\ ）把一帧编码为 JPEG。JPEG 有损：``quality`` 关键字（1-100）在大小与画质之间权衡，``subsampling`` 控制色度被压缩的程度（``JPEG_SUBSAMPLING_420`` 最小，``444`` 画质最好）。带硬件 JPEG 编码器的板会进行硬件卸载，否则使用软件编码器（``esp_new_jpeg``\ ）。
+
+当前固件未启用 PNG 解码器或编码器。通过 ``image.Image(path)`` 加载 PNG 时立即抛出 ``OSError``；:py:meth:`image.Image.to_png` 和将未压缩图像保存为 ``.png`` 时抛出 ``RuntimeError``。请在上传前将 PNG 素材转换为 JPEG。
 
 录制序列：ImageIO
 -----------------

@@ -34,7 +34,7 @@ ESP-VISION 中的每一个视觉操作都在读写一个 :py:class:`image.Image`
      - 亮度/色度打包，常见于摄像头与编解码流水线。
    * - ``JPEG`` / ``PNG``
      - 不定
-     - 由 :py:meth:`image.Image.to_jpeg` / ``to_png`` 生成的压缩字节流。
+     - 压缩字节流。JPEG 由 :py:meth:`image.Image.to_jpeg` 生成；当前固件未启用 PNG 编解码。
 
 RGB565 把一个颜色打包进 16 位，以色彩精度换取相较 RGB888 一半的内存。绿色多分到 一位，因为人眼对绿色最敏感。:py:meth:`image.Image.get_pixel` 既可返回打包值，也可 返回展开为每通道 8 位的 ``(r, g, b)`` 元组。
 

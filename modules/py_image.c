@@ -1359,9 +1359,10 @@ static mp_obj_t py_image_save(size_t n_args, const mp_obj_t *args, mp_map_t *kw_
         return args[0];
     }
 
-    fb_alloc_mark();
+    py_image_alloc_cleanup_t cleanup;
+    py_image_alloc_cleanup_begin(&cleanup, false);
     imlib_save_image(arg_img, path, &roi, arg_q);
-    fb_alloc_free_till_mark();
+    nlr_pop_jump_callback(true);
     return args[0];
 }
 static MP_DEFINE_CONST_FUN_OBJ_KW(py_image_save_obj, 2, py_image_save);
@@ -6276,14 +6277,15 @@ mp_obj_t py_image_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw
         img_read_settings_t rs;
         const char *path = mp_obj_str_get_str(args[ARG_arg].u_obj);
 
-        fb_alloc_mark();
+        py_image_alloc_cleanup_t cleanup;
+        py_image_alloc_cleanup_begin(&cleanup, false);
         imlib_read_geometry(&fp, &image, path, &rs);
         file_close(&fp);
 
         image_alloc(&image, image_size(&image));
 
         imlib_load_image(&image, path);
-        fb_alloc_free_till_mark();
+        nlr_pop_jump_callback(true);
         #else
         mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Image I/O is not supported"));
         #endif // IMLIB_ENABLE_IMAGE_FILE_IO

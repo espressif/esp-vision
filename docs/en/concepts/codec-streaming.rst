@@ -8,7 +8,9 @@ Once you have a frame you often want to *get it off the board*: preview it on a 
 Still-image codecs: JPEG and PNG
 --------------------------------
 
-:py:meth:`image.Image.to_jpeg` (and its alias :py:meth:`image.Image.compress`) encodes a frame to JPEG. JPEG is lossy: the ``quality`` keyword (1-100) trades size for fidelity, and ``subsampling`` controls how aggressively chroma is reduced (``JPEG_SUBSAMPLING_420`` is smallest, ``444`` is best quality). On boards with a hardware JPEG encoder this is offloaded; otherwise a software encoder (``esp_new_jpeg``) is used. :py:meth:`image.Image.to_png` produces lossless PNG, which is larger but exact -- useful for saving reference frames.
+:py:meth:`image.Image.to_jpeg` (and its alias :py:meth:`image.Image.compress`) encodes a frame to JPEG. JPEG is lossy: the ``quality`` keyword (1-100) trades size for fidelity, and ``subsampling`` controls how aggressively chroma is reduced (``JPEG_SUBSAMPLING_420`` is smallest, ``444`` is best quality). On boards with a hardware JPEG encoder this is offloaded; otherwise a software encoder (``esp_new_jpeg``) is used.
+
+Current firmware does not enable the PNG decoder or encoder. Loading a PNG with ``image.Image(path)`` raises ``OSError`` immediately; :py:meth:`image.Image.to_png` and saving an uncompressed image to ``.png`` raise ``RuntimeError``. Convert PNG assets to JPEG before uploading them.
 
 Recording sequences: ImageIO
 ----------------------------

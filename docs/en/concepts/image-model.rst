@@ -34,7 +34,7 @@ The pixel format determines how many bytes each pixel occupies and how its value
      - Luminance/chrominance packing, common in camera/codec pipelines.
    * - ``JPEG`` / ``PNG``
      - varies
-     - Compressed byte streams produced by :py:meth:`image.Image.to_jpeg` / ``to_png``.
+     - Compressed byte streams. JPEG is produced by :py:meth:`image.Image.to_jpeg`; PNG codec support is not enabled in the current firmware.
 
 RGB565 packs a color into 16 bits, trading color precision for half the memory of RGB888. Green gets the extra bit because the human eye is most sensitive to it. :py:meth:`image.Image.get_pixel` can return either the packed value or an ``(r, g, b)`` tuple expanded back to 8 bits per channel.
 

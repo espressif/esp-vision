@@ -485,7 +485,7 @@ class Image:
     def set_pixel(self, x: int, y: int, pixel: Color) -> Image: ...
     #: Push this image to the host as a binary EV-MUX ``preview.frame`` JPEG.
     def flush(self) -> None: ...
-    #: Save the image to a file; the format is inferred from the extension.
+    #: Save the image to a file; the format is inferred from the extension. PNG encoding is not enabled in current firmware.
     #: path: destination path.
     #: roi: optional source rectangle (x, y, w, h).
     #: quality: JPEG quality from 1 to 100 when saving as JPEG.

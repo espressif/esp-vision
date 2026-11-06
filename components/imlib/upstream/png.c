@@ -255,6 +255,9 @@ void png_decompress(image_t *dst, image_t *src) {
 #if defined(IMLIB_ENABLE_IMAGE_FILE_IO)
 // This function inits the geometry values of an image.
 void png_read_geometry(file_t *fp, image_t *img, const char *path, png_read_settings_t *rs) {
+#if !defined(IMLIB_ENABLE_PNG_DECODER)
+    file_raise_error(fp, MP_ERROR_TEXT("PNG decoder is not enabled"));
+#endif
     uint32_t header;
     file_seek(fp, 12); // start of IHDR
     file_read(fp, &header, 4);
@@ -303,6 +306,11 @@ void png_read(image_t *img, const char *path) {
 }
 
 void png_write(image_t *img, const char *path) {
+#if !defined(IMLIB_ENABLE_PNG_ENCODER)
+    if (img->pixfmt != PIXFORMAT_PNG) {
+        mp_raise_msg_varg(&mp_type_RuntimeError, MP_ERROR_TEXT("PNG encoder is not enabled"));
+    }
+#endif
     file_t fp;
     file_open(&fp, path, false, FA_WRITE | FA_CREATE_ALWAYS);
     if (img->pixfmt == PIXFORMAT_PNG) {
