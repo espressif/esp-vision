@@ -39,6 +39,9 @@ package_plugin_npm:
   variables:
     GIT_SUBMODULE_STRATEGY: none
     npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 python3-serial
   script:
     - export TMPDIR="$CI_PROJECT_DIR/.cache/plugin-release-tmp" TMP="$CI_PROJECT_DIR/.cache/plugin-release-tmp" TEMP="$CI_PROJECT_DIR/.cache/plugin-release-tmp"
     - mkdir -p "$TMPDIR" .cache/plugin-release-tarballs
@@ -47,6 +50,19 @@ package_plugin_npm:
   artifacts:
     paths: [.cache/plugin-release-tarballs/]
     expire_in: 1 month
+
+# Exercise the exact tag packager before release when its inputs change.
+plugin_release_checks:
+  extends: package_plugin_npm
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - changes:
+        - ".gitlab/ci/plugin.yml"
+        - "tools/ci/mcp/package_plugin_release.mjs"
+        - "tools/ci/mcp/release_npm.mjs"
+        - "host/esp-vision-plugin/**/*"
+        - "host/device-cli/**/*"
 
 publish_plugin_npm:
   stage: post_deploy

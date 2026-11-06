@@ -261,7 +261,7 @@ test('an existing CLI version is skipped before packaging or publication', () =>
 
 test('plugin publication rejects a default-branch push without a firmware tag', () => withReleaseFixture(async fixture => {
   const result = runHelper(fixture, ['--package', 'host/esp-vision-plugin'], withoutTokenEnv(fixture.env, {
-    CI_PIPELINE_SOURCE: 'push', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true',
+    CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true',
   }))
   assert.notEqual(result.status, 0)
   assert.match(result.output, /require a protected firmware release tag/)
