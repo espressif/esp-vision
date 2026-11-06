@@ -6,6 +6,12 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Exercise P4/S31 production download control handling with the Core serial opening policy and the complete official USB-JTAG sequence, including repeated/coalesced requests and the final 50 ms deferral; separately model why a Linux opening with cached DTR/RTS both disabled can request a normal reset, without changing firmware policy or claiming measured kernel signals.
+
+- Use the S31 ROM digital-system reset for software download entry after later-registered shutdown cleanup, allowing ROM to reinitialize retained USB-OTG state; register the restart hook before USB/machine/network startup independently of the CDC timer, fail explicitly on registration errors, and retain normal S31/P4/S3 reset behavior.
+
+- Enable S31 Korvo/Mosaico USB-OTG automatic ROM entry through deferred CDC DTR/RTS control and machine.bootloader(), using the masked LP download latch; keep Chatbot on its connected USB Serial/JTAG interface. Normal return after programming requires the matching S31 latch handling in Device Core 0.7.0 or an equivalent host.
+
 - Add browser ROM factory-MAC identity binding to Device Core 0.7.0 through the pinned official chip reader, exposing Node-compatible `chipMac` and optional prevalidated `expectedMac`; reject initial or recovered identity changes before stub startup, erase or write, with browser-bundle and same-model-device regressions.
 
 - Default unlabeled automatically mounted FAT volumes and MSC LUN names to `ESP_FLASH` / `ESP_SDCARD`, preserving custom labels, board-specific USB MSC interface strings and writer ownership without formatting; add a bilingual USB interface/configuration and disk-naming chapter explaining Windows volume names, and align storage acceptance with the explicit initialization policy.

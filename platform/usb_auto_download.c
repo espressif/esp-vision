@@ -11,7 +11,7 @@
 #include "esp_rom_sys.h"
 #include "esp_system.h"
 #include "esp_timer.h"
-#if CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_IDF_TARGET_ESP32P4 || CONFIG_IDF_TARGET_ESP32S31
 #include "soc/lp_system_reg.h"
 #else
 #include "soc/rtc_cntl_reg.h"
@@ -47,24 +47,55 @@ typedef enum {
 static atomic_int s_reboot_mode = ATOMIC_VAR_INIT(USB_REBOOT_NONE);
 static atomic_bool s_download_mode = ATOMIC_VAR_INIT(false);
 static esp_timer_handle_t s_restart_timer;
+static bool s_restart_initialized;
 
-static void usb_auto_download_before_restart(void)
+static usb_reboot_mode_t usb_auto_download_apply_mode(void)
 {
     const usb_reboot_mode_t mode = atomic_load_explicit(&s_reboot_mode, memory_order_acquire);
     USB_AUTO_DOWNLOAD_LOG("shutdown mode=%d", mode);
     if (mode == USB_REBOOT_BOOTLOADER) {
-#if CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_IDF_TARGET_ESP32P4 || CONFIG_IDF_TARGET_ESP32S31
         REG_SET_BIT(LP_SYSTEM_REG_SYS_CTRL_REG, LP_SYSTEM_REG_FORCE_DOWNLOAD_BOOT);
 #else
         REG_SET_BIT(RTC_CNTL_OPTION1_REG, RTC_CNTL_FORCE_DOWNLOAD_BOOT);
 #endif
     } else if (mode == USB_REBOOT_NORMAL) {
-#if CONFIG_IDF_TARGET_ESP32P4
+#if CONFIG_IDF_TARGET_ESP32P4 || CONFIG_IDF_TARGET_ESP32S31
         REG_CLR_BIT(LP_SYSTEM_REG_SYS_CTRL_REG, LP_SYSTEM_REG_FORCE_DOWNLOAD_BOOT);
 #else
         REG_CLR_BIT(RTC_CNTL_OPTION1_REG, RTC_CNTL_FORCE_DOWNLOAD_BOOT);
 #endif
     }
+    return mode;
+}
+
+static void usb_auto_download_before_restart(void)
+{
+#if CONFIG_IDF_TARGET_ESP32S31
+    if (usb_auto_download_apply_mode() == USB_REBOOT_BOOTLOADER) {
+        // The ordinary S31 restart only resets CPUs and retains the live OTG
+        // controller/PHY. Reset the digital system after shutdown cleanup so
+        // ROM can initialize USB again, while keeping the LP download latch.
+        esp_rom_software_reset_system();
+        // A failed ROM reset must not fall through to the CPU-only reset.
+        for (;;) {
+        }
+    }
+#else
+    (void)usb_auto_download_apply_mode();
+#endif
+}
+
+esp_err_t esp_vision_restart_init(void)
+{
+    if (s_restart_initialized) {
+        return ESP_OK;
+    }
+    esp_err_t ret = esp_register_shutdown_handler(usb_auto_download_before_restart);
+    if (ret == ESP_OK) {
+        s_restart_initialized = true;
+    }
+    return ret;
 }
 
 void esp_vision_restart(bool download_mode)
@@ -74,9 +105,9 @@ void esp_vision_restart(bool download_mode)
     }
     atomic_store_explicit(&s_reboot_mode, download_mode ? USB_REBOOT_BOOTLOADER : USB_REBOOT_NORMAL,
                           memory_order_release);
-    // Python entry also works when the CDC timer/shutdown handler is disabled.
-    // The registered shutdown handler reapplies the same mode before reset.
-    usb_auto_download_before_restart();
+    // Set the mode now without bypassing shutdown cleanup. S31 registers the
+    // shared shutdown handler at startup even when the CDC timer is disabled.
+    (void)usb_auto_download_apply_mode();
     if (download_mode) {
 #if CONFIG_IDF_TARGET_ESP32S3
         /* S3's USB ROM hand-off needs persistence before the reboot. */
@@ -113,7 +144,7 @@ esp_err_t esp_vision_usb_auto_download_init(void)
         return ret;
     }
 
-    ret = esp_register_shutdown_handler(usb_auto_download_before_restart);
+    ret = esp_vision_restart_init();
     if (ret != ESP_OK) {
         (void)esp_timer_delete(s_restart_timer);
         s_restart_timer = NULL;

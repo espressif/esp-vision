@@ -126,6 +126,9 @@ void mp_task(void *pvParameter)
     volatile uint32_t sp = (uint32_t)esp_cpu_get_sp();
     esp_err_t ev_mux_init_err = ESP_FAIL;
 
+    #if CONFIG_IDF_TARGET_ESP32S31
+    ESP_ERROR_CHECK(esp_vision_restart_init());
+    #endif
     #if MICROPY_PY_THREAD
     mp_thread_init(pxTaskGetStackStart(NULL), MICROPY_TASK_STACK_SIZE / sizeof(uintptr_t));
     #endif

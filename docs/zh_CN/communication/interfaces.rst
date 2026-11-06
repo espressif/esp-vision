@@ -176,7 +176,9 @@ DTR/RTS、RESET 与 ROM 下载
 
 DTR 变化不会取得或释放 EV-MUX 会话。已关闭主机串口句柄但 USB 仍连接时，固件未必立即知道；正确做法是关闭前发送 ``session.release``，否则等租约到期。
 
-CDC DTR/RTS 自动下载是另外一条 USB control 路径。它与 Python ``machine.bootloader()`` 共用 ``esp_vision_restart(download_mode)`` 底层函数；Python 请求可立即执行，USB control callback 只记录状态，延迟 timer 在回调外执行复位。P4 设置/清除下载位时保留系统寄存器其他位；S3 还遵循其 ROM USB persistence/PHY 交接契约。
+CDC DTR/RTS 自动下载是另外一条 USB control 路径。它与 Python ``machine.bootloader()`` 共用 ``esp_vision_restart(download_mode)`` 底层函数；Python 请求可立即执行，USB control callback 只记录状态，延迟 timer 在回调外执行复位。P4 和 S31 设置/清除下载位时保留系统寄存器其他位；S3 还遵循其 ROM USB persistence/PHY 交接契约。S31 Korvo 和 Mosaico 启用这条 CDC 入口；Chatbot 保留实际连接的 USB Serial/JTAG，不启用未连接的 OTG 口。正式 2026.10.23 的 S31 固件尚无此支持，仍需要硬件方式进入 ROM。
+
+此固件修改提供 S31 从应用进入 ROM 的能力。烧录后正常返回应用还要求主机清除并验证 S31 的下载标志，例如 Device Core 0.7.0；旧版 Device Core 0.6.1 不包含此步骤。发布此固件前，应先发布匹配的 Core，并由 IDE 和官网采用。
 
 .. seqdiag::
 

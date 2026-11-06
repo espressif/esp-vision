@@ -13,5 +13,9 @@
 esp_err_t esp_vision_usb_auto_download_init(void);
 void esp_vision_usb_auto_download_line_state(bool dtr, bool rts);
 
+// Register before USB/machine/network initialization so later shutdown cleanup
+// runs before S31's download system reset. Independent of the CDC timer.
+esp_err_t esp_vision_restart_init(void);
+
 // Shared synchronous restart path for Python and deferred USB requests.
 void esp_vision_restart(bool download_mode);
