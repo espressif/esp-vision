@@ -92,6 +92,8 @@ This release adds S31 USB-OTG automatic ROM entry, verified complete installatio
 
 ### Fixed
 
+- Install Python and pyserial in the tag-only Plugin packager, exercise that same packager on relevant branches and merge requests, and isolate the no-tag publication regression from inherited release-tag variables while testing both branch and tag environments.
+
 - Bind Expert archive identity checks to the independently versioned npm manifest instead of a historical hard-coded version, and retain the Core notice copied from the verified published CLI artifact used for Plugin packaging.
 
 - Complete serial startup frames that cross the initial 300 ms drain window within the parser's existing progress/total budgets, without extending the fixed deadline for later frames or accepting old sessions; reject parser receive timeouts even after they clear the buffer, and clean up waits on cancellation or close. Add byte-count/timing diagnostics and regressions for split/coalesced byte boundaries, timeout budgets and injected legacy parsers.
