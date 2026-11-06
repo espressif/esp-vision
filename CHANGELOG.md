@@ -4,6 +4,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+## [2026.11.06]
+
+This release adds S31 USB-OTG automatic ROM entry, verified complete installation and addressed Flash erase, negotiated UART communication, safe camera observation, shared USB/TCP preview, storage initialization policies, and validated camera/ISP/AI behavior. Firmware and npm package versions remain independent: application SDK Device Core 0.7.0, Device CLI 0.1.1 with bundled Core 0.5.1, Knowledge MCP 0.1.2 and Plugin 0.1.1.
+
 ### Added
 
 - Exercise P4/S31 production download control handling with the Core serial opening policy and the complete official USB-JTAG sequence, including repeated/coalesced requests and the final 50 ms deferral; separately model why a Linux opening with cached DTR/RTS both disabled can request a normal reset, without changing firmware policy or claiming measured kernel signals.
@@ -37,6 +41,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Add strict ESP-DL inference hardware acceptance with a SHA-256-verified ESPDet model in a temporary read-only RAM VFS, real camera inference, repeatability/output checks, transfer/latency measurements and identity-scoped cleanup after uncertain mount results; persistent Flash/SD acceptance remains independent.
 
 ### Changed
+
+- Prepare the 2026.11.06 firmware release and immutable Knowledge MCP 0.1.2 / Plugin 0.1.1 npm archives. Bind both host package manifests to published Device CLI 0.1.1 and its declared bundled Core 0.5.1; keep the separately published application SDK Core 0.7.0 and the standalone CLI lifecycle independent.
 
 - Document the public address-based ROM erase/write/read primitives separately from firmware installation policy, including the portable one-write-per-session contract and integer JEDEC ID; clarify that Core 0.7.0 adds region erase and complete-install deletion semantics, while partition-address changes are handled by supplied metadata.
 
@@ -85,6 +91,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Refresh the shared dark/light/adaptive architecture diagrams and bilingual README/architecture guides for Plugin, standalone Device CLI, public Device Core and the official online Knowledge MCP; show all four public npm versions and package responsibilities in the READMEs.
 
 ### Fixed
+
+- Bind Expert archive identity checks to the independently versioned npm manifest instead of a historical hard-coded version, and retain the Core notice copied from the verified published CLI artifact used for Plugin packaging.
 
 - Complete serial startup frames that cross the initial 300 ms drain window within the parser's existing progress/total budgets, without extending the fixed deadline for later frames or accepting old sessions; reject parser receive timeouts even after they clear the buffer, and clean up waits on cancellation or close. Add byte-count/timing diagnostics and regressions for split/coalesced byte boundaries, timeout budgets and injected legacy parsers.
 

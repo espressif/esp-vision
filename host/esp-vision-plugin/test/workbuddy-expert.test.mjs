@@ -213,6 +213,7 @@ test('Expert names accept 15 characters per locale and reject 16 and the reporte
 })
 
 test('CI identities distinguish unpublished candidates, fixed release tags and unchanged npm versions', async t => {
+  const npmVersion = JSON.parse(await readFile(resolve(packageRoot, 'package.json'), 'utf8')).version
   const env = { CI_COMMIT_SHA: 'a'.repeat(40), CI_PIPELINE_ID: '123' }
   assert.equal(ciBuildIdentity('0.1.0', env).expertVersion, '0.1.0-dev.123')
   assert.notEqual(ciBuildIdentity('0.1.0', { ...env, CI_PIPELINE_ID: '124' }).expertVersion, ciBuildIdentity('0.1.0', env).expertVersion)
@@ -225,8 +226,8 @@ test('CI identities distinguish unpublished candidates, fixed release tags and u
   }
   const root = await temporary(t)
   const candidate = await buildExpertArchive({ outputDirectory: resolve(root, 'candidate'), ciEnvironment: env })
-  assert.equal(candidate.sourceVersion, '0.1.0')
-  assert.equal(candidate.expertVersion, '0.1.0-dev.123')
+  assert.equal(candidate.sourceVersion, npmVersion)
+  assert.equal(candidate.expertVersion, `${npmVersion}-dev.123`)
   const entries = unpack(await readFile(candidate.archivePath))
   const provenance = entries.get('BUILD-PROVENANCE.json').contents
   assert.deepEqual(JSON.parse(provenance), candidate.build)
@@ -238,7 +239,7 @@ test('CI identities distinguish unpublished candidates, fixed release tags and u
   const first = await buildExpertArchive({ outputDirectory: resolve(root, 'release1'), ciEnvironment: releaseEnv })
   const retry = await buildExpertArchive({ outputDirectory: resolve(root, 'release2'), ciEnvironment: { ...releaseEnv, CI_PIPELINE_ID: '124' } })
   assert.equal(first.expertVersion, '2026.10.27')
-  assert.equal(first.sourceVersion, '0.1.0')
+  assert.equal(first.sourceVersion, npmVersion)
   assert.equal(first.build.pipelineId, null, 'release identity must not change on a pipeline retry')
   assert.equal(first.sha256, retry.sha256)
 })
