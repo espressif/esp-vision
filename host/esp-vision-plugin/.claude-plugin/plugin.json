@@ -1,6 +1,6 @@
 {
   "name": "esp-vision",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ESP-VISION device operations through a bundled local CLI and official online firmware knowledge.",
   "icon": "./assets/esp-vision-logo.png",
   "author": {

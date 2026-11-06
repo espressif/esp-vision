@@ -1,6 +1,6 @@
 {
   "name": "@esp-vision/plugin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ESP-VISION plugin with a bundled local device CLI and official online firmware knowledge.",
   "license": "Apache-2.0",
   "repository": {
@@ -52,7 +52,7 @@
     "deviceCli": "~0.1.0",
     "resolved": {
       "deviceCore": "0.5.1",
-      "deviceCli": "0.1.0"
+      "deviceCli": "0.1.1"
     }
   },
   "espVisionReleaseType": "patch"

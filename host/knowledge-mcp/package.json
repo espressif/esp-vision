@@ -1,6 +1,6 @@
 {
   "name": "@esp-vision/knowledge-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Public stdio and Streamable HTTP Knowledge MCP runtime for ESP-VISION.",
   "license": "Apache-2.0",
   "type": "module",
@@ -58,7 +58,7 @@
     "deviceCli": "~0.1.0",
     "resolved": {
       "deviceCore": "0.5.1",
-      "deviceCli": "0.1.0"
+      "deviceCli": "0.1.1"
     }
   },
   "espVisionReleaseType": "patch"
