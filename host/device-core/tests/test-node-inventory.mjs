@@ -134,3 +134,68 @@ test('inventory propagates an aborted serial enumeration', async () => {
     error => error === reason,
   )
 })
+
+test('passive known ROM enumeration never opens, resets or claims firmware identity', async () => {
+  for (const productId of [2, 9, 18, 32]) {
+    const result = await inventory({ interfaces: ['serial'] }, {
+      platform: 'linux',
+      async listSerial() { return [{ path: '/dev/ttyACM1', vendorId: 0x303a, productId, product: 'ESP32 ROM' }] },
+      createDevice() { throw new Error('ROM port must not receive an EV-MUX probe') },
+      transportFor() { throw new Error('ROM port must not be opened as runtime') },
+    })
+    assert.equal(result.devices[0].status, 'rom')
+    assert.equal(result.devices[0].identity, null)
+    assert.equal(result.devices[0].interfaceSource, 'descriptor-candidate')
+    assert.equal(result.devices[0].error, undefined)
+  }
+})
+
+test('active ROM detection attempts normal boot before probing the rebound runtime once', async () => {
+  let reset = 0, connects = 0
+  const rom = { path: '/dev/ttyACM1', vendorId: 0x303a, productId: 32, serialNumber: '30eda0eda1b0', location: '1-2' }
+  const runtime = { ...rom, path: '/dev/ttyACM2', productId: 0x4023, product: 'ESP-VISION' }
+  const result = await inventory({ interfaces: ['serial'], probe: true }, {
+    platform: 'linux', listSerial: async () => [rom],
+    async probeRom(selected) { assert.deepEqual(selected, rom); reset++; return { port: runtime, probe: { attempted: true, outcome: 'runtime' } } },
+    transportFor(row) { assert.equal(row.address, runtime.path); return {} },
+    createDevice() { return {
+      async connect() { assert.equal(reset, 1); connects++; return { identity: { deviceId: rom.serialNumber } } },
+      async inspect() { return {} }, async disconnect() {},
+    } },
+  })
+  assert.equal(connects, 1)
+  assert.equal(result.devices[0].status, 'identified')
+  assert.equal(result.devices[0].romProbe.outcome, 'runtime')
+})
+
+test('failed SPI startup does not fabricate firmware identity or probe a stale ROM path', async () => {
+  for (const port of [null, { path: '/dev/ttyACM1' }]) {
+    const result = await inventory({ interfaces: ['serial'], probe: true }, {
+      platform: 'linux', listSerial: async () => [{ path: '/dev/ttyACM1', vendorId: 0x303a, productId: 32 }],
+      probeRom: async () => ({ port, probe: { attempted: true, outcome: port ? 'rom' : 'no-runtime' } }),
+      createDevice() { throw Error('No runtime may be opened') },
+    })
+    assert.equal(result.devices[0].status, port ? 'rom' : 'unidentified')
+    assert.equal(result.devices[0].identity, null)
+  }
+})
+
+for (const [code, status] of [['TIMEOUT', 'unidentified'], ['VERSION_MISMATCH', 'unidentified'],
+  ['SERIAL_BUSY', 'busy'], ['SESSION_BUSY', 'busy'], ['SERIAL_ACCESS_DENIED', 'permission-denied']]) {
+  test(`firmware detection keeps ${code} distinct from evidence of absent firmware`, async () => {
+    let closed = false
+    const result = await inventory({ interfaces: ['serial'], probe: true }, {
+      platform: 'linux',
+      async listSerial() { return [{ path: '/dev/ttyACM1', vendorId: 0x303a, productId: 0x4023, product: 'ESP-VISION' }] },
+      transportFor() { return {} },
+      createDevice() { return {
+        async connect() { throw Object.assign(new Error('probe failed'), { code }) },
+        async disconnect() { closed = true },
+      } },
+    })
+    assert.equal(result.devices[0].status, status)
+    assert.equal(result.devices[0].identity, null, 'USB product name cannot establish firmware identity')
+    assert.equal(result.devices[0].error.code, code)
+    assert.equal(closed, true)
+  })
+}

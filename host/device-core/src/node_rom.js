@@ -141,7 +141,11 @@ export function openNodeRom({ port, python = defaultPython, signal } = {}, depen
       progress?.(data, data.length, bytes)
       return data
     },
-    async flashData(bytes, progress, offset) { await rpc('write', [offset, Buffer.from(bytes).toString('base64')]); progress(bytes.byteLength, bytes.byteLength) },
+    async flashData(bytes, progress, offset) {
+      const receipt = await rpc('write', [offset, Buffer.from(bytes).toString('base64')])
+      progress(bytes.byteLength, bytes.byteLength)
+      return receipt
+    },
     readRegister: address => rpc('readRegister', [address]),
     writeRegister: (address, value, mask) => rpc('writeRegister', [address, value, mask]),
     hardReset: () => rpc('reset'),

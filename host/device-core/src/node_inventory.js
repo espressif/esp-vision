@@ -50,11 +50,12 @@ export function filterSerialPorts(ports, { platform = process.platform, allPorts
 export function serialEntry(port) {
   const vid = port.vendorId, pid = port.productId
   const usb = vid !== null && vid !== undefined
+  const rom = vid === 0x303a && [2, 9, 18, 32].includes(pid)
   const kind = vid === 0x303a && pid === 0x1001 ? 'usj'
     : [0x10c4, 0x1a86, 0x0403, 0x067b].includes(vid) ? 'uart'
     : vid === 0x303a && /esp.vision/i.test(port.product ?? '') ? 'usb'
     : usb ? 'serial' : 'uart'
-  return { interface: kind, address: port.path, status: 'unprobed', identity: null, usb: { vendorId: vid ?? null, productId: pid ?? null, serialNumber: port.serialNumber ?? null, product: port.product ?? null, manufacturer: port.manufacturer ?? null }, interfaceSource: 'descriptor-candidate' }
+  return { interface: kind, address: port.path, status: rom ? 'rom' : 'unprobed', identity: null, usb: { vendorId: vid ?? null, productId: pid ?? null, serialNumber: port.serialNumber ?? null, product: port.product ?? null, manufacturer: port.manufacturer ?? null }, interfaceSource: 'descriptor-candidate' }
 }
 export function transportFor(entry, options = {}) {
   return entry.interface === 'tcp' ? tcpTransport({ host: entry.host, port: entry.port })
@@ -85,13 +86,35 @@ export async function inventory(options = {}, dependencies = {}) {
   signal?.throwIfAborted()
   if (probe) for (const row of rows) {
     signal?.throwIfAborted()
+    if (row.status === 'rom') {
+      try {
+        const ports = await (dependencies.listSerial ?? listSerial)({ ...options, signal })
+        const selected = ports.filter(port => port.path === row.address)
+        if (selected.length !== 1) throw Object.assign(new Error('Selected ROM port is no longer unique'), { code: 'ROM_PORT_LOST' })
+        const probeRom = dependencies.probeRom ?? (await import('./node_rom_probe.js')).probeNodeRom
+        const result = await probeRom(selected[0], { python: options.python ?? defaultPython, timeout: options.probeTimeout ?? 5000, signal })
+        row.romProbe = result.probe
+        if (!result.port || result.probe.outcome !== 'runtime') {
+          row.status = result.port ? 'rom' : 'unidentified'
+          if (!result.port) row.error = { code: 'ROM_RUNTIME_NOT_FOUND', message: 'Normal boot did not expose a runtime; enter ROM download mode again to install firmware' }
+          continue
+        }
+        Object.assign(row, serialEntry(result.port))
+      } catch (error) {
+        signal?.throwIfAborted()
+        row.romProbe = error.romProbe
+        row.error = { code: error.code ?? 'ROM_PROBE_FAILED', message: error.message }
+        continue
+      }
+    }
     const device = (dependencies.createDevice ?? createDevice)({ transport: (dependencies.transportFor ?? transportFor)(row, options) })
     try {
       const result = await device.connect({ role: row.interface === 'serial' ? 'unknown' : row.interface, timeout: options.probeTimeout ?? 5000, signal, probeRepl: false, autoBaud: false, ...(row.advertisement ? { expectedDevice: row.advertisement } : {}) })
+      if (row.romProbe?.mac && result.identity?.deviceId !== row.romProbe.mac) throw Object.assign(new Error('Runtime identity differs from the selected ROM device'), { code: 'DEVICE_IDENTITY_MISMATCH' })
       row.identity = result.identity; row.inspection = await device.inspect({ fields: options.fields, signal }); row.status = 'identified'
     } catch (error) {
       if (signal?.aborted) throw error
-      row.status = error.code === 'SERIAL_ACCESS_DENIED' ? 'permission-denied' : error.code === 'SERIAL_BUSY' ? 'busy' : 'unidentified'; row.error = { code: error.code ?? 'PROBE_FAILED', message: 'Probe failed; the port may be busy, inaccessible, unflashed or running another firmware' }
+      row.status = error.code === 'SERIAL_ACCESS_DENIED' ? 'permission-denied' : ['SERIAL_BUSY', 'SESSION_BUSY'].includes(error.code) ? 'busy' : 'unidentified'; row.error = { code: error.code ?? 'PROBE_FAILED', message: 'Probe failed; the port may be busy, inaccessible, unflashed or running another firmware' }
     } finally { await device.disconnect().catch(() => { row.cleanupFailed = true }) }
   }
   const rank = row => row.status === 'identified' ? 0 : row.status === 'advertised' ? 1 : row.status === 'unprobed' ? 2 : 3

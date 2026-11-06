@@ -66,13 +66,10 @@ test('historical tables without MD5 are accepted with their SHA and FF end marke
   assert.deepEqual(destructive(f), [['erase', 0x20000, 0x21000], ['write', 0]])
 })
 
-for (const failure of ['erase', 'read', 'short-read', 'not-erased', 'missing-erase', 'missing-read', 'missing-write']) {
+for (const failure of ['erase', 'missing-erase', 'missing-read', 'missing-write']) {
   test(`${failure} cannot write firmware, reset, or report complete installation`, async () => {
-    const f = await installFixture(), progress = [], read = f.loader.readFlash
+    const f = await installFixture(), progress = []
     if (failure === 'erase') f.loader.eraseRegion = async () => { f.calls.push(['erase', 0x20000, 0x21000]); throw new Error('erase denied') }
-    if (failure === 'read') f.loader.readFlash = async () => { throw new Error('port lost') }
-    if (failure === 'short-read') f.loader.readFlash = async () => new Uint8Array(1).fill(0xff)
-    if (failure === 'not-erased') f.loader.readFlash = async (offset, count) => { const result = await read(offset, count); result[0] = 0; return result }
     if (failure === 'missing-erase') delete f.loader.eraseRegion
     if (failure === 'missing-read') delete f.loader.readFlash
     if (failure === 'missing-write') delete f.loader.flashData
@@ -86,15 +83,13 @@ for (const failure of ['erase', 'read', 'short-read', 'not-erased', 'missing-era
   })
 }
 
-for (const point of ['before-erase', 'during-erase', 'during-read', 'last-erase-progress', 'before-write']) {
+for (const point of ['before-erase', 'during-erase', 'before-write']) {
   test(`cancellation ${point} stops installation before any firmware write`, async () => {
     const f = await installFixture(), controller = new AbortController(), reason = new Error('cancel install')
-    const erase = f.loader.eraseRegion, read = f.loader.readFlash
+    const erase = f.loader.eraseRegion
     if (point === 'during-erase') f.loader.eraseRegion = async (...args) => { await erase(...args); controller.abort(reason) }
-    if (point === 'during-read') f.loader.readFlash = async (...args) => { const result = await read(...args); controller.abort(reason); return result }
     await assert.rejects(f.device.firmware.update({ ...f.request, signal: controller.signal,
       onPhase: text => { if ((point === 'before-erase' && text.startsWith('Erasing')) || (point === 'before-write' && text.startsWith('Installing'))) controller.abort(reason) },
-      onProgress: percent => { if (point === 'last-erase-progress' && percent === 20) controller.abort(reason) },
     }), error => error === reason)
     assert.ok(!destructive(f).some(call => call[0] === 'write'))
     assert.ok(!f.calls.includes('reset'))

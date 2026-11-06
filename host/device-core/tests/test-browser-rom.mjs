@@ -74,18 +74,26 @@ test('SLIP keeps a valid packet after boot noise, trailing packets and escaped b
   transport.buffer = new Uint8Array([0xc0, 0xdb, 0x47, 0xc0])
   await assert.rejects(transport.read(100), { code: 'ROM_SLIP_ESCAPE' })
 })
-test('SLIP preserves state across partial incoming chunks and has a total packet deadline', async () => {
+test('SLIP preserves state across partial incoming chunks and has a total packet deadline', async t => {
+  // Drive wall time explicitly: a busy CI runner can suspend this process for
+  // longer than the receive budget between real timer callbacks.
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 })
   const transport = transportFixture()
   transport.buffer = new Uint8Array([0xc0, 1, 0xdb])
-  const later = setTimeout(() => { transport.buffer = new Uint8Array([0xdc, 2, 0xc0]) }, 5)
-  try { assert.deepEqual(await transport.read(100), new Uint8Array([1, 0xc0, 2])) } finally { clearTimeout(later) }
+  setTimeout(() => { transport.buffer = new Uint8Array([0xdc, 2, 0xc0]) }, 5)
+  const partial = transport.read(100)
+  t.mock.timers.tick(5)
+  assert.deepEqual(await partial, new Uint8Array([1, 0xc0, 2]))
   transport.buffer = new Uint8Array([0xc0, 1])
-  await assert.rejects(transport.read(15), { code: 'ROM_READ_TIMEOUT' })
+  const expired = assert.rejects(transport.read(15), { code: 'ROM_READ_TIMEOUT' })
+  t.mock.timers.tick(15)
+  await expired
   transport.device.readable = null
   await assert.rejects(transport.read(100), { code: 'ROM_PORT_LOST' })
   transport.device.writable = null
   await assert.rejects(transport.write(new Uint8Array()), { code: 'ROM_PORT_LOST' })
 })
+
 function readFixture({ data = new Uint8Array([1, 2, 3]), packets, digest = romMd5(data), delay = 0 } = {}) {
   const received = [], reads = [...(packets ?? [data]), digest]
   const loader = { IS_STUB: true, ESP_READ_FLASH: 0xd2, transport: { baudrate: 2000000,
@@ -155,7 +163,7 @@ function officialFixture({ failRates = [], usb = false, security = { flags: 0, f
       payload.push(0xc0, ...escaped, 0xc0); this.transport.buffer = new Uint8Array(payload); reads.push(length)
       return 0
     }
-    async writeFlash(options) { calls.push(['write', options.compress, options.eraseAll, options.fileArray[0].address]); if (failWrite) throw new Error('write interrupted'); options.reportProgress(0, 10, 10) }
+    async writeFlash(options) { calls.push(['write', options.compress, options.eraseAll, options.fileArray[0].address]); if (failWrite) throw new Error('write interrupted'); options.calculateMD5Hash(options.fileArray[0].data); options.reportProgress(0, 10, 10) }
   }
   const adapter = createOfficialBrowserLoader({ ESPLoader: FakeLoader, Transport: FakeTransport }, port, {}, { onStatus: event => events.push(event), signal, expectedMac })
   return { adapter, events, calls, port, loaders, opens, reads }
@@ -242,6 +250,17 @@ test('all high rates fail safely back to validated 115200', async () => {
   await f.adapter.initialize(); await f.adapter.runStub()
   assert.equal(f.adapter.baudRate, 115200)
   assert.deepEqual(f.events.filter(event => event.phase === 'baud-testing').map(event => event.baudRate), ROM_UART_BAUD_RATES)
+})
+
+test('browser official write enables device MD5 and returns an exact verified range receipt', async () => {
+  const f = officialFixture({ usb: true })
+  await f.adapter.initialize()
+  const stub = await f.adapter.runStub()
+  const bytes = new Uint8Array([0xe9, 1, 2, 3])
+  const result = await stub.flashData(bytes.buffer, () => {}, 0x10000)
+  assert.deepEqual(result, { algorithm: 'md5', offset: 0x10000, bytes: 4,
+    digest: createHash('md5').update(bytes).digest('hex') })
+  await f.adapter.disconnect()
 })
 test('port reopen that resets the board does not count as an initialized high-speed stub', async () => {
   const f = officialFixture({ reopenResets: true })

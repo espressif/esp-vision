@@ -92,7 +92,7 @@ export async function updateFirmware(request, connectedIdentity, disconnect) {
     session = new FirmwareFlashSession(loader, image, { mode, signal, reset: reset ? () => reset(loader) : undefined })
     await session.connect(bytes)
     abort(signal)
-    // Erase/erase-verification honor cancellation; once firmware writing starts,
+    // Erase and the pre-write boundary honor cancellation; once firmware writing starts,
     // finish verification/reset as before. No uncertain operation is replayed.
     const result = await session.flash(bytes, { onProgress, onPhase })
     return { ...result, version: target.version, board: target.board, reconnected: false }

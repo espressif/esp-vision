@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 // SPDX-License-Identifier: Apache-2.0
-// MD5 verifies the flasher stub's transport digest; approved firmware still uses
-// full SHA-256. Web Crypto intentionally does not offer the legacy MD5 algorithm.
+// MD5 verifies transport and esptool write receipts; approved source bytes still
+// require SHA-256. Web Crypto does not offer the legacy MD5 algorithm.
+export function romMd5Hex(bytes) {
+  return Array.from(romMd5(bytes), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
 export function romMd5(bytes) {
   const input = new Uint8Array(Math.ceil((bytes.length + 9) / 64) * 64)
   input.set(bytes); input[bytes.length] = 0x80

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // ROM flashing is separate from DeviceSession and its EV-MUX v4 owner protocol.
 import { planInstallFilesystemErase } from './firmware_partitions.js'
+import { romMd5Hex } from './rom_md5.js'
+import { clearDownloadLatch } from './rom_reset.js'
 
 function checkAbort(signal) {
   if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : Object.assign(new Error('Firmware operation cancelled'), { name: 'AbortError' })
@@ -94,7 +96,7 @@ export class FirmwareFlashSession {
         if (!Number.isSafeInteger(id) || id <= 0 || id > 0xffffff || capacity < 18 || capacity > 30
             || 2 ** capacity < image.flashSize) throw new Error('Detected flash is unknown or smaller than the approved complete image layout')
         if (typeof this.stub.eraseRegion !== 'function' || typeof this.stub.readFlash !== 'function' || typeof this.stub.flashData !== 'function') {
-          throw Object.assign(new Error('Complete installation requires bounded filesystem erase and readback support'), { code: 'FIRMWARE_ERASE_UNSUPPORTED' })
+          throw Object.assign(new Error('Complete installation requires filesystem erase and firmware verification support'), { code: 'FIRMWARE_ERASE_UNSUPPORTED' })
         }
       } else {
         const table = image.partitionTable
@@ -123,51 +125,40 @@ export class FirmwareFlashSession {
         // erase, backups or automatic recovery/replay are part of installation.
         await this.stub.eraseRegion(offset, size)
         checkAbort(this.#signal)
-        onPhase('Verifying the erased internal FAT filesystem')
-        checkAbort(this.#signal)
-        for (let position = 0; position < size; position += 65536) {
-          const count = Math.min(65536, size - position)
-          const chunk = await this.stub.readFlash(offset + position, count, undefined,
-            { chunkSize: 65536, blockSize: 1024, maxInFlight: 1 })
-          checkAbort(this.#signal)
-          if (!(chunk instanceof Uint8Array) || chunk.byteLength !== count || chunk.some(value => value !== 0xff)) {
-            throw Object.assign(new Error('Internal FAT filesystem erase verification failed; keep the device in download mode'), { code: 'FIRMWARE_ERASE_VERIFY_FAILED' })
-          }
-          onProgress(Math.floor(20 * (position + count) / size))
-          checkAbort(this.#signal)
-        }
+        // Explicit installation trusts the checked erase command; do not read
+        // or hash the erased filesystem back over the download connection.
       }
       onPhase(install ? 'Installing complete firmware; internal FAT filesystem cleared' : 'Writing application; bootloader, partition table, NVS and user files are preserved')
       checkAbort(this.#signal)
-      await this.stub.flashData(payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength),
-        (written, total) => onProgress((install ? 20 : 0) + (total ? Math.min(install ? 60 : 80, Math.round(written / total * (install ? 60 : 80))) : 0)), image.offset, true)
+      const verification = await this.stub.flashData(payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength),
+        (written, total) => onProgress(total ? Math.min(80, Math.round(written / total * 80)) : 0), image.offset, true)
       // Once firmware writing starts, preserve the existing completion policy:
       // finish verification/reset rather than interrupting a partial image.
-      onPhase(install ? 'Verifying the complete installation image' : 'Verifying the complete application image')
-      // maxInFlight is a packet count: one 1 KiB packet bounds USB-JTAG backlog.
-      const readback = new Uint8Array(payload.byteLength)
-      for (let offset = 0; offset < payload.byteLength; offset += 65536) {
-        const count = Math.min(65536, payload.byteLength - offset)
-        const chunk = await this.stub.readFlash(image.offset + offset, count, undefined,
-          { chunkSize: 65536, blockSize: 1024, maxInFlight: 1 })
-        if (chunk.byteLength !== count) throw new Error('Written firmware readback is incomplete')
-        readback.set(chunk, offset)
-        onProgress(80 + Math.min(19, Math.floor(20 * (offset + count) / payload.byteLength)))
+      if (verification !== undefined && verification !== null) {
+        onPhase('Checking esptool device MD5 verification')
+        if (verification.algorithm !== 'md5' || verification.offset !== image.offset || verification.bytes !== payload.byteLength
+            || !/^[a-f0-9]{32}$/.test(verification.digest ?? '') || verification.digest !== romMd5Hex(payload)) {
+          throw new Error('Written firmware verification failed; invalid esptool MD5 receipt')
+        }
+      } else {
+        // Custom adapters without a verified write receipt retain full readback.
+        onPhase(install ? 'Verifying the complete installation image' : 'Verifying the complete application image')
+        // maxInFlight is a packet count: one 1 KiB packet bounds USB-JTAG backlog.
+        const readback = new Uint8Array(payload.byteLength)
+        for (let offset = 0; offset < payload.byteLength; offset += 65536) {
+          const count = Math.min(65536, payload.byteLength - offset)
+          const chunk = await this.stub.readFlash(image.offset + offset, count, undefined,
+            { chunkSize: 65536, blockSize: 1024, maxInFlight: 1 })
+          if (chunk.byteLength !== count) throw new Error('Written firmware readback is incomplete')
+          readback.set(chunk, offset)
+          onProgress(80 + Math.min(19, Math.floor(20 * (offset + count) / payload.byteLength)))
+        }
+        if (await firmwareSha256(readback) !== image.sha256) throw new Error('Written firmware verification failed; keep the device in download mode for recovery')
       }
-      if (await firmwareSha256(readback) !== image.sha256) throw new Error('Written firmware verification failed; keep the device in download mode for recovery')
       onProgress(100)
       this.state = 'verified'
       try {
-        // P4/S31 software download requests survive a CPU reset. Clear only that
-        // latch, verify all other live fields, then apply the host reset policy.
-        if (image.chipFamily === 0x3280 || image.chipFamily === 0x3231) {
-          const address = image.chipFamily === 0x3280 ? 0x50110008 : 0x20700008, mask = 4
-          const before = await this.stub.readRegister(address)
-          if (!Number.isInteger(before) || before < 0 || before > 0xffffffff) throw new Error('Invalid download system control register')
-          if (before & mask) await this.stub.writeRegister(address, 0, mask)
-          const after = await this.stub.readRegister(address)
-          if (after !== ((before & ~mask) >>> 0)) throw new Error('Normal boot latch verification failed')
-        }
+        await clearDownloadLatch(image.chipFamily, this.stub)
         await this.reset()
       }
       catch (error) {
