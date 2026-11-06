@@ -4,6 +4,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Fixed
+
+- Reject PNG image files at load when the decoder is disabled, and avoid truncating existing files when PNG encoding is unavailable; clarify the firmware's PNG limitation.
+
 ## [2026.11.06]
 
 This release adds S31 USB-OTG automatic ROM entry, verified complete installation and addressed Flash erase, negotiated UART communication, safe camera observation, shared USB/TCP preview, storage initialization policies, and validated camera/ISP/AI behavior. Firmware and npm package versions remain independent: application SDK Device Core 0.7.0, Device CLI 0.1.1 with bundled Core 0.5.1, Knowledge MCP 0.1.2 and Plugin 0.1.1.
