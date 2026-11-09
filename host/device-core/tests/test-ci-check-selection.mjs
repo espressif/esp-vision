@@ -13,17 +13,23 @@ test('CI keeps its qualified hardware suite explicit while manual ISP checks rem
   const yaml = readFileSync(ciConfig, 'utf8')
   const commands = yaml.replace(/\\\r?\n\s*/g, ' ').split(/\r?\n/)
     .map(line => line.trim()).filter(line => line.startsWith('python3 tools/ci/flash_and_test.py '))
-  assert.equal(commands.length, 1)
-  const selections = [...commands[0].matchAll(/(?:^|\s)--checks\s+(\S+)/g)]
-  assert.equal(selections.length, 1)
-  assert.match(commands[0], /(?:^|\s)--require-all(?:\s|$)/)
+  assert.equal(commands.length, 2)
   const expected = ['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation',
     'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream',
     'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument',
     'sensor_snapshot_buffer', 'memory_policy', 'espdl_inference']
-  const selected = parseArgs(['--serial', 'policy-test', '--checks', selections[0][1], '--require-all'])
-  assert.deepEqual(selected.checks, expected)
-  assert.equal(selected.requireAll, true)
+  const visionUnsupported = ['ipa_stats', 'display', 'display_stream', 'camera_display_lifecycle']
+  for (const [index, command] of commands.entries()) {
+    const selections = [...command.matchAll(/(?:^|\s)--checks\s+(\S+)/g)]
+    assert.equal(selections.length, 1)
+    assert.match(command, /(?:^|\s)--require-all(?:\s|$)/)
+    const screenOutput = /(?:^|\s)--screen-output(?:\s|$)/.test(command)
+    assert.equal(screenOutput, index === 0)
+    const selected = parseArgs(['--serial', 'policy-test', '--checks', selections[0][1], '--require-all',
+      ...(screenOutput ? ['--screen-output', 'screen.jpg'] : [])])
+    assert.deepEqual(selected.checks, index === 0 ? expected : expected.filter(name => !visionUnsupported.includes(name)))
+    assert.equal(selected.requireAll, true)
+  }
   assert.deepEqual(parseArgs(['--serial', 'policy-test', '--checks', 'all']).checks, [...DEVICE_CHECKS])
   const manual = ['isp_ccm_frames', 'isp_lsc_display']
   assert.deepEqual(parseArgs(['--serial', 'policy-test', '--checks', manual.join(',')]).checks, manual)

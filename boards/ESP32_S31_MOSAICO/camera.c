@@ -49,6 +49,7 @@
 #define ESP_VISION_CAMERA_STREAM_PRIME_ATTEMPTS 3
 #define ESP_VISION_CAMERA_FULL_INIT_ATTEMPTS 3
 #define ESP_VISION_CAMERA_INIT_RETRY_DELAY_MS 100
+#define ESP_VISION_CAMERA_PPA_SCALE_STEPS 16U
 
 typedef struct {
     void *ptr;
@@ -76,6 +77,7 @@ typedef struct {
     uint32_t active_input_offset_y;
     uint32_t width;
     uint32_t height;
+    uint32_t ppa_scale_steps;
     uint32_t input_pixfmt;
     uint32_t input_stride;
     uint32_t buffer_count;
@@ -211,6 +213,7 @@ static void esp_vision_camera_release_ppa(void)
         s_camera.ppa_out_buf = NULL;
     }
     s_camera.ppa_out_size = 0;
+    s_camera.ppa_scale_steps = 0;
 }
 
 static esp_err_t esp_vision_camera_claim_board_resources(void)
@@ -533,20 +536,60 @@ static esp_err_t esp_vision_camera_queue_all_buffers(void)
     return ESP_OK;
 }
 
-static void esp_vision_camera_update_active_window(void)
+static esp_err_t esp_vision_camera_update_active_window(void)
 {
-    s_camera.active_input_width = ESP_VISION_CAMERA_ACTIVE_INPUT_WIDTH;
-    s_camera.active_input_height = ESP_VISION_CAMERA_ACTIVE_INPUT_HEIGHT;
-
-    if ((s_camera.active_input_width == 0) || (s_camera.active_input_width > s_camera.raw_input_width)) {
-        s_camera.active_input_width = s_camera.raw_input_width;
-    }
-    if ((s_camera.active_input_height == 0) || (s_camera.active_input_height > s_camera.raw_input_height)) {
-        s_camera.active_input_height = s_camera.raw_input_height;
+    if (s_camera.raw_input_width == 0 || s_camera.raw_input_height == 0 ||
+            s_camera.width == 0 || s_camera.height == 0) {
+        return ESP_ERR_INVALID_ARG;
     }
 
-    s_camera.active_input_offset_x = (s_camera.raw_input_width - s_camera.active_input_width) / 2;
-    s_camera.active_input_offset_y = (s_camera.raw_input_height - s_camera.active_input_height) / 2;
+    /* Choose one window at QQVGA, where PPA's 1/16 scale granularity is
+     * coarsest. Doubling the scale for QVGA/VGA keeps the same field of view.
+     * SC101IOT uses 854x640 at 3/16, 3/8 and 3/4; OV3640 keeps 640x480.
+     * PPA floors the scaled block dimensions, including the fractional pixel
+     * on SC101IOT's 854-pixel edge. Both axes always use the same scale. */
+    const uint32_t base_width = ESP_VISION_CAMERA_PPA_OUTPUT_QQVGA_HEIGHT;
+    const uint32_t base_height = ESP_VISION_CAMERA_PPA_OUTPUT_QQVGA_WIDTH;
+    uint32_t scale_x = (base_width * ESP_VISION_CAMERA_PPA_SCALE_STEPS +
+                        s_camera.raw_input_width - 1) / s_camera.raw_input_width;
+    uint32_t scale_y = (base_height * ESP_VISION_CAMERA_PPA_SCALE_STEPS +
+                        s_camera.raw_input_height - 1) / s_camera.raw_input_height;
+    uint32_t base_scale = scale_x > scale_y ? scale_x : scale_y;
+    uint32_t crop_width = (base_width * ESP_VISION_CAMERA_PPA_SCALE_STEPS + base_scale - 1) / base_scale;
+    uint32_t crop_height = (base_height * ESP_VISION_CAMERA_PPA_SCALE_STEPS + base_scale - 1) / base_scale;
+    crop_width = (crop_width + 1) & ~1U;
+    crop_height = (crop_height + 1) & ~1U;
+    uint32_t scale_steps = base_scale * s_camera.height / base_width;
+    if (crop_width > s_camera.raw_input_width || crop_height > s_camera.raw_input_height ||
+            scale_steps == 0 || scale_steps >= 16 * ESP_VISION_CAMERA_PPA_SCALE_STEPS ||
+            crop_height * scale_steps / ESP_VISION_CAMERA_PPA_SCALE_STEPS != s_camera.width ||
+            crop_width * scale_steps / ESP_VISION_CAMERA_PPA_SCALE_STEPS != s_camera.height) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    s_camera.active_input_width = crop_width;
+    s_camera.active_input_height = crop_height;
+    s_camera.active_input_offset_x = ((s_camera.raw_input_width - crop_width) / 2) & ~1U;
+    s_camera.active_input_offset_y = (s_camera.raw_input_height - crop_height) / 2;
+    s_camera.ppa_scale_steps = scale_steps;
+    return ESP_OK;
+}
+
+static void esp_vision_camera_configure_ppa_geometry(ppa_srm_oper_config_t *config)
+{
+    config->in.pic_w = s_camera.raw_input_width;
+    config->in.pic_h = s_camera.raw_input_height;
+    config->in.block_w = s_camera.active_input_width;
+    config->in.block_h = s_camera.active_input_height;
+    config->in.block_offset_x = s_camera.active_input_offset_x;
+    config->in.block_offset_y = s_camera.active_input_offset_y;
+    config->out.pic_w = s_camera.width;
+    config->out.pic_h = s_camera.height;
+    config->out.block_offset_x = 0;
+    config->out.block_offset_y = 0;
+    config->rotation_angle = PPA_SRM_ROTATION_ANGLE_90;
+    config->scale_x = (float)s_camera.ppa_scale_steps / ESP_VISION_CAMERA_PPA_SCALE_STEPS;
+    config->scale_y = config->scale_x;
 }
 
 static esp_err_t esp_vision_camera_init_ppa(void)
@@ -558,6 +601,8 @@ static esp_err_t esp_vision_camera_init_ppa(void)
         .oper_type = PPA_OPERATION_SRM,
     };
 
+    ret = esp_vision_camera_update_active_window();
+    ESP_RETURN_ON_ERROR(ret, TAG, "unsupported camera scaling geometry");
     out_size = esp_vision_camera_output_size(s_camera.width, s_camera.height, s_camera.output_pixfmt);
     if (out_size == 0) {
         return ESP_ERR_INVALID_ARG;
@@ -576,7 +621,6 @@ static esp_err_t esp_vision_camera_init_ppa(void)
         return ESP_ERR_NO_MEM;
     }
 
-    esp_vision_camera_update_active_window();
     return ESP_OK;
 }
 
@@ -1074,24 +1118,12 @@ esp_err_t esp_vision_camera_capture_into(uint8_t *pixels, size_t pixels_size)
                     ESP_CACHE_MSYNC_FLAG_INVALIDATE);
 
     ppa_srm_oper_config_t ppa_config = {};
+    esp_vision_camera_configure_ppa_geometry(&ppa_config);
     ppa_config.in.buffer = s_camera.buffers[buf.index].ptr;
-    ppa_config.in.pic_w = s_camera.raw_input_width;
-    ppa_config.in.pic_h = s_camera.raw_input_height;
-    ppa_config.in.block_w = s_camera.active_input_width;
-    ppa_config.in.block_h = s_camera.active_input_height;
-    ppa_config.in.block_offset_x = s_camera.active_input_offset_x;
-    ppa_config.in.block_offset_y = s_camera.active_input_offset_y;
     ppa_config.in.srm_cm = PPA_SRM_COLOR_MODE_YUV422_UYVY;
     ppa_config.out.buffer = s_camera.ppa_out_buf;
     ppa_config.out.buffer_size = s_camera.ppa_out_size;
-    ppa_config.out.pic_w = s_camera.width;
-    ppa_config.out.pic_h = s_camera.height;
-    ppa_config.out.block_offset_x = 0;
-    ppa_config.out.block_offset_y = 0;
     ppa_config.out.srm_cm = esp_vision_camera_output_color_mode(s_camera.output_pixfmt);
-    ppa_config.rotation_angle = PPA_SRM_ROTATION_ANGLE_90;
-    ppa_config.scale_x = (float)s_camera.height / (float)s_camera.active_input_width;
-    ppa_config.scale_y = (float)s_camera.width / (float)s_camera.active_input_height;
     ppa_config.byte_swap = false;
     ppa_config.mirror_x = s_camera.hmirror;
     ppa_config.mirror_y = s_camera.vflip;

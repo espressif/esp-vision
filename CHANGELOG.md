@@ -6,9 +6,9 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
-- Add SC101IOT DVP camera support on ESP32_S31_MOSAICO alongside OV3640, with 1280×720 UYVY input and a centered 640×480 crop, board-controlled PWDN sequencing, and sensor PCLK timing configuration.
+- Add SC101IOT DVP camera support on ESP32_S31_MOSAICO alongside OV3640.
 
-- Add ESP32_P4X_VISION hardware CI on the `vision_p4x` runner with ESP-IDF v5.5.6, the shared eighteen required runtime checks, and firmware release qualification gating.
+- Add ESP32_P4X_VISION hardware CI.
 
 ### Changed
 
@@ -19,6 +19,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Speed up complete firmware installation by trusting checked, partition-bounded FFAT erase commands without erased-range reads, and reuse official esptool whole-write MD5 verification receipts in Node/browser adapters instead of transferring firmware back to the host. Keep SHA-256 qualification before writing and full readback for custom adapters without receipts.
 
 ### Fixed
+
+- Keep Mosaico SC101IOT framing consistent across QQVGA, QVGA and VGA with hardware scaling, a wider field of view and no black borders.
+
+- Fix ESP32_P4X_VISION hardware CI to match the board's supported capabilities.
 
 - Drive the partial ROM-packet deadline regression with a controlled clock so CI scheduling delays cannot consume its successful receive budget.
 

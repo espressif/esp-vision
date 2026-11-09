@@ -241,6 +241,28 @@ class FirmwarePublicationGateTests(unittest.TestCase):
                 self.assertIn(f"'{check}'", check_registry)
                 self.assertIn(check, checks)
 
+    def test_vision_hardware_job_requires_only_supported_checks(self):
+        hil = yaml.safe_load((ROOT / ".gitlab/ci/target_test.yml").read_text())
+
+        def script_for(name):
+            job = hil[name]
+            return job["script"] if "script" in job else script_for(job["extends"])
+
+        def arguments_for(name):
+            return shlex.split("\n".join(script_for(name)).replace("\\\n", " "))
+
+        function_args = arguments_for("target_test_p4x_function_ev_board_idf5.5.6")
+        vision_args = arguments_for("target_test_p4x_vision_idf5.5.6")
+        function_checks = function_args[function_args.index("--checks") + 1].split(",")
+        vision_checks = vision_args[vision_args.index("--checks") + 1].split(",")
+        unsupported = {"ipa_stats", "display", "display_stream", "camera_display_lifecycle"}
+        self.assertEqual(vision_checks, [check for check in function_checks if check not in unsupported])
+        self.assertEqual(len(vision_checks), 14)
+        self.assertIn("--require-all", vision_args)
+        self.assertIn("--output", vision_args)
+        self.assertNotIn("--screen-output", vision_args)
+        self.assertIn("--screen-output", function_args)
+
     def test_upload_waits_for_package_and_required_qualification(self):
         jobs = yaml.safe_load((ROOT / ".gitlab/ci/deploy.yml").read_text())
         gate = jobs["qualify_firmware_release"]
