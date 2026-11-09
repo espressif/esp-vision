@@ -191,6 +191,8 @@ qualify_firmware_release:
       artifacts: false
     - job: target_test_p4x_function_ev_board_idf5.5.6
       artifacts: false
+    - job: target_test_p4x_vision_idf5.5.6
+      artifacts: false
     - job: device_core_checks
       artifacts: false
     - job: pre_commit

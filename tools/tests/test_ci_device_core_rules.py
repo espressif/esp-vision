@@ -246,7 +246,8 @@ class FirmwarePublicationGateTests(unittest.TestCase):
         gate = jobs["qualify_firmware_release"]
         needs = {item["job"] for item in gate["needs"]}
         self.assertTrue({"pack_launchpad", "firmware", "device_core_checks",
-                         "target_test_p4x_function_ev_board_idf5.5.6"} <= needs)
+                         "target_test_p4x_function_ev_board_idf5.5.6",
+                         "target_test_p4x_vision_idf5.5.6"} <= needs)
         self.assertTrue(all(not item.get("optional") for item in gate["needs"]))
         self.assertFalse(gate.get("allow_failure", False))
         upload_needs = {item["job"] for item in jobs["upload-dl-trigger"]["needs"]}

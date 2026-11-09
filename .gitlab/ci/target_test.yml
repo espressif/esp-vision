@@ -64,3 +64,19 @@ target_test_p4x_function_ev_board_idf5.5.6:
       artifacts: true
   variables:
     IDF_LABEL: idf5.5.6
+
+.target_test_p4x_vision:
+  extends: .target_test_base
+  tags:
+    - vision_p4x
+  resource_group: vision_p4x
+  variables:
+    BOARD: ESP32_P4X_VISION
+
+target_test_p4x_vision_idf5.5.6:
+  extends: .target_test_p4x_vision
+  needs:
+    - job: "firmware: [v5.5.6, ESP32_P4X_VISION]"
+      artifacts: true
+  variables:
+    IDF_LABEL: idf5.5.6

@@ -4,7 +4,15 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- Add SC101IOT DVP camera support on ESP32_S31_MOSAICO alongside OV3640, with 1280×720 UYVY input and a centered 640×480 crop, board-controlled PWDN sequencing, and sensor PCLK timing configuration.
+
+- Add ESP32_P4X_VISION hardware CI on the `vision_p4x` runner with ESP-IDF v5.5.6, the shared eighteen required runtime checks, and firmware release qualification gating.
+
 ### Changed
+
+- Update the ESP-IDF 5.5, 6.0 and 6.1 component manifests to esp_video 2.5.0 and esp_h264 1.4.*.
 
 - Prepare Device Core 0.7.1 as an independent npm patch release for faster complete installation and ROM-to-runtime firmware detection; retain the existing firmware and plugin release lifecycle.
 

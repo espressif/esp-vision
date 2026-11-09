@@ -13,6 +13,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "driver/gpio.h"
 #include "driver/ppa.h"
 #include "esp_board_manager.h"
 #include "esp_board_manager_defs.h"
@@ -42,6 +43,7 @@
 #define ESP_VISION_CAMERA_SENSOR_ID_UNKNOWN 0x0000
 #define ESP_VISION_CAMERA_OV3640_SENSOR_ID_1 0x364C
 #define ESP_VISION_CAMERA_OV3640_SENSOR_ID_2 0x3641
+#define ESP_VISION_CAMERA_SC101IOT_SENSOR_ID 0xDA4A
 #define ESP_VISION_CAMERA_DQBUF_TIMEOUT_MS 500
 #define ESP_VISION_CAMERA_DQBUF_RESTART_MAX 1
 #define ESP_VISION_CAMERA_STREAM_PRIME_ATTEMPTS 3
@@ -57,6 +59,7 @@ typedef struct {
     bool initialized;
     bool video_initialized;
     bool board_resources_claimed;
+    bool pwdn_configured;
     bool usb_serial_jtag_pad_was_enabled;
     bool usb_serial_jtag_clock_was_enabled;
     bool streaming;
@@ -269,7 +272,22 @@ static esp_err_t esp_vision_camera_video_init(void)
     ret = esp_vision_camera_claim_board_resources();
     ESP_RETURN_ON_ERROR(ret, TAG, "failed to claim Mosaico camera resources");
 
+    /* Stabilize external XCLK before releasing PWDN. */
     vTaskDelay(pdMS_TO_TICKS(ESP_VISION_CAMERA_POWER_STABILIZATION_MS));
+
+    /* Board-owned PWDN: low = awake, high = sleep for both sensors. */
+    const gpio_config_t pwdn_config = {
+        .pin_bit_mask = (1ULL << ESP_VISION_CAMERA_SENSOR_PWDN_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    ESP_RETURN_ON_ERROR(gpio_set_level(ESP_VISION_CAMERA_SENSOR_PWDN_PIN, 0), TAG,
+                        "failed to preset camera PWDN");
+    ESP_RETURN_ON_ERROR(gpio_config(&pwdn_config), TAG, "failed to configure camera PWDN");
+    s_camera.pwdn_configured = true;
+    ESP_RETURN_ON_ERROR(gpio_sleep_sel_dis(ESP_VISION_CAMERA_SENSOR_PWDN_PIN), TAG,
+                        "failed to disable camera PWDN sleep override");
+
+    vTaskDelay(pdMS_TO_TICKS(ESP_VISION_CAMERA_PWDN_WAKE_DELAY_MS));
 
     ret = esp_board_manager_init_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
     ESP_RETURN_ON_ERROR(ret, TAG, "board manager failed to initialize camera");
@@ -307,7 +325,8 @@ static esp_err_t esp_vision_camera_query_sensor_id(void)
     }
 
     if ((chip_id.pid != ESP_VISION_CAMERA_OV3640_SENSOR_ID_1) &&
-            (chip_id.pid != ESP_VISION_CAMERA_OV3640_SENSOR_ID_2)) {
+            (chip_id.pid != ESP_VISION_CAMERA_OV3640_SENSOR_ID_2) &&
+            (chip_id.pid != ESP_VISION_CAMERA_SC101IOT_SENSOR_ID)) {
         ESP_LOGE(TAG, "unsupported camera sensor ID: 0x%04" PRIx16, chip_id.pid);
         return ESP_ERR_NOT_SUPPORTED;
     }
@@ -324,6 +343,10 @@ static void esp_vision_camera_video_deinit(void)
         (void)esp_board_manager_deinit_device_by_name(ESP_BOARD_DEVICE_NAME_CAMERA);
         s_camera.device_path = NULL;
         s_camera.video_initialized = false;
+    }
+    if (s_camera.pwdn_configured) {
+        gpio_set_level(ESP_VISION_CAMERA_SENSOR_PWDN_PIN, 1);
+        s_camera.pwdn_configured = false;
     }
     esp_vision_camera_release_board_resources();
 }
@@ -404,6 +427,11 @@ static esp_err_t esp_vision_camera_configure_input_format(uint32_t width, uint32
                  format.fmt.pix.pixelformat);
         return ESP_ERR_NOT_SUPPORTED;
     }
+    if ((format.fmt.pix.width != width) || (format.fmt.pix.height != height)) {
+        ESP_LOGE(TAG, "camera selected unexpected input size: %" PRIu32 "x%" PRIu32,
+                 format.fmt.pix.width, format.fmt.pix.height);
+        return ESP_ERR_NOT_SUPPORTED;
+    }
 
     uint32_t bytesperline = format.fmt.pix.bytesperline;
     if (bytesperline == 0) {
@@ -421,8 +449,51 @@ static esp_err_t esp_vision_camera_configure_input_format(uint32_t width, uint32
     return ESP_OK;
 }
 
+static esp_err_t esp_vision_camera_sensor_register(bool write, uint8_t address, uint8_t *value)
+{
+    esp_cam_sensor_reg_val_t reg = {.regaddr = address, .value = *value};
+    struct v4l2_ext_control control = {
+        .id = write ? ESP_CAM_SENSOR_IOC_S_REG : ESP_CAM_SENSOR_IOC_G_REG,
+        .size = sizeof(reg),
+        .p_u8 = (uint8_t *) &reg,
+    };
+    struct v4l2_ext_controls controls = {
+        .ctrl_class = V4L2_CTRL_CLASS_ESP_CAM_IOCTL,
+        .count = 1,
+        .controls = &control,
+    };
+    if (ioctl(s_camera.fd, write ? VIDIOC_S_EXT_CTRLS : VIDIOC_G_EXT_CTRLS, &controls) != 0) {
+        return ESP_FAIL;
+    }
+    if (!write) {
+        *value = (uint8_t)reg.value;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t esp_vision_camera_configure_sc101iot_timing(void)
+{
+    /* Clear paged register 0x3640[1:0] for BSP PCLK timing before streaming.
+     * Keep page selection and access exclusive; later driver calls select their own page. */
+    uint8_t page = 0x36;
+    uint8_t timing = 0;
+    esp_err_t ret = esp_vision_camera_sensor_register(true, 0xf0, &page);
+    ESP_RETURN_ON_ERROR(ret, TAG, "failed to select SC101IOT register page");
+    ret = esp_vision_camera_sensor_register(false, 0x40, &timing);
+    ESP_RETURN_ON_ERROR(ret, TAG, "failed to read SC101IOT PCLK delay");
+    timing &= (uint8_t)~0x03;
+    ret = esp_vision_camera_sensor_register(true, 0x40, &timing);
+    ESP_RETURN_ON_ERROR(ret, TAG, "failed to configure SC101IOT PCLK delay");
+    return ESP_OK;
+}
+
 static esp_err_t esp_vision_camera_set_input_format(void)
 {
+    if (s_camera.sensor_id == ESP_VISION_CAMERA_SC101IOT_SENSOR_ID) {
+        esp_err_t ret = esp_vision_camera_configure_input_format(1280, 720, V4L2_PIX_FMT_UYVY);
+        ESP_RETURN_ON_ERROR(ret, TAG, "failed to configure SC101IOT input");
+        return esp_vision_camera_configure_sc101iot_timing();
+    }
     if ((s_camera.sensor_id != ESP_VISION_CAMERA_OV3640_SENSOR_ID_1) &&
             (s_camera.sensor_id != ESP_VISION_CAMERA_OV3640_SENSOR_ID_2)) {
         return ESP_ERR_INVALID_STATE;
