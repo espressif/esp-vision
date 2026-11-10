@@ -30,6 +30,11 @@ jobs:
       - name: Run astyle
         run: pre-commit run --all-files --show-diff-on-failure astyle_py
 
+      - name: Check repository content boundary
+        run: |
+          python tools/ci/check_repository_hygiene.py
+          python -m unittest discover -s tools/tests -p 'test_repository_hygiene.py' -v
+
       - name: Run copyright check
         run: pre-commit run --all-files --show-diff-on-failure check-copyright
 

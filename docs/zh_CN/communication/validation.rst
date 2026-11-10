@@ -108,12 +108,12 @@ CI 硬件门禁使用 ESP-IDF v5.5.6，在 P4 Function EV Board 上执行显式�
 LCD 抓屏与图案核验
 ------------------
 
-``--screen-output`` 显示已知测试图案，通过 ``device.capture({ source: 'screen', format: 'jpeg' })`` 读取 LCD 最后一帧 RGB565 的 JPEG，再保存到指定路径。预先创建项目内输出目录：
+``--screen-output`` 显示已知测试图案，通过 ``device.capture({ source: 'screen', format: 'jpeg' })`` 读取 LCD 最后一帧 RGB565 的 JPEG，再保存到指定路径。先将 ``ESP_VISION_WORK_DIR`` 设置为检出目录外可写的工作目录，再创建输出目录：
 
 .. code-block:: console
 
-   mkdir -p /home/libo/project/.esp-vision/hardware-validation
-   npm --prefix host/device-core run test:hardware -- --serial <USJ-port> --role usj --checks display --screen-output /home/libo/project/.esp-vision/hardware-validation/lcd.jpg
+   mkdir -p "$ESP_VISION_WORK_DIR/hardware-validation"
+   npm --prefix host/device-core run test:hardware -- --serial <USJ-port> --role usj --checks display --screen-output "$ESP_VISION_WORK_DIR/hardware-validation/lcd.jpg"
 
 抓屏调用固件 ``debug.capture_screen``，在 VM 任务中读取显示缓冲区，不调用摄像头。应核验 JPEG 可解码、尺寸与图案符合预期，并对照设备真实屏幕观察。LCD 未初始化返回 ``DISPLAY_NOT_READY``；无 LCD 或该固件不支持时返回 ``NOT_SUPPORTED``，不得改用摄像头掩盖失败。抓屏反映软件提交的最后显示帧，不证明物理面板、电缆或背光正常。
 

@@ -22,6 +22,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Enforce the shared-repository content boundary with agent guidance, ignore rules and index checks in pre-commit, GitLab CI and GitHub CI; replace developer-specific paths and shell setup in maintained documentation with configurable workspace instructions.
+
 - Keep Mosaico SC101IOT framing consistent across QQVGA, QVGA and VGA with hardware scaling, a wider field of view and no black borders.
 
 - Fix ESP32_P4X_VISION hardware CI to match the board's supported capabilities.
@@ -30,6 +32,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Classify an occupied EV-MUX session as busy during firmware identification; USB descriptors, ROM responses and timeouts do not establish the presence or absence of ESP-VISION firmware.
 - Keep passive ROM enumeration non-opening; active firmware detection verifies the selected ROM MAC/security, attempts normal SPI boot once, then rebinds only its matching physical USB endpoint before the ESP-VISION handshake. Preserve unknown startup outcomes and require download re-entry when no runtime returns.
+
+### Removed
+
+- Remove the internal native-UVC proposal and experiment record from `specs/`; supported UVC behavior remains documented in the bilingual API reference.
 
 ## [2026.11.06]
 

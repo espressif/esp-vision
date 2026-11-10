@@ -2,7 +2,17 @@
 
 ESP-VISION contains the MicroPython vision firmware for ESP32-P4/S3/S31 and the independently versioned `@esp-vision/device-core` host SDK. IDE, Agent, CLI and custom hosts share Device Core above EV-MUX v4; IDE/Agent applications live in separate repositories and consume the npm package.
 
-Keep this file focused on repository-wide agreements and navigation. Put component-specific requirements, platform limits and investigation details in the linked component guides.
+Keep this file focused on shared repository agreements and navigation. Put implemented contracts, supported limits and maintained usage instructions in the linked component guides. Keep personal settings and work-in-progress records outside the checkout.
+
+## Repository content boundary
+
+This shared repository contains reviewed project deliverables: source, reproducible tests and fixtures, shared build/CI configuration, public package metadata, and maintained documentation of implemented behavior. A document is not a deliverable merely because an agent created it, a task finished, or it was placed under `docs/`.
+
+- Never commit personal configuration, credentials, local environment/device settings, agent memory or transcripts, reasoning traces, temporary plans, design proposals, investigation diaries, handoff notes, experiment output or raw validation reports. Do not create `specs/` for agent work or relocate these records into documentation to make them committable.
+- Before creating a file, decide its audience and lifecycle. Keep working material in the external workspace selected by `ESP_VISION_WORK_DIR`; put review evidence and unresolved follow-ups in the MR/issue or CI artifacts. Extract only verified, maintained contracts into the existing documentation structure, updating both languages where applicable. Keep reusable test code and sanitized fixtures, not one-off execution results.
+- Keep user-specific paths, shell aliases, credentials and agent preferences in local configuration outside the checkout. Shared instructions must use configurable paths and portable commands. Shipped plugin manifests and Skills under `host/esp-vision-plugin/` are product source, not permission to commit personal agent settings elsewhere.
+- Before committing, inspect `git status --short`, `git diff --cached --name-status` and the complete staged diff. Stage explicit task files; exclude unrelated work and audit each added file against this boundary. Update the changelog and run `python tools/ci/check_repository_hygiene.py`. The check inspects the index, including force-added ignored files, and also runs in pre-commit and CI.
+- Ignore rules and the path check prevent known artifact locations; they cannot classify arbitrary prose or detect every secret. Review content regardless of its filename. Never use `git add -f` or a new exception to bypass this boundary for working material. Preserve existing uncommitted work outside the checkout before removing it; do not delete another task's files as cleanup.
 
 ## Start here
 
@@ -58,7 +68,7 @@ Prefer CI for the final firmware matrix after the feature is complete. SDK-only 
 
 - Every committed change updates root `CHANGELOG.md` under `[Unreleased]`, grouped by Added/Changed/Fixed/Removed. SDK release changes also update its package changelog/version as appropriate; npm versions are independent of firmware versions. Git tags identify firmware/documentation releases, not SDK releases.
 - Device Core publication is controlled by `.gitlab/ci/device-core.yml`: relevant non-master changes run publish dry runs; actual npm publication uses protected master credentials. Do not expose tokens or commit secrets.
-- Use meaningful branch prefixes (`feat/`, `fix/`, `docs/`, etc.), never `codex/`. For Espressif GitLab API access use `tk_gitlab` to load the token without printing it.
+- Use meaningful branch prefixes (`feat/`, `fix/`, `docs/`, etc.), never `codex/`. Load GitLab credentials through the developer's local credential setup or CI secret store without printing them; do not require a personal shell alias in shared instructions.
 - Keep temporary worktrees, builds, caches, logs and scratch scripts under the writable `ESP_VISION_WORK_DIR` workspace described above; set `TMPDIR`, `TMP` and `TEMP` accordingly. Use a persistent directory outside the checkout when artifacts must survive system temporary-directory cleanup. Do not commit generated output, local device paths or unrelated workspace changes.
 - Markdown prose uses one line per paragraph/list item; do not hard-wrap it.
 
