@@ -34,7 +34,7 @@ repos:
     hooks:
       - id: check-copyright
         args: ['--config', 'tools/ci/check_copyright_config.yaml', '--ignore', 'tools/ci/check_copyright_ignore.txt']
-        exclude: ^platform/main\.c$
+        exclude: ^(platform/main\.c|\.github/actions/sync-pr-to-gitlab/sync_pr_to_gitlab/github_pr_to_internal_pr\.py)$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

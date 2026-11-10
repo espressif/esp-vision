@@ -9,6 +9,7 @@
    :maxdepth: 1
 
    add-python-module
+   contribute
    customize-firmware
    publish-firmware
    add-model

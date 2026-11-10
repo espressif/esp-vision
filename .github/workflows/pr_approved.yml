@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+name: Sync approved PRs to GitLab
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  sync:
+    if: >-
+      github.event.label.name == 'PR-Sync-Merge' ||
+      github.event.label.name == 'PR-Sync-Rebase' ||
+      github.event.label.name == 'PR-Sync-Update'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync the reviewed PR to GitLab
+        uses: ./.github/actions/sync-pr-to-gitlab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLAB_URL: ${{ secrets.GITLAB_URL }}
+          GITLAB_NAMESPACE: ae_group
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GIT_CONFIG_NAME: ${{ secrets.GIT_CONFIG_NAME }}
+          GIT_CONFIG_EMAIL: ${{ secrets.GIT_CONFIG_EMAIL }}
