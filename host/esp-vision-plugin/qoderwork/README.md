@@ -2,7 +2,7 @@
 
 基于 ESP32 的 ESP-VISION 视觉应用开发：查询官方固件/API 知识，使用随包本地 CLI 检查设备、部署 MicroPython 脚本并验证实际结果。作者为 {{AUTHOR_NAME}}，联系邮箱 {{AUTHOR_EMAIL}}。
 
-此包使用 QoderWork 的 `.qoder-plugin/plugin.json`、`skills/`、`qoder.md` 与 `.mcp.json` 布局；不是 WorkBuddy Expert ZIP、旧 Skill ZIP，也不是已发布的 Qoder CLI 市场条目。版本 {{VERSION}}；原 npm 包身份仍为 `@esp-vision/plugin@0.1.0`，本构建不会发布 npm 或提交市场。
+此包使用 QoderWork 的 `.qoder-plugin/plugin.json`、`skills/`、`qoder.md` 与 `.mcp.json` 布局；不是 WorkBuddy Expert ZIP、旧 Skill ZIP，也不是已发布的 Qoder CLI 市场条目。版本 {{VERSION}}；原 npm 包身份仍为 `@esp-vision/plugin@{{SOURCE_VERSION}}`，本构建不会发布 npm 或提交市场。
 
 需要 Node.js 22+、允许执行本地命令的 QoderWork 环境和可达的 Knowledge MCP。设备使用还需要用户指定的受信任设备及串口权限或 TCP 网络连通性。完整第三方许可证随 `cli/licenses/`、`THIRD_PARTY_NOTICES.md` 和 `DEVICE_CORE_NOTICE.md` 一并提供。
 

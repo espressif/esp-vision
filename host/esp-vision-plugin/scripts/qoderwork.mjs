@@ -10,7 +10,7 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const templateRoot = resolve(packageRoot, 'qoderwork')
 
 export function validateQoderManifest(manifest) {
-  assert.equal(manifest.name, 'esp-vision-espressif')
+  assert.equal(manifest.name, 'esp-vision-plugin')
   assert.equal(manifest.displayName, 'ESP-Vision 嵌入式 AI 视觉开发')
   assert.match(manifest.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/)
   assert.deepEqual(manifest.skills, [`./skills/${skillName}`])
@@ -44,7 +44,7 @@ export async function buildQoderArchive({ sourceRoot = packageRoot, outputDirect
   const reference = await readFile(resolve(source, `skills/${skillName}/references/application-workflow.md`), 'utf8')
   add(`skills/${skillName}/references/application-workflow.md`, deviceReference(reference, '# Installation and application verification\n\nLocate the installed QoderWork plugin root from its actual Skill installation path. Verify cli/device-cli.mjs and the bundled licenses exist. Preserve uncertain or modified installations before using the host native uninstall/reinstall flow. Do not edit an unrecognized directory or infer successful activation from a ZIP build. Verify the Skill and qoder.md role instructions are active and the official Knowledge MCP connection works. A matching version does not prove matching payload bytes.\n\nThe following device acceptance guidance applies after installation and explicit device selection. Finish directory operations and uploads before starting a continuous application.'))
   for (const name of ['README.md', 'CONNECTORS.md', 'qoder.md']) {
-    add(name, renderListing(await readTemplate(templateRoot, name), manifest))
+    add(name, renderListing(await readTemplate(templateRoot, name), manifest, original.version))
   }
   bundle.provenance('qoderwork', manifest.version, sourceCommit(source, ciEnvironment, 'QoderWork'))
   return { ...(await bundle.finish(`esp-vision-qoderwork-${manifest.version}.zip`)), version: manifest.version }
