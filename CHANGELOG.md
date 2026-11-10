@@ -6,7 +6,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
-- Give the QoderWork plugin the distinct package name `esp-vision-plugin` to avoid the occupied `esp-vision` name.
+- Give the QoderWork plugin the distinct package name `esp-vision-plugin` to avoid the occupied `esp-vision` name, and replace its public-facing README with project, hardware, adaptation and usage information.
 
 - Prepare Device Core 0.7.1 as an independent npm patch release for faster complete installation and ROM-to-runtime firmware detection; retain the existing firmware and plugin release lifecycle.
 

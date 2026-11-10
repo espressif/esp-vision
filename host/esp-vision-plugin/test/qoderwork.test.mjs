@@ -87,7 +87,11 @@ test('QoderWork candidate roundtrips deterministically with original runtime/lic
   assert.match(reference, /https:\/\/github\.com\/espressif\/esp-vision\/security\/policy/)
 
   assert.doesNotMatch(text('skills/esp-vision-development/references/application-workflow.md'), /WorkBuddy|CodeBuddy|CODEBUDDY_PLUGIN_ROOT|CLAUDE_PLUGIN_ROOT/)
-  for (const path of ['README.md', 'skills/esp-vision-development/SKILL.md', 'skills/esp-vision-development/references/application-workflow.md']) {
+  assert.match(text('README.md'), /开源.*(?:项目|仓库)/)
+  assert.match(text('README.md'), /ESP32-P4.*ESP32-S3.*ESP32-S31/)
+  assert.match(text('README.md'), /https:\/\/vision\.espressif\.com\//)
+  assert.doesNotMatch(text('README.md'), /客户端预检|机审|待平台验收/)
+  for (const path of ['skills/esp-vision-development/SKILL.md', 'skills/esp-vision-development/references/application-workflow.md']) {
     assert.doesNotMatch(text(path), /<实际安装路径>|<plugin-root>|\/absolute\/installed|\/dev\/selected-device/)
     assert.match(text(path), /CLI:\?Set CLI to the verified installed bundle path/)
   }
