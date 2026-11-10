@@ -10,6 +10,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Add ESP32_P4X_VISION hardware CI.
 
+- Add ESP32_S31_KORVO camera and display hardware CI.
+
 ### Changed
 
 - Update the ESP-IDF 5.5, 6.0 and 6.1 component manifests to esp_video 2.5.0 and esp_h264 1.4.*.
