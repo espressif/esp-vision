@@ -61,6 +61,8 @@ pre_commit:
     - python -m pip install --upgrade pip
     - python -m pip install pre-commit
   script:
+    - python tools/ci/check_repository_hygiene.py
+    - python -m unittest discover -s tools/tests -p 'test_repository_hygiene.py' -v
     - pre-commit run --all-files --show-diff-on-failure astyle_py
     - pre-commit run --all-files --show-diff-on-failure check-copyright
 
