@@ -1,21 +1,34 @@
 # ESP-Vision AI视觉
 
-Author: {{AUTHOR_NAME}}. Contact: {{AUTHOR_EMAIL}}. Expert version: {{VERSION}}. Source plugin/npm version: {{SOURCE_VERSION}}.
+ESP-VISION 是乐鑫开源的低代码端侧 AI 与计算机视觉项目，基于 MicroPython 提供统一的 Python 接口，帮助开发者在 ESP32 系列芯片上构建摄像头采集、图像处理、AI 推理、显示和视频传输应用。
 
-ESP-Vision helps develop ESP32-based vision applications. This Expert ZIP bundles an Agent, the ESP-Vision development Skill, the original dependency-closed device CLI, required third-party license notices, and the official Knowledge MCP dependency. It is a new host-format export, not an npm release or proof of WorkBuddy activation.
+通过 WorkBuddy 专家，你可以查询 ESP-VISION 官方文档与 API、了解开发板能力，并在指定设备后检查设备、部署 MicroPython 程序和验证运行结果。
 
-## Runtime requirements
+## 支持的硬件
 
-Use the local WorkBuddy desktop execution environment with Node.js 22 or newer. Serial access requires Python with `pyserial`. Firmware flashing additionally requires `esptool>=5.3,<6`. Install missing runtimes only with the user's authorization and chosen environment. The package does not automatically install runtimes. Documentation needs network access to `https://mcp.vision.espressif.com/mcp` and no device connection. Device operations use the bundled CLI and a user-selected serial or TCP endpoint.
+项目提供基于 ESP32-P4、ESP32-S3 和 ESP32-S31 的开发板配置，包括 ESP32-P4X-EYE、ESP32-P4X-Function-EV-Board、ESP32-P4X-Vision、ESP32-S3-EYE、AtomS3R-M12，以及 ESP32-S31 Chatbot、Korvo 和 Mosaico。具体功能取决于开发板硬件和固件配置，请查看[支持的开发板](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/esp32p4/target-support/index.html)。
 
-## Publication and activation
+如果你的开发板尚未列出，可以参考开源仓库中的 `boards/TEMPLATE` 和已有开发板配置，适配摄像头、显示、存储等硬件并自行构建固件。新硬件需要根据实际配置完成适配和验证。
 
-Upload the ZIP through the [WorkBuddy Open Platform](https://open.workbuddy.cn/) after developer/enterprise registration and certification. Create the Expert business entry, upload the archive, inspect parsed metadata, test the saved expert, then submit for review. Approval and publication are separate steps. See the [platform workflow](https://open.workbuddy.cn/docs) and [Expert specification](https://open.workbuddy.cn/docs/expert). No upload, certification, review approval or publication is implied by this package.
+## 开始使用
 
-On first summon, complete WorkBuddy's Knowledge MCP dependency connection guide. Confirm the expert and Skill activate, the MCP can answer a documentation question, and the installed bundle retains the CLI. Use the root substituted by the host in `node "${CODEBUDDY_PLUGIN_ROOT}/cli/device-cli.mjs" --help`. If it is not substituted, resolve the actual installed plugin path as described in the Skill; do not guess a project-relative path. Host path substitution, Windows/macOS activation and real hardware operations require target-host acceptance.
+- 在 WorkBuddy 中连接官方知识服务，即可查询文档；知识查询需要网络，但不需要连接设备。
+- 设备操作需要支持本地命令执行的 WorkBuddy 桌面环境和 Node.js 22 或更高版本。串口连接需要 Python 和 `pyserial`；烧录固件还需要 `esptool>=5.3,<6`。设备使用还需要串口权限或可用的 TCP 网络。
+- 可以尝试：“查询我的开发板支持哪些 ESP-VISION 视觉 API”“检查我指定设备的固件和连接状态”“帮我部署并验证一个视觉应用”。设备操作前请明确指定目标设备。
 
-The published npm 0.1.0 WorkBuddy installer still creates its original separate Skill ZIP and MCP export. This archive is the Expert publication artifact; preparing it does not change that immutable release.
+## 了解更多
 
-## Maintainer acceptance
+- [ESP-VISION 官网](https://vision.espressif.com/)
+- [开源代码与开发板配置](https://github.com/espressif/esp-vision)
+- [中文文档](https://docs.espressif.com/projects/esp-vision/zh_CN/latest/)
+- [Web IDE](https://ide.vision.espressif.com/)
 
-Verify ZIP parsing and all bilingual listing fields, the avatar's display and marketplace style acceptance, Agent/Skill loading, Knowledge connection, retained CLI resources, paths containing spaces, and target operating systems. After selecting a device, separately verify real enumeration, requested Python execution/output and captures. A mock serial smoke test does not establish hardware support.
+## English
+
+ESP-VISION is an open-source, low-code edge AI and computer vision project from Espressif. Built on MicroPython, it provides Python APIs for camera capture, image processing, AI inference, display and video applications on supported ESP32 hardware. This WorkBuddy Expert helps you explore official documentation, inspect a device you select, deploy MicroPython programs and verify their results.
+
+Board configurations cover ESP32-P4, ESP32-S3 and ESP32-S31, including ESP32-P4X-EYE, ESP32-P4X-Function-EV-Board, ESP32-P4X-Vision, ESP32-S3-EYE, AtomS3R-M12 and ESP32-S31 Chatbot, Korvo and Mosaico. Features vary by board and firmware; see the [supported boards](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/target-support/index.html). To add another board, use `boards/TEMPLATE` and existing board configurations in the [open-source repository](https://github.com/espressif/esp-vision) as a starting point, adapt its hardware and build and validate the firmware.
+
+Connect the official knowledge service in WorkBuddy for documentation queries. Device operations require a WorkBuddy desktop environment with local execution and Node.js 22 or newer; serial access also needs Python and `pyserial`, while flashing requires `esptool>=5.3,<6`. Select the device explicitly before running device operations.
+
+Visit the [ESP-VISION website](https://vision.espressif.com/), [documentation](https://docs.espressif.com/projects/esp-vision/en/latest/) or [Web IDE](https://ide.vision.espressif.com/). License information for the project and third-party components is included with the Expert and in the repository.
