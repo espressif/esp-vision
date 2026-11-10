@@ -44,16 +44,17 @@ test('QoderWork candidate roundtrips deterministically with original runtime/lic
   await assert.rejects(buildQoderArchive({ outputDirectory: resolve(temp, 'path with spaces') }), /overwrite/)
   const orphan = resolve(temp, 'orphan-checksum')
   await mkdir(orphan)
-  await writeFile(resolve(orphan, 'esp-vision-qoderwork-0.1.0.zip.sha256'), 'preserved')
+  await writeFile(resolve(orphan, 'esp-vision-qoderwork-0.1.1.zip.sha256'), 'preserved')
   await assert.rejects(buildQoderArchive({ outputDirectory: orphan }), /overwrite/)
-  assert.equal(await readFile(resolve(orphan, 'esp-vision-qoderwork-0.1.0.zip.sha256'), 'utf8'), 'preserved')
+  assert.equal(await readFile(resolve(orphan, 'esp-vision-qoderwork-0.1.1.zip.sha256'), 'utf8'), 'preserved')
   const bytes = await readFile(first.archivePath)
   assert.equal(createHash('sha256').update(bytes).digest('hex'), first.sha256)
   const files = unpack(bytes)
   const text = name => files.get(name).toString()
   const manifest = JSON.parse(text('.qoder-plugin/plugin.json'))
   validateQoderManifest(manifest)
-  assert.equal(manifest.version, '0.1.0')
+  assert.equal(manifest.name, 'esp-vision-plugin')
+  assert.equal(manifest.version, '0.1.1')
   assert.ok(!files.has('.codebuddy-plugin/plugin.json') && !files.has('.claude-plugin/plugin.json'))
   assert.ok(![...files.keys()].some(name => /node_modules|\.git\/|workbuddy\//.test(name)))
   const mcp = JSON.parse(text('.mcp.json'))
@@ -62,7 +63,7 @@ test('QoderWork candidate roundtrips deterministically with original runtime/lic
   assert.equal(mcp.mcpServers['esp-vision-knowledge'].url, '{{USER_CONFIG}}')
   assert.match(mcp.mcpServers['esp-vision-knowledge']._setup.guide, /https:\/\/mcp\.vision\.espressif\.com\/mcp/)
   assert.doesNotMatch(text('skills/esp-vision-development/SKILL.md'), /CODEBUDDY_PLUGIN_ROOT|CLAUDE_PLUGIN_ROOT|`PLUGIN_ROOT`|<plugin-root>|\/absolute\/installed/)
-  assert.match(text('skills/esp-vision-development/SKILL.md'), /^version: 0\.1\.0$/m)
+  assert.match(text('skills/esp-vision-development/SKILL.md'), /^version: 0\.1\.1$/m)
   const skill = text('skills/esp-vision-development/SKILL.md')
   const reference = text('skills/esp-vision-development/references/application-workflow.md')
   assert.match(skill, /Troubleshooting Q&A in \[application workflow\]/)
@@ -86,7 +87,11 @@ test('QoderWork candidate roundtrips deterministically with original runtime/lic
   assert.match(reference, /https:\/\/github\.com\/espressif\/esp-vision\/security\/policy/)
 
   assert.doesNotMatch(text('skills/esp-vision-development/references/application-workflow.md'), /WorkBuddy|CodeBuddy|CODEBUDDY_PLUGIN_ROOT|CLAUDE_PLUGIN_ROOT/)
-  for (const path of ['README.md', 'skills/esp-vision-development/SKILL.md', 'skills/esp-vision-development/references/application-workflow.md']) {
+  assert.match(text('README.md'), /开源.*(?:项目|仓库)/)
+  assert.match(text('README.md'), /ESP32-P4.*ESP32-S3.*ESP32-S31/)
+  assert.match(text('README.md'), /https:\/\/vision\.espressif\.com\//)
+  assert.doesNotMatch(text('README.md'), /客户端预检|机审|待平台验收/)
+  for (const path of ['skills/esp-vision-development/SKILL.md', 'skills/esp-vision-development/references/application-workflow.md']) {
     assert.doesNotMatch(text(path), /<实际安装路径>|<plugin-root>|\/absolute\/installed|\/dev\/selected-device/)
     assert.match(text(path), /CLI:\?Set CLI to the verified installed bundle path/)
   }
@@ -107,7 +112,9 @@ test('QoderWork candidate roundtrips deterministically with original runtime/lic
 })
 
 test('QoderWork fails closed on invalid names, versions and undeclared dependencies', async () => {
-  const manifest = { ...sharedMetadata(JSON.parse(await readFile(resolve(root, 'plugin.json'), 'utf8')), JSON.parse(await readFile(resolve(root, 'qoderwork/plugin.json'), 'utf8'))), skills: ['./skills/esp-vision-development'], mcpServers: './.mcp.json' }
+  const { packageName, ...metadata } = JSON.parse(await readFile(resolve(root, 'qoderwork/plugin.json'), 'utf8'))
+  const manifest = { ...sharedMetadata(JSON.parse(await readFile(resolve(root, 'plugin.json'), 'utf8')), metadata), name: packageName, skills: ['./skills/esp-vision-development'], mcpServers: './.mcp.json' }
+  assert.throws(() => validateQoderManifest({ ...manifest, name: 'esp-vision' }))
   for (const version of ['0.1.0-dev.1', '01.1.0', '1.0', '../unsafe']) {
     assert.throws(() => validateQoderManifest({ ...manifest, version }))
   }
@@ -142,7 +149,7 @@ test('QoderWork builds without Git on PATH using validated CI_COMMIT_SHA', async
     assert.notEqual(rejected.status, 0)
     assert.match(rejected.stderr, /CI_COMMIT_SHA must be a complete lowercase 40-character Git SHA/)
     assert.doesNotMatch(rejected.stderr, /ENOENT/)
-    await assert.rejects(readFile(resolve(output, 'esp-vision-qoderwork-0.1.0.zip')), { code: 'ENOENT' })
+    await assert.rejects(readFile(resolve(output, 'esp-vision-qoderwork-0.1.1.zip')), { code: 'ENOENT' })
   }
 })
 

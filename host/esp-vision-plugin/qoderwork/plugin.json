@@ -1,5 +1,6 @@
 {
+  "packageName": "esp-vision-plugin",
   "displayName": "ESP-Vision 嵌入式 AI 视觉开发",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "基于 ESP32 的 ESP-VISION 视觉开发专家，结合官方知识与随包本地 CLI 完成设备检查、MicroPython 开发和结果验收。"
 }
