@@ -10,7 +10,7 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const templateRoot = resolve(packageRoot, 'qoderwork')
 
 export function validateQoderManifest(manifest) {
-  assert.equal(manifest.name, 'esp-vision')
+  assert.equal(manifest.name, 'esp-vision-espressif')
   assert.equal(manifest.displayName, 'ESP-Vision 嵌入式 AI 视觉开发')
   assert.match(manifest.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/)
   assert.deepEqual(manifest.skills, [`./skills/${skillName}`])
@@ -31,7 +31,8 @@ export function adaptQoderSkill(skill, version) {
 export async function buildQoderArchive({ sourceRoot = packageRoot, outputDirectory, ciEnvironment = process.env } = {}) {
   const bundle = await createExport({ sourceRoot, packageRoot, outputDirectory, rootName: 'esp-vision-qoderwork' })
   const { source, original, knowledgeUrl, add } = bundle
-  const manifest = { ...sharedMetadata(original, JSON.parse(await readTemplate(templateRoot, 'plugin.json'))),
+  const { packageName, ...metadata } = JSON.parse(await readTemplate(templateRoot, 'plugin.json'))
+  const manifest = { ...sharedMetadata(original, metadata), name: packageName,
     skills: [`./skills/${skillName}`], mcpServers: './.mcp.json' }
   validateQoderManifest(manifest)
   add('.qoder-plugin/plugin.json', json(manifest))

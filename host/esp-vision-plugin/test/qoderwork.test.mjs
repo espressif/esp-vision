@@ -53,6 +53,7 @@ test('QoderWork candidate roundtrips deterministically with original runtime/lic
   const text = name => files.get(name).toString()
   const manifest = JSON.parse(text('.qoder-plugin/plugin.json'))
   validateQoderManifest(manifest)
+  assert.equal(manifest.name, 'esp-vision-espressif')
   assert.equal(manifest.version, '0.1.0')
   assert.ok(!files.has('.codebuddy-plugin/plugin.json') && !files.has('.claude-plugin/plugin.json'))
   assert.ok(![...files.keys()].some(name => /node_modules|\.git\/|workbuddy\//.test(name)))
@@ -107,7 +108,9 @@ test('QoderWork candidate roundtrips deterministically with original runtime/lic
 })
 
 test('QoderWork fails closed on invalid names, versions and undeclared dependencies', async () => {
-  const manifest = { ...sharedMetadata(JSON.parse(await readFile(resolve(root, 'plugin.json'), 'utf8')), JSON.parse(await readFile(resolve(root, 'qoderwork/plugin.json'), 'utf8'))), skills: ['./skills/esp-vision-development'], mcpServers: './.mcp.json' }
+  const { packageName, ...metadata } = JSON.parse(await readFile(resolve(root, 'qoderwork/plugin.json'), 'utf8'))
+  const manifest = { ...sharedMetadata(JSON.parse(await readFile(resolve(root, 'plugin.json'), 'utf8')), metadata), name: packageName, skills: ['./skills/esp-vision-development'], mcpServers: './.mcp.json' }
+  assert.throws(() => validateQoderManifest({ ...manifest, name: 'esp-vision' }))
   for (const version of ['0.1.0-dev.1', '01.1.0', '1.0', '../unsafe']) {
     assert.throws(() => validateQoderManifest({ ...manifest, version }))
   }
