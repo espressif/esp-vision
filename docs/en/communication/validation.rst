@@ -108,12 +108,12 @@ Camera closed-loop evidence requires a new complete stdout marker or validated J
 LCD screenshots and test patterns
 ---------------------------------
 
-``--screen-output`` displays a known test pattern, calls ``device.capture({ source: 'screen', format: 'jpeg' })`` to retrieve a JPEG of the last LCD RGB565 frame, and saves it to the requested path. Create the project-local output directory first:
+``--screen-output`` displays a known test pattern, calls ``device.capture({ source: 'screen', format: 'jpeg' })`` to retrieve a JPEG of the last LCD RGB565 frame, and saves it to the requested path. Set ``ESP_VISION_WORK_DIR`` to a writable workspace outside the checkout, then create the output directory:
 
 .. code-block:: console
 
-   mkdir -p /home/libo/project/.esp-vision/hardware-validation
-   npm --prefix host/device-core run test:hardware -- --serial <USJ-port> --role usj --checks display --screen-output /home/libo/project/.esp-vision/hardware-validation/lcd.jpg
+   mkdir -p "$ESP_VISION_WORK_DIR/hardware-validation"
+   npm --prefix host/device-core run test:hardware -- --serial <USJ-port> --role usj --checks display --screen-output "$ESP_VISION_WORK_DIR/hardware-validation/lcd.jpg"
 
 Capture invokes firmware ``debug.capture_screen`` in the VM task and reads the display buffer without camera calls. Verify JPEG decoding, dimensions and expected pattern, then compare with the actual device screen. An uninitialized display returns ``DISPLAY_NOT_READY``; absent LCD or unsupported firmware returns ``NOT_SUPPORTED``. Never substitute camera capture to hide failure. The screenshot represents the last software-submitted display frame; it does not prove physical panel, cable or backlight operation.
 

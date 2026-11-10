@@ -46,13 +46,40 @@ vscode-extension/
 # Editors / IDE
 .vscode/
 .specs/
+specs/
 .codex/
 .claude/
+.cursor/
+.esp-vision/
+.worktrees/
 .idea/
 *.swp
 *.swo
 .cache/
 compile_commands.json
+
+# Local agent state and plans (public plugin manifests are product source)
+.agents/
+!host/esp-vision-plugin/.agents/
+host/esp-vision-plugin/.agents/*
+!host/esp-vision-plugin/.agents/plugins/
+host/esp-vision-plugin/.agents/plugins/*
+!host/esp-vision-plugin/.agents/plugins/marketplace.json
+/plans/
+/scratch/
+/investigations/
+/handoffs/
+.mcp.json
+!host/esp-vision-plugin/.mcp.json
+
+# Private environment and credential files; only sanitized templates are shared
+.env
+.env.*
+!.env.example
+!.env.template
+.npmrc
+.pypirc
+.netrc
 
 # OS
 .DS_Store

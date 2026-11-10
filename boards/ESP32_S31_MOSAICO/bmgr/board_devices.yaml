@@ -85,7 +85,7 @@ devices:
     peripherals:
       - name: spi_display
 
-  # OV3640 DVP camera. XCLK is supplied by the board's external 24 MHz oscillator.
+  # OV3640 / SC101IOT DVP camera. XCLK is supplied externally.
   - name: camera
     type: camera
     sub_type: dvp
@@ -95,7 +95,8 @@ devices:
     config:
       dvp_config:
         reset_io: 53
-        pwdn_io: 48
+        # PWDN is controlled by board code.
+        pwdn_io: -1
         vsync_io: 55
         data_width: CAM_CTLR_DATA_WIDTH_8
         de_io: 19

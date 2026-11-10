@@ -20,6 +20,15 @@ exclude: |
   )
 
 repos:
+  - repo: local
+    hooks:
+      - id: repository-hygiene
+        name: Reject private configuration and working artifacts
+        entry: python tools/ci/check_repository_hygiene.py
+        language: python
+        pass_filenames: false
+        always_run: true
+
   - repo: https://github.com/espressif/check-copyright/
     rev: v1.1.1
     hooks:

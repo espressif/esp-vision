@@ -241,12 +241,52 @@ class FirmwarePublicationGateTests(unittest.TestCase):
                 self.assertIn(f"'{check}'", check_registry)
                 self.assertIn(check, checks)
 
+    def test_hardware_jobs_require_board_specific_checks(self):
+        hil = yaml.safe_load((ROOT / ".gitlab/ci/target_test.yml").read_text())
+
+        def script_for(name):
+            job = hil[name]
+            return job["script"] if "script" in job else script_for(job["extends"])
+
+        def arguments_for(name):
+            return shlex.split("\n".join(script_for(name)).replace("\\\n", " "))
+
+        function_args = arguments_for("target_test_p4x_function_ev_board_idf5.5.6")
+        function_checks = function_args[function_args.index("--checks") + 1].split(",")
+        self.assertIn("--screen-output", function_args)
+        profiles = (
+            ("target_test_p4x_vision_idf5.5.6",
+             {"ipa_stats", "display", "display_stream", "camera_display_lifecycle"}, 14, False),
+            ("target_test_s31_korvo_idf6.1", {"ipa_stats", "espdl_inference"}, 16, True),
+        )
+        for name, omitted, count, screen in profiles:
+            with self.subTest(job=name):
+                arguments = arguments_for(name)
+                checks = arguments[arguments.index("--checks") + 1].split(",")
+                self.assertEqual(checks, [check for check in function_checks if check not in omitted])
+                self.assertEqual(len(checks), count)
+                self.assertIn("--require-all", arguments)
+                self.assertIn("--output", arguments)
+                self.assertEqual("--screen-output" in arguments, screen)
+
+        korvo_args = arguments_for("target_test_s31_korvo_idf6.1")
+        self.assertEqual(korvo_args[korvo_args.index("--role") + 1], "uart")
+        self.assertEqual(korvo_args[korvo_args.index("--port") + 1], "$ESPPORT")
+        korvo = hil[".target_test_s31_korvo"]
+        self.assertEqual(korvo["variables"]["BOARD"], "ESP32_S31_KORVO")
+        self.assertEqual(korvo["tags"], ["esp32s31-korvo-1_1"])
+        self.assertNotIn("before_script", korvo)
+        self.assertNotIn("image", korvo)
+        self.assertEqual(hil["target_test_s31_korvo_idf6.1"]["needs"],
+                         [{"job": "firmware: [release-v6.1, ESP32_S31_KORVO]", "artifacts": True}])
+
     def test_upload_waits_for_package_and_required_qualification(self):
         jobs = yaml.safe_load((ROOT / ".gitlab/ci/deploy.yml").read_text())
         gate = jobs["qualify_firmware_release"]
         needs = {item["job"] for item in gate["needs"]}
         self.assertTrue({"pack_launchpad", "firmware", "device_core_checks",
-                         "target_test_p4x_function_ev_board_idf5.5.6"} <= needs)
+                         "target_test_p4x_function_ev_board_idf5.5.6",
+                         "target_test_p4x_vision_idf5.5.6", "target_test_s31_korvo_idf6.1"} <= needs)
         self.assertTrue(all(not item.get("optional") for item in gate["needs"]))
         self.assertFalse(gate.get("allow_failure", False))
         upload_needs = {item["job"] for item in jobs["upload-dl-trigger"]["needs"]}

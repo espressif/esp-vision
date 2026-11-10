@@ -21,7 +21,7 @@ dependencies:
     rules:
       - if: "target == esp32p4"
   espressif/esp_video:
-    version: "2.4.0"
+    version: "2.5.0"
     rules:
       - if: "target in [esp32p4, esp32s31]"
   espressif/esp32-camera:
@@ -41,7 +41,7 @@ dependencies:
     rules:
       - if: "target in [esp32p4]"
   espressif/esp_h264:
-    version: "1.3.0"
+    version: "1.4.*"
     rules:
       - if: "target in [esp32p4]"
   espressif/usb:

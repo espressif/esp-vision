@@ -4,11 +4,21 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- Add SC101IOT DVP camera support on ESP32_S31_MOSAICO alongside OV3640.
+
+- Add ESP32_P4X_VISION hardware CI.
+
+- Add ESP32_S31_KORVO camera and display hardware CI.
+
 ### Changed
 
 - Update the WorkBuddy Expert package introduction with bilingual project, hardware, adaptation and usage information.
 
 - Give the QoderWork plugin the distinct package name `esp-vision-plugin` to avoid the occupied `esp-vision` name, and replace its public-facing README with project, hardware, adaptation and usage information.
+
+- Update the ESP-IDF 5.5, 6.0 and 6.1 component manifests to esp_video 2.5.0 and esp_h264 1.4.*.
 
 - Prepare Device Core 0.7.1 as an independent npm patch release for faster complete installation and ROM-to-runtime firmware detection; retain the existing firmware and plugin release lifecycle.
 
@@ -16,10 +26,20 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Enforce the shared-repository content boundary with agent guidance, ignore rules and index checks in pre-commit, GitLab CI and GitHub CI; replace developer-specific paths and shell setup in maintained documentation with configurable workspace instructions.
+
+- Keep Mosaico SC101IOT framing consistent across QQVGA, QVGA and VGA with hardware scaling, a wider field of view and no black borders.
+
+- Fix ESP32_P4X_VISION hardware CI to match the board's supported capabilities.
+
 - Drive the partial ROM-packet deadline regression with a controlled clock so CI scheduling delays cannot consume its successful receive budget.
 
 - Classify an occupied EV-MUX session as busy during firmware identification; USB descriptors, ROM responses and timeouts do not establish the presence or absence of ESP-VISION firmware.
 - Keep passive ROM enumeration non-opening; active firmware detection verifies the selected ROM MAC/security, attempts normal SPI boot once, then rebinds only its matching physical USB endpoint before the ESP-VISION handshake. Preserve unknown startup outcomes and require download re-entry when no runtime returns.
+
+### Removed
+
+- Remove the internal native-UVC proposal and experiment record from `specs/`; supported UVC behavior remains documented in the bilingual API reference.
 
 ## [2026.11.06]
 
