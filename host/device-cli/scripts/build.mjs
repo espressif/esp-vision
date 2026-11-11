@@ -119,6 +119,9 @@ const bundle = await build({
   bundle: true,
   platform: 'node',
   format: 'esm',
+  // Bundled CommonJS dependencies (multicast-dns/dns-packet) still require
+  // Node built-ins. The build script's own require is not part of the output.
+  banner: { js: "import { createRequire as createBundleRequire } from 'node:module'; const require = createBundleRequire(import.meta.url);" },
   target: 'node22',
   sourcemap: false,
   legalComments: 'inline',

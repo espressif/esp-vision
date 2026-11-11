@@ -15,6 +15,23 @@ test('the public Node entry point exposes passive inventory and serial adapters'
   assert.equal(typeof inventory, 'function')
 })
 
+test('LAN discovery failures retain the original loading or socket diagnostic', async () => {
+  for (const failure of [
+    new Error('Dynamic require of "buffer" is not supported'),
+    Object.assign(new Error('bind EACCES 0.0.0.0:5353'), { code: 'EACCES' }),
+  ]) {
+    const result = await inventory({ interfaces: ['tcp'] }, {
+      async listNetwork() { throw failure },
+    })
+    assert.equal(result.sourcesAvailable, 0)
+    assert.deepEqual(result.devices, [])
+    assert.deepEqual(result.warnings, [{
+      source: 'tcp', code: failure.code ?? 'DISCOVERY_UNAVAILABLE',
+      message: `LAN discovery unavailable: ${failure.message}`,
+    }])
+  }
+})
+
 test('serial listing passes a bounded non-opening enumeration request to Python', async () => {
   const controller = new AbortController()
   let invocation

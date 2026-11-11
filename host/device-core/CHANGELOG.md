@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- Preserve the original LAN discovery error message so dependency-loading failures can be distinguished from socket and network failures.
+
 - Drive the partial ROM-packet deadline regression with a controlled clock so CI scheduling delays cannot consume its successful receive budget.
 
 - Classify an occupied EV-MUX session as busy during firmware identification; USB descriptors, ROM responses and timeouts do not establish the presence or absence of ESP-VISION firmware.

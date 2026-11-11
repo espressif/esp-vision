@@ -80,7 +80,7 @@ export async function inventory(options = {}, dependencies = {}) {
       const devices = await (dependencies.listNetwork ?? (request => createNodeDiscovery().list(request)))({ timeout, signal })
       sourcesAvailable++
       rows.push(...devices.map(device => ({ interface: 'tcp', address: `${device.addresses[0]}:${device.port}`, host: device.addresses[0], port: device.port, status: 'advertised', identity: { deviceId: device.deviceId, hostname: device.hostname, board: device.board, firmwareVersion: device.firmwareVersion }, advertisement: device })))
-    } catch (error) { if (signal?.aborted) throw error; warnings.push({ source: 'tcp', code: error.code ?? 'DISCOVERY_UNAVAILABLE', message: 'LAN discovery unavailable; install multicast-dns and check multicast access' }) }
+    } catch (error) { if (signal?.aborted) throw error; warnings.push({ source: 'tcp', code: error.code ?? 'DISCOVERY_UNAVAILABLE', message: `LAN discovery unavailable: ${error.message || 'Unknown discovery error'}` }) }
   })())
   await Promise.all(tasks)
   signal?.throwIfAborted()
