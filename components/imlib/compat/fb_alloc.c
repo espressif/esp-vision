@@ -232,6 +232,23 @@ void fb_free() {
     heap_caps_free(node);
 }
 
+void fb_free_buffer(void *ptr) {
+    if (ptr == NULL) {
+        return;
+    }
+    omv_fb_alloc_node_t **link = &omv_fb_alloc_head;
+    while (*link != NULL) {
+        omv_fb_alloc_node_t *node = *link;
+        if (node->ptr == ptr && !node->mark && !node->permanent) {
+            *link = node->prev;
+            heap_caps_free(node->raw_ptr);
+            heap_caps_free(node);
+            return;
+        }
+        link = &node->prev;
+    }
+}
+
 void fb_free_all() {
     while (omv_fb_alloc_head != NULL) {
         fb_free();

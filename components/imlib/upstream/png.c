@@ -255,6 +255,9 @@ void png_decompress(image_t *dst, image_t *src) {
 #if defined(IMLIB_ENABLE_IMAGE_FILE_IO)
 // This function inits the geometry values of an image.
 void png_read_geometry(file_t *fp, image_t *img, const char *path, png_read_settings_t *rs) {
+#if !defined(IMLIB_ENABLE_PNG_DECODER)
+    file_raise_error(fp, MP_ERROR_TEXT("PNG decoder is not enabled"));
+#endif
     uint32_t header;
     file_seek(fp, 12); // start of IHDR
     file_read(fp, &header, 4);
@@ -286,7 +289,9 @@ void png_read_pixels(file_t *fp, image_t *img) {
 }
 
 void png_read(image_t *img, const char *path) {
-    file_t fp;
+    file_t fp = {0};
+    file_guard_t guard;
+    file_guard_begin(&guard, &fp);
     png_read_settings_t rs;
 
     // Do not use file buferring here.
@@ -300,10 +305,18 @@ void png_read(image_t *img, const char *path) {
 
     png_read_pixels(&fp, img);
     file_close(&fp);
+    nlr_pop_jump_callback(false);
 }
 
 void png_write(image_t *img, const char *path) {
-    file_t fp;
+#if !defined(IMLIB_ENABLE_PNG_ENCODER)
+    if (img->pixfmt != PIXFORMAT_PNG) {
+        mp_raise_msg_varg(&mp_type_RuntimeError, MP_ERROR_TEXT("PNG encoder is not enabled"));
+    }
+#endif
+    file_t fp = {0};
+    file_guard_t guard;
+    file_guard_begin(&guard, &fp);
     file_open(&fp, path, false, FA_WRITE | FA_CREATE_ALWAYS);
     if (img->pixfmt == PIXFORMAT_PNG) {
         file_write(&fp, img->pixels, img->size);
@@ -314,5 +327,6 @@ void png_write(image_t *img, const char *path) {
         fb_free(); // frees alloc in png_compress()
     }
     file_close(&fp);
+    nlr_pop_jump_callback(false);
 }
 #endif //IMLIB_ENABLE_IMAGE_FILE_IO)

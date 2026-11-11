@@ -134,7 +134,9 @@ void ppm_read_pixels(file_t *fp, image_t *img, int n_lines, ppm_read_settings_t 
 }
 
 void ppm_read(image_t *img, const char *path) {
-    file_t fp;
+    file_t fp = {0};
+    file_guard_t guard;
+    file_guard_begin(&guard, &fp);
     ppm_read_settings_t rs;
 
     file_open(&fp, path, true, FA_READ | FA_OPEN_EXISTING);
@@ -145,6 +147,7 @@ void ppm_read(image_t *img, const char *path) {
     }
     ppm_read_pixels(&fp, img, img->h, &rs);
     file_close(&fp);
+    nlr_pop_jump_callback(false);
 }
 
 void ppm_write_subimg(image_t *img, const char *path, rectangle_t *r) {
@@ -153,7 +156,9 @@ void ppm_write_subimg(image_t *img, const char *path, rectangle_t *r) {
         mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("No intersection!"));
     }
 
-    file_t fp;
+    file_t fp = {0};
+    file_guard_t guard;
+    file_guard_begin(&guard, &fp);
     file_open(&fp, path, true, FA_WRITE | FA_CREATE_ALWAYS);
 
     if (IM_IS_GS(img)) {
@@ -183,5 +188,6 @@ void ppm_write_subimg(image_t *img, const char *path, rectangle_t *r) {
         }
     }
     file_close(&fp);
+    nlr_pop_jump_callback(false);
 }
 #endif //IMLIB_ENABLE_IMAGE_FILE_IO

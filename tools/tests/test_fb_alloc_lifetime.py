@@ -168,6 +168,27 @@ int main(int argc,char **argv) {
         fb_alloc_init0();check_empty();assert(native_frees==3);
         fb_alloc_mark();fb_alloc(11,FB_ALLOC_NO_HINT);fb_alloc_init0();fb_alloc_init0();check_empty();
         assert(native_frees==6);
+    } else if(!strcmp(argv[1],"free_middle_buffer")) {
+        fb_alloc_mark();
+        uint32_t size=0;void *buffer=fb_alloc_all(&size,FB_ALLOC_PREFER_SIZE);
+        fb_alloc_mark();uint8_t *later=fb_alloc(31,FB_ALLOC_NO_HINT);memset(later,0x7a,31);
+        callback_gc_and_churn();assert(native_live==6);
+        fb_free_buffer(buffer);assert(native_live==4 && native_frees==2);
+        fb_free_buffer(buffer);fb_free_buffer(NULL);assert(native_live==4 && native_frees==2);
+        for(size_t i=0;i<31;i++)assert(later[i]==0x7a);
+        fb_alloc_free_till_mark();assert(native_live==1 && native_frees==5);
+        fb_alloc_free_till_mark();check_empty();assert(native_frees==6);
+    } else if(!strcmp(argv[1],"free_buffer_preserves_permanent")) {
+        fb_alloc_mark();uint8_t *permanent=fb_alloc(32,FB_ALLOC_NO_HINT);
+        fb_alloc_mark_permanent();memset(permanent,0x4e,32);
+        fb_alloc_mark();uint8_t *temporary=fb_alloc(33,FB_ALLOC_NO_HINT);
+        fb_free_buffer(permanent);assert(native_live==6 && native_frees==0);
+        fb_free_buffer(temporary+1);assert(native_live==6 && native_frees==0);
+        fb_free_buffer(temporary);assert(native_live==4 && native_frees==2);
+        fb_alloc_free_till_mark();assert(native_live==3);
+        fb_alloc_free_till_mark();assert(native_live==3);
+        for(size_t i=0;i<32;i++)assert(permanent[i]==0x4e);
+        fb_alloc_free_till_mark_past_mark_permanent();check_empty();assert(native_frees==6);
     } else if(!strcmp(argv[1],"zero")) {
         assert(!fb_alloc(0,FB_ALLOC_NO_HINT));fb_free();fb_free_all();fb_alloc_init0();check_empty();assert(!native_calls);
     } else if(!strcmp(argv[1],"real_gc_control")) {
@@ -247,6 +268,12 @@ class FramebufferAllocationLifetimeTests(unittest.TestCase):
 
     def test_gc_rebuild_and_repeated_vm_cleanup(self):
         self.run_case('gc_rebuild')
+
+    def test_free_buffer_removes_middle_node_without_disturbing_nested_marks(self):
+        self.run_case('free_middle_buffer')
+
+    def test_free_buffer_preserves_permanent_and_rejects_interior_pointer(self):
+        self.run_case('free_buffer_preserves_permanent')
 
     def test_zero_size_and_empty_cleanup(self):
         self.run_case('zero')

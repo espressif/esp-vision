@@ -1136,6 +1136,8 @@ static mp_obj_t py_image_to(pixformat_t pixfmt, mp_rom_obj_t default_color_palet
     }
 
     image_t dst_img_tmp = dst_img;
+    py_image_alloc_cleanup_t cleanup;
+    bool track_umm = (src_img->pixfmt == PIXFORMAT_PNG) || (dst_img.pixfmt == PIXFORMAT_PNG);
 
     if ((dst_img.is_bayer || dst_img.is_yuv) &&
         (((x_scale != 1.0f) && (x_scale != -1.0f)) ||
@@ -1165,7 +1167,7 @@ static mp_obj_t py_image_to(pixformat_t pixfmt, mp_rom_obj_t default_color_palet
                                       IMAGE_HINT_APPLY_COLOR_PALETTE_FIRST);
         }
     } else if (dst_img.is_compressed) {
-        fb_alloc_mark();
+        py_image_alloc_cleanup_begin(&cleanup, track_umm);
 
         bool simple = (x_scale == 1.0f) &&
                       (y_scale == 1.0f) &&
@@ -1222,13 +1224,13 @@ static mp_obj_t py_image_to(pixformat_t pixfmt, mp_rom_obj_t default_color_palet
         if (dst_img.data != dst_img_tmp.data) {
             memcpy(dst_img.data, dst_img_tmp.data, dst_img.size);
         }
-        fb_alloc_free_till_mark();
+        nlr_pop_jump_callback(true);
     } else {
-        fb_alloc_mark();
+        py_image_alloc_cleanup_begin(&cleanup, track_umm);
         imlib_draw_image(&dst_img, src_img, 0, 0, x_scale, y_scale, &roi,
                          args[ARG_channel].u_int, args[ARG_alpha].u_int, color_palette, alpha_palette,
                          args[ARG_hint].u_int, NULL, NULL, NULL, NULL);
-        fb_alloc_free_till_mark();
+        nlr_pop_jump_callback(true);
     }
 
     if (!args[ARG_copy].u_bool) {
@@ -1338,10 +1340,13 @@ static bool py_image_save_hardware_jpeg(image_t *img, const char *path, const re
         return false;
     }
 
-    file_t fp;
+    file_t fp = {0};
+    file_guard_t guard;
+    file_guard_begin(&guard, &fp);
     file_open(&fp, path, false, FA_WRITE | FA_CREATE_ALWAYS);
     file_write(&fp, jpeg_buf, jpeg_size);
     file_close(&fp);
+    nlr_pop_jump_callback(false);
     return true;
 }
 
@@ -1359,9 +1364,10 @@ static mp_obj_t py_image_save(size_t n_args, const mp_obj_t *args, mp_map_t *kw_
         return args[0];
     }
 
-    fb_alloc_mark();
+    py_image_alloc_cleanup_t cleanup;
+    py_image_alloc_cleanup_begin(&cleanup, false);
     imlib_save_image(arg_img, path, &roi, arg_q);
-    fb_alloc_free_till_mark();
+    nlr_pop_jump_callback(true);
     return args[0];
 }
 static MP_DEFINE_CONST_FUN_OBJ_KW(py_image_save_obj, 2, py_image_save);
@@ -6272,18 +6278,22 @@ mp_obj_t py_image_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw
 
     if (mp_obj_is_str(args[ARG_arg].u_obj)) {
         #if defined(IMLIB_ENABLE_IMAGE_FILE_IO)
-        file_t fp;
+        file_t fp = {0};
         img_read_settings_t rs;
         const char *path = mp_obj_str_get_str(args[ARG_arg].u_obj);
 
-        fb_alloc_mark();
+        py_image_alloc_cleanup_t cleanup;
+        py_image_alloc_cleanup_begin(&cleanup, false);
+        file_guard_t guard;
+        file_guard_begin(&guard, &fp);
         imlib_read_geometry(&fp, &image, path, &rs);
         file_close(&fp);
+        nlr_pop_jump_callback(false);
 
         image_alloc(&image, image_size(&image));
 
         imlib_load_image(&image, path);
-        fb_alloc_free_till_mark();
+        nlr_pop_jump_callback(true);
         #else
         mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Image I/O is not supported"));
         #endif // IMLIB_ENABLE_IMAGE_FILE_IO

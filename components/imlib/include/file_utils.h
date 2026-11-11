@@ -32,11 +32,23 @@
 #include <stddef.h>
 
 #include "py/obj.h"
+#include "py/nlr.h"
 
 typedef struct {
     mp_obj_t fp;
     uint8_t flags;
 } file_t;
+
+// Keep this guard on the C stack until the file is closed or ownership is
+// transferred. Pop its NLR callback on every normal return. The file must be
+// initialized before registration; no callback is stored in persistent file_t's.
+typedef struct {
+    nlr_jump_callback_node_t callback;
+    file_t *fp;
+} file_guard_t;
+
+void file_guard_begin(file_guard_t *guard, file_t *fp);
+void file_abort(file_t *fp);
 
 #define FA_READ             0x01
 #define FA_WRITE            0x02
