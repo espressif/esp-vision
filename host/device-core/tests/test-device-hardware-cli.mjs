@@ -102,8 +102,8 @@ test('cancellation before connection has no file side effects and still disconne
   assert.equal(device.calls.at(-1), 'disconnect')
 })
 
-test('missing optional Python executable fails cleanly without opening a port', async () => {
-  const transport = serialTransport({ python: '/nonexistent-esp-vision-python', serial: '/not-a-device' })
+test('missing serial device fails cleanly without a Python interpreter', async () => {
+  const transport = serialTransport({ serial: '/not-a-device' })
   const unsubscribe = transport.subscribe({ error() {}, close() {} })
   try {
     await assert.rejects(transport.connect({ signal: AbortSignal.timeout(1000) }), { code: 'SERIAL_ERROR' })

@@ -123,7 +123,7 @@ test('native USB MEM_END timeout exception never bypasses validated stub greetin
   const lost = browserRomCompatibility({ memFinish: async () => { throw new Error('Port disconnected') } }, { nativeUsb: true })
   await assert.rejects(lost.memFinish(), /disconnected/)
 })
-function officialFixture({ failRates = [], usb = false, security = { flags: 0, flashCryptCnt: 0 }, failWrite = false, recoverSecurity, recoverFamily, detach = false, reopenResets = false, flashId = 0x1840ef, stubStarts = true, signal, expectedMac, mac = '30:ed:a0:ed:a1:b0', recoverMac } = {}) {
+function officialFixture({ chipName = 'ESP32-S31', failRates = [], usb = false, security = { flags: 0, flashCryptCnt: 0 }, failWrite = false, recoverSecurity, recoverFamily, detach = false, reopenResets = false, flashId = 0x1840ef, stubStarts = true, signal, expectedMac, mac = '30:ed:a0:ed:a1:b0', recoverMac } = {}) {
   const events = [], calls = [], loaders = [], opens = [], reads = []
   const port = { readable: null, writable: null,
     getInfo: () => ({ usbVendorId: usb ? 0x303a : 0x10c4, usbProductId: usb ? 32 : 0xea60 }),
@@ -141,7 +141,7 @@ function officialFixture({ failRates = [], usb = false, security = { flags: 0, f
     async setRTS(value) { calls.push(['rts', value]) }
   }
   class FakeLoader {
-    constructor({ transport }) { this.transport = transport; this.CHIP_DETECT_MAGIC_REG_ADDR = 0x40001000; this.ESP_CHANGE_BAUDRATE = 15; this.ESP_READ_FLASH = 0xd2; this.ESP_ERASE_REGION = 0xd1; this.ERASE_REGION_TIMEOUT_PER_MB = 30000; this.chip = { CHIP_NAME: loaders.length && recoverFamily ? recoverFamily : 'ESP32-S31', getChipRevision: async () => 0, readMac: async reader => { assert.equal(reader, this); calls.push('mac'); return loaders.length > 1 && recoverMac !== undefined ? recoverMac : mac }, postConnect: async () => calls.push('postConnect') }; loaders.push(this) }
+    constructor({ transport }) { this.transport = transport; this.CHIP_DETECT_MAGIC_REG_ADDR = 0x40001000; this.ESP_CHANGE_BAUDRATE = 15; this.ESP_READ_FLASH = 0xd2; this.ESP_ERASE_REGION = 0xd1; this.ERASE_REGION_TIMEOUT_PER_MB = 30000; this.chip = { CHIP_NAME: loaders.length && recoverFamily ? recoverFamily : chipName, getChipRevision: async () => 0, readMac: async reader => { assert.equal(reader, this); calls.push('mac'); return loaders.length > 1 && recoverMac !== undefined ? recoverMac : mac }, postConnect: async () => calls.push('postConnect') }; loaders.push(this) }
     async detectChip(mode) { calls.push(['detect', mode]); await port.open({ baudRate: 115200 }); this.transport.baudrate = 115200 }
     async getSecurityInfo() { return loaders.length > 1 && recoverSecurity ? recoverSecurity : security }
     async runStub() { calls.push('stub'); this.IS_STUB = stubStarts }
@@ -404,4 +404,28 @@ test('a detached port cannot report region erase success even after a stale succ
   await assert.rejects(stub.eraseRegion(0x710000, 4096), { code: 'ROM_PORT_LOST' })
   await assert.rejects(stub.eraseRegion(0x710000, 4096))
   assert.equal(commands, 1)
+})
+
+test('S3 USB-OTG reset verifies the download latch before arming its RTC watchdog', async () => {
+  const f = officialFixture({ usb: true, chipName: 'ESP32-S3' })
+  await f.adapter.initialize()
+  let latch = 5
+  f.loaders[0].readReg = async address => { assert.equal(address, 0x6000812c); return latch }
+  const write = f.loaders[0].writeReg.bind(f.loaders[0])
+  f.loaders[0].writeReg = async (...args) => { if (args[0] === 0x6000812c) latch &= ~1; await write(...args) }
+  await f.adapter.hardReset()
+  assert.equal(latch, 4)
+  assert.deepEqual(f.calls.filter(call => Array.isArray(call) && call[0] === 'register-write'), [
+    ['register-write', 0x6000812c, 0, 1], ['register-write', 0x600080b0, 0x50d83aa1],
+    ['register-write', 0x6000809c, 2000], ['register-write', 0x60008098, 0xc0012000], ['register-write', 0x600080b0, 0],
+  ])
+  await f.adapter.disconnect()
+})
+test('S3 USB-OTG reset refuses an unverified normal-boot latch', async () => {
+  const f = officialFixture({ usb: true, chipName: 'ESP32-S3' })
+  await f.adapter.initialize()
+  f.loaders[0].readReg = async () => 1
+  await assert.rejects(f.adapter.hardReset(), { code: 'ROM_RESET_LATCH' })
+  assert.deepEqual(f.calls.filter(call => Array.isArray(call) && call[0] === 'register-write'), [['register-write', 0x6000812c, 0, 1]])
+  await f.adapter.disconnect()
 })

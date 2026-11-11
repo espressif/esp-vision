@@ -12,7 +12,7 @@ import stringWidth from 'string-width'
 import { explainSerialFailure } from './serial_diagnostics.js'
 import { createDevice } from '@esp-vision/device-core'
 import {
-  defaultPython, filterSerialPorts, inventory, listSerial, serialEntry, transportFor,
+  filterSerialPorts, inventory, listSerial, serialEntry, transportFor,
   openNodeRom,
 } from '@esp-vision/device-core/node'
 
@@ -48,8 +48,8 @@ esp-vision-device capture camera|screen --output LOCAL.jpg [--quality N] [--max-
   screen: Capture the current LCD framebuffer, including drawing rendered there. Use this to verify LCD overlays and UI; display initialization is required.
 esp-vision-device batch PLAN.json [--port PATH | --tcp HOST[:PORT]]
 esp-vision-device watch --duration MS [--port PATH | --tcp HOST[:PORT]]
-Common: --timeout MS, --python PYTHON (default python3; Windows python), --json, --help
-Serial setup: check PYTHON --version and PYTHON -c "import serial" with the selected interpreter. Install pyserial there with PYTHON -m pip install pyserial. Windows Launcher: --python py and py -m pip install pyserial.
+Common: --timeout MS, --json, --help
+Serial access and firmware flashing use the bundled npm backend; no host Python is required.
 All commands that operate on a device require --port or --tcp, except inspect and offline firmware check.
 Python --completion start accepts only --path DEVICE.py. It acknowledges the start, disconnects, and exits; it does not retain a daemon or resumable job.
 Python --timeout is an execution deadline for --completion wait only; omit it with --completion start.
@@ -60,8 +60,8 @@ Batch plans use schemaVersion 1 with an operations array. Operations run sequent
 In JSON mode stdout contains one schemaVersion 1 JSON envelope. Python output, status, logs, and errors are NDJSON events on stderr.
 Binary file reads and JPEG captures always write to --output. Local output is capped at 16 MiB by default and --max-bytes may lower that cap.
 Firmware versions come from dl.espressif.com by default; local catalogs are advanced overrides.
-Firmware update uses the built-in serial flasher (Python esptool==5.6.0). TCP is not OTA.
-Default mode update preserves the existing layout/data; explicit mode install writes a complete image, replacing data in its written range. Blank boards require --board and a ROM-capable USJ/UART port, not an application USB-OTG interface.`
+Firmware update uses the shared esptool-js serial flasher; no host Python is required. TCP is not OTA.
+Default mode update preserves the existing layout/data; explicit mode install clears internal Flash files and writes a complete image, which may replace NVS settings. SD cards are not erased. Blank boards require --board and a ROM-capable USJ/UART port, not an application USB-OTG interface.`
 
 export const cliCapabilities = Object.freeze({
   commands: {
@@ -201,8 +201,7 @@ export function parseCli(args) {
     ? parsePositiveInteger(v.timeout, 'Timeout', { max: 600000 })
     : command === 'inspect' && !endpoint && !v.select ? 3000 : 30000
   const probeTimeout = parsePositiveInteger(v['probe-timeout'] ?? '5000', 'Probe timeout', { max: 60000 })
-  const python = v.python ?? defaultPython
-  const options = { ...v, command, subcommand, endpoint, timeout, timeoutExplicit: explicitTimeout, connectTimeout: 30000, probeTimeout, python }
+  const options = { ...v, command, subcommand, endpoint, timeout, timeoutExplicit: explicitTimeout, connectTimeout: 30000, probeTimeout }
 
   if (command === 'inspect') {
     options.allPorts = v['all-ports'] ?? false
@@ -720,7 +719,7 @@ export async function runCli(options, dependencies = {}) {
       if (catalog !== undefined && !/^https:\/\//.test(catalog)) catalog = JSON.parse(await (dependencies.readFile ?? readFile)(catalog, 'utf8'))
       const checked = await device.firmware.check({ catalog, mode, ...(endpoint && !offline ? {} : { identity: { board: options.board, firmwareVersion: options['current-version'] ?? 'unknown' } }), ...(options.version ? { version: options.version } : {}), signal: dependencies.signal })
       if (options.subcommand === 'check') result = checked
-      else result = await device.firmware.update({ mode, release: checked.release, board: options.board, ...(options.image ? { data: new Uint8Array(await (dependencies.readFile ?? readFile)(options.image)) } : {}), openLoader: ({ signal }) => (dependencies.openLoader ?? openNodeRom)({ port: options.port, python: options.python, signal }), onPhase: message => emit(dependencies, { event: 'firmware.phase', message }), signal: dependencies.signal })
+      else result = await device.firmware.update({ mode, release: checked.release, board: options.board, ...(options.image ? { data: new Uint8Array(await (dependencies.readFile ?? readFile)(options.image)) } : {}), openLoader: ({ signal }) => (dependencies.openLoader ?? openNodeRom)({ port: options.port, signal }), onPhase: message => emit(dependencies, { event: 'firmware.phase', message }), signal: dependencies.signal })
     } else if (options.command === 'python') {
       const request = {
         ...(options.source !== undefined ? { source: options.source } : {}),
@@ -902,4 +901,4 @@ if (isMain()) {
   }
 }
 
-export { defaultPython, filterSerialPorts, inventory, listSerial, serialEntry, transportFor }
+export { filterSerialPorts, inventory, listSerial, serialEntry, transportFor }

@@ -98,6 +98,28 @@ test('MR staging fails if npm changes an unrelated locked dependency', async t =
   assert.match(result.stderr, /Unrelated locked dependency changed: node_modules\/host-lock-fixture/)
 })
 
+test('MR stages an unpublished Core without inventing registry archive metadata', async t => {
+  const f = await fixture(t)
+  const lock = JSON.parse(f.tracked)
+  delete lock.packages['node_modules/@esp-vision/device-core'].resolved
+  delete lock.packages['node_modules/@esp-vision/device-core'].integrity
+  const tracked = JSON.stringify(lock, null, 2) + '\n'
+  await writeFile(join(f.cli, 'package-lock.json'), tracked)
+  const result = f.run()
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /qualifying unpublished Core source/)
+  assert.equal(await readFile(join(f.cli, 'package-lock.json'), 'utf8'), tracked)
+  assert.equal(await readFile(join(f.cli, 'node_modules/@esp-vision/device-core/index.js'), 'utf8'), 'export const resetLifecycle = "fixed"\n')
+})
+
+test('MR does not accept partially missing registry archive metadata', async t => {
+  const f = await fixture(t)
+  const lock = JSON.parse(f.tracked)
+  delete lock.packages['node_modules/@esp-vision/device-core'].integrity
+  await writeFile(join(f.cli, 'package-lock.json'), JSON.stringify(lock))
+  assert.notEqual(f.run().status, 0)
+})
+
 test('MR staging permits removal of former Core-only transitive dependencies', async t => {
   const f = await fixture(t)
   const lock = JSON.parse(f.tracked)

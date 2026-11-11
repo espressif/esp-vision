@@ -19,7 +19,7 @@ try {
   const code = result.outputFiles[0].text, inputs = Object.keys(result.metafile.inputs)
   assert.ok(inputs.some(path => path.includes('esptool-js/lib/esploader.js')))
   for (const chip of ['esp32p4', 'esp32s31']) assert.ok(inputs.some(path => path.includes(`stub_flasher/${chip}.json`)))
-  assert.ok(!inputs.some(path => /tasmota|src\/(node|cli)/.test(path)))
+  assert.ok(!inputs.some(path => /tasmota|koffi|@serialport|src\/(node|cli)/.test(path)))
   const context = vm.createContext({ atob, btoa, EventTarget, URL, TextDecoder, TextEncoder, Uint8Array, DataView, ArrayBuffer, AbortController, setTimeout, clearTimeout, console, crypto: webcrypto, structuredClone })
   vm.runInContext(code, context)
   let opens = 0

@@ -62,7 +62,7 @@
 
 设备协议与业务真机测试统一运行 ``host/device-core`` 中的 ``npm run test:hardware``，直接调用 ``createDevice()`` 的公开 API。摄像头、文件和 LCD 均走同一个 Core，不再维护独立的主机协议客户端或 Agent smoke 入口。串口适配器只传字节，TCP 使用 Node socket；无需安装 Agent。
 
-使用 Node.js 22。串口模式需要 Python 与 ``pyserial``；``--python`` 可指定解释器。所有输出放在项目目录中；以下从仓库根目录执行：
+使用 Node.js 22。串口模式使用 npm 原生绑定，无需主机 Python。所有输出放在项目目录中；以下从仓库根目录执行：
 
 .. code-block:: console
 

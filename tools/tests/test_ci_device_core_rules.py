@@ -200,6 +200,16 @@ class LaunchpadSdkTagIsolationTests(unittest.TestCase):
 
 @unittest.skipIf(yaml is None, "PyYAML required")
 class FirmwarePublicationGateTests(unittest.TestCase):
+    def test_hil_loads_native_serial_dependencies_before_flashing(self):
+        hil = yaml.safe_load((ROOT / '.gitlab/ci/target_test.yml').read_text())
+        setup = hil['.target_test_base']['before_script']
+        install = next(i for i, line in enumerate(setup) if 'npm --prefix host/device-core install ' in line)
+        probe = next(i for i, line in enumerate(setup) if 'serialBinding()' in line)
+        self.assertIn('--include=optional', setup[install])
+        self.assertIn('--ignore-scripts', setup[install])
+        self.assertLess(install, probe)
+        self.assertTrue(any('install -y --no-install-recommends udev' in line for line in setup))
+
     def test_board_idf_pairs_and_consumers_resolve(self):
         config = list(yaml.safe_load_all((ROOT / ".gitlab-ci.yml").read_text()))[-1]
         pairs = [(board, image)

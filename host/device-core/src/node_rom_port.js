@@ -3,7 +3,7 @@
 import { realpath } from 'node:fs/promises'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createDevice } from './index.js'
-import { defaultPython, listSerial } from './node_inventory.js'
+import { listSerial } from './node_inventory.js'
 import { serialTransport } from './node_transport.js'
 
 const ROM_PIDS = new Set([2, 9, 18, 32])
@@ -33,7 +33,7 @@ function nativeRom(port) { return port.vendorId === 0x303a && ROM_PIDS.has(port.
 function nativeRuntime(port) { return port.vendorId === 0x303a && RUNTIME_PIDS.has(port.productId) }
 
 /** Resolve only the selected port. Descriptors authorize a handoff, never a flash. */
-export async function prepareNodeRomPort({ port, python = defaultPython, signal, timeout = 5000, expectedIdentity } = {}, dependencies = {}) {
+export async function prepareNodeRomPort({ port, signal, timeout = 5000, expectedIdentity } = {}, dependencies = {}) {
   if (typeof port !== 'string' || !port || /[\x00-\x1f\x7f]/.test(port)) throw new TypeError('ROM preparation requires a local port')
   if (!Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 5000) throw new RangeError('ROM preparation timeout must be positive and at most 5000 ms')
   const required = expectedIdentity == null ? null : { mac: mac(expectedIdentity.mac), location: physicalLocation(expectedIdentity.location) }
@@ -61,7 +61,7 @@ export async function prepareNodeRomPort({ port, python = defaultPython, signal,
   }
   checkAbort(signal)
   let ports
-  try { ports = await enumerate({ python, signal, timeout }) }
+  try { ports = await enumerate({ signal, timeout }) }
   catch (error) {
     checkAbort(signal)
     if (required) throw fail('ROM_PORT_IDENTITY_REQUIRED', 'Cannot confirm the bound runtime descriptors', error)
@@ -92,7 +92,7 @@ export async function prepareNodeRomPort({ port, python = defaultPython, signal,
     command: { attempted: false, acknowledged: false, outcome: 'not_attempted' }, cleanup: null, observed: null }
   let device, primary
   try {
-    device = makeDevice({ transport: makeTransport({ serial: current.path, role: 'usb', python }) })
+    device = makeDevice({ transport: makeTransport({ serial: current.path, role: 'usb' }) })
     const connected = await device.connect({ role: 'usb', probeRepl: false, autoBaud: false, timeout, signal })
     checkAbort(signal)
     const owners = connected?.capabilities?.sinks?.filter(sink => sink.owner === true) ?? []
@@ -147,7 +147,7 @@ export async function prepareNodeRomPort({ port, python = defaultPython, signal,
     checkAbort(signal)
     const remaining = Math.max(1, Math.ceil(deadline - now()))
     let candidates
-    try { candidates = await enumerate({ python, signal, timeout: remaining }) }
+    try { candidates = await enumerate({ signal, timeout: remaining }) }
     catch (error) {
       checkAbort(signal)
       throw Object.assign(fail('ROM_PORT_REBIND_FAILED', 'Cannot enumerate the selected device after bootloader submission', error), { transition })
@@ -170,7 +170,7 @@ export async function prepareNodeRomPort({ port, python = defaultPython, signal,
 
 
 /** Only for the caller's first read-only initialize failure, never read/write. */
-export async function recoverNodeRomPort(previous, { python = defaultPython, signal, timeout = 5000 } = {}, dependencies = {}) {
+export async function recoverNodeRomPort(previous, { signal, timeout = 5000 } = {}, dependencies = {}) {
   checkAbort(signal)
   if (!Number.isSafeInteger(timeout) || timeout <= 0 || timeout > 5000) throw new RangeError('ROM recovery timeout must be positive and at most 5000 ms')
   const expectedMac = mac(previous?.expectedMac)
@@ -189,7 +189,7 @@ export async function recoverNodeRomPort(previous, { python = defaultPython, sig
   while (now() < deadline) {
     checkAbort(signal)
     let ports
-    try { ports = await enumerate({ python, signal, timeout: Math.max(1, Math.ceil(deadline - now())) }) }
+    try { ports = await enumerate({ signal, timeout: Math.max(1, Math.ceil(deadline - now())) }) }
     catch (error) {
       checkAbort(signal)
       throw fail('ROM_PORT_ENUMERATION_FAILED', 'Cannot verify the selected device for read-only initialization recovery', error)
@@ -209,7 +209,7 @@ export async function recoverNodeRomPort(previous, { python = defaultPython, sig
   if (!runtime) return null
   // Revalidate at prepare's fresh enumeration, before opening EV-MUX. An OS port
   // may have been reused for a different board since the recovery snapshot.
-  const result = await prepareNodeRomPort({ port: runtime.path, python, signal, timeout,
+  const result = await prepareNodeRomPort({ port: runtime.path, signal, timeout,
     expectedIdentity: { mac: expectedMac, location } }, dependencies)
   if (result.expectedMac !== expectedMac || result.transition?.observed !== 'rom' || physicalLocation(result.transition.location) !== location) {
     throw fail('ROM_RUNTIME_IDENTITY_MISMATCH', 'Recovery did not preserve the selected physical device identity')

@@ -19,7 +19,7 @@ The package has its own version, independent of firmware and IDE versions. These
    npm view @esp-vision/device-core@0.6.0 version dist.integrity
    npm install '@esp-vision/device-core@~0.6.0'
 
-Node.js 22 is the Node host baseline. Browsers need a bundler/import map for package specifiers and Web Serial or a binary WebSocket bridge. Device Core contains no serial driver, network bridge, model or IDE UI. Node serial enumeration requires Python with pyserial; Node mDNS discovery uses ``multicast-dns``. The separate Device CLI installs as ``@esp-vision/device-cli@0.1.0`` and provides the supported agent-facing device command. Pin npm versions and update lockfiles.
+Node.js 22 is the Node host baseline. Browsers need a bundler/import map for package specifiers and Web Serial or a binary WebSocket bridge. Device Core contains no serial driver, network bridge, model or IDE UI. Node serial enumeration uses optional npm native bindings; Node mDNS discovery uses ``multicast-dns``. The separate Device CLI installs as ``@esp-vision/device-cli`` and provides the supported agent-facing device command. Pin npm versions and update lockfiles.
 
 Application, Core and transport responsibilities
 ------------------------------------------------
@@ -203,7 +203,7 @@ Install the optional ``multicast-dns`` peer for Node discovery:
        console.log(await device.inspect({ fields: ['identity'] }))
    } finally { await device.disconnect() }
 
-Applications call ``device.discover()``. ``createNodeDiscovery()`` and ``createBridgeDiscovery()`` return providers with ``list({ timeout, signal })``, not ``discover()``; inject them through ``createDevice({ discovery: provider })``. SDK 0.5.1 exports ``inventory``, ``listSerial``, ``filterSerialPorts``, ``serialEntry``, ``transportFor``, ``defaultPython`` and ``nodeAdapterAssets`` from ``@esp-vision/device-core/node``. Inventory is passive unless ``probe: true``; transport constructors do not open links. Serial enumeration requires pyserial. See :doc:`advanced`.
+Applications call ``device.discover()``. ``createNodeDiscovery()`` and ``createBridgeDiscovery()`` return providers with ``list({ timeout, signal })``, not ``discover()``; inject them through ``createDevice({ discovery: provider })``. SDK 0.8 exports ``inventory``, ``listSerial``, ``filterSerialPorts``, ``serialEntry``, ``transportFor`` from ``@esp-vision/device-core/node``. Inventory is passive unless ``probe: true``; transport constructors do not open links. Serial enumeration requires npm native prebuilds, without host Python. See :doc:`advanced`.
 
 .. code-block:: javascript
 

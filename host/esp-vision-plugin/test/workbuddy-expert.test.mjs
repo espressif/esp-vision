@@ -122,8 +122,8 @@ test('Expert archive roundtrips deterministically with portable Agent/Skill/MCP 
   assert.match(reference, /does not access a device/)
   assert.doesNotMatch(reference, /export MSYS2_ARG_CONV_EXCL/)
 
-  assert.match(reference, /--python py/)
-  assert.match(reference, /not proof that every serial error has the same cause/)
+  assert.match(reference, /No host Python is required/)
+  assert.match(reference, /do not reset the board or force takeover/)
   assert.match(reference, /ENUMERATION_UNAVAILABLE.*not that no device exists/)
   assert.match(reference, /do not force takeover/)
   assert.match(reference, /Do not repeatedly retry or switch tools\/interpreters to evade a denial/)
@@ -166,14 +166,11 @@ test('Expert archive roundtrips deterministically with portable Agent/Skill/MCP 
   const cli = resolve(extracted, 'cli/device-cli.mjs')
   const { stdout: help } = await execFile(process.execPath, [cli, '--help'], { env, cwd: root, timeout: 15000 })
   assert.match(help, /esp-vision-device inspect/)
-  if (process.platform !== 'win32') {
-    const fakePython = resolve(root, 'fake python inventory')
-    await writeFile(fakePython, '#!/usr/bin/env node\nif (!process.argv[2]?.replaceAll("\\\\", "/").endsWith("/node_serial.py")) process.exit(91)\nprocess.stdout.write("[]\\n")\n')
-    await chmod(fakePython, 0o755)
-    const { stdout, stderr } = await execFile(process.execPath, [cli, 'inspect', '--interface', 'serial', '--python', fakePython, '--json'], { env, cwd: root, timeout: 15000 })
+  {
+    const { stdout, stderr } = await execFile(process.execPath, [cli, 'inspect', '--interface', 'serial', '--json'], { env, cwd: root, timeout: 15000 })
     const result = JSON.parse(stdout)
     assert.equal(result.ok, true)
-    assert.deepEqual(result.result.devices, [])
+    assert.ok(Array.isArray(result.result.devices))
     assert.equal(result.result.sourcesAvailable, 1)
     assert.ok(stderr.trim().split('\n').map(line => JSON.parse(line)).every(event => event.schemaVersion === 1 && typeof event.event === 'string'))
   }
@@ -199,10 +196,10 @@ test('Expert export rejects credential-bearing MCP or a symlinked CLI instead of
   await writeFile(path, JSON.stringify(mcp))
   await assert.rejects(buildExpertArchive({ sourceRoot: fixture, outputDirectory: resolve(root, 'credentials') }), /credential-free Knowledge/)
   await writeFile(path, original)
-  const helper = resolve(fixture, 'cli/node_serial.py')
+  const helper = resolve(fixture, 'cli/native/bindings.cjs')
   await rm(helper)
   if (process.platform !== 'win32') {
-    await symlink(resolve(packageRoot, 'cli/node_serial.py'), helper)
+    await symlink(resolve(packageRoot, 'cli/native/bindings.cjs'), helper)
     await assert.rejects(buildExpertArchive({ sourceRoot: fixture, outputDirectory: resolve(root, 'symlink') }), /symlink/)
   }
 })
@@ -307,7 +304,7 @@ test('Expert archive bytes ignore source umask while preserving executable paylo
   const root = await temporary(t)
   const sourceRoot = resolve(root, 'source')
   await cp(packageRoot, sourceRoot, { recursive: true })
-  const paths = ['assets/esp-vision-logo.png', 'cli/node_serial.py', 'cli/licenses/ansi-regex-license']
+  const paths = ['assets/esp-vision-logo.png', 'cli/native/bindings.cjs', 'cli/licenses/ansi-regex-license']
   for (const path of paths) await chmod(resolve(sourceRoot, path), 0o600)
   await chmod(resolve(sourceRoot, 'cli/device-cli.mjs'), 0o700)
   const first = await buildExpertArchive({ sourceRoot, outputDirectory: resolve(root, 'first') })

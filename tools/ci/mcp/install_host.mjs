@@ -91,10 +91,18 @@ try {
       const lock = JSON.parse(await readFile(join(source, 'package-lock.json'), 'utf8'))
       const coreLock = lock.packages['node_modules/@esp-vision/device-core']
       assert.equal(coreLock?.version, packed.version, 'Core lock version must match the staged SDK')
-      assert.equal(new URL(coreLock.resolved).origin, 'https://registry.npmjs.org',
-        'The tracked Core lock must retain its published registry source')
-      assert.match(coreLock.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/,
-        'The tracked Core lock must retain its published archive integrity')
+      if (coreLock.resolved === undefined && coreLock.integrity === undefined) {
+        // A coordinated new minor can be tested before its Core is published.
+        // No registry URL/hash is invented: only this exact source tarball is
+        // allowed here. Publication still requires a registry integrity lock.
+        assert.equal(manifest.espVision.resolved.deviceCore, packed.version)
+        console.log(`${name}: qualifying unpublished Core source; registry lock must be completed before publication`)
+      } else {
+        assert.equal(new URL(coreLock.resolved).origin, 'https://registry.npmjs.org',
+          'The tracked Core lock must retain its published registry source')
+        assert.match(coreLock.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/,
+          'The tracked Core lock must retain its published archive integrity')
+      }
       lock.version = manifest.version
       lock.packages[''].version = manifest.version
       lock.packages[''].devDependencies = manifest.devDependencies

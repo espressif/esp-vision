@@ -16,6 +16,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Unify Device Core 0.8, CLI 0.2 and plugin 0.2 on npm serial bindings and the shared browser/Node esptool-js backend. Remove user-side Python/pyserial/esptool requirements; include native prebuilds and Linux USJ control-line compatibility in portable bundles. Replace the removed Python adapter tests with the shared Node/browser ROM coverage. Qualify unpublished source candidates in MR checks, then resolve the published Core archive integrity and carry the verified CLI lock through release jobs. Install and preflight the native serial backend in hardware CI before flashing.
+
 - Consolidate third-party license and source details in the bilingual license inventory instead of repeating them at the end of the README files.
 
 - Update the WorkBuddy Expert package introduction with bilingual project, hardware, adaptation and usage information.

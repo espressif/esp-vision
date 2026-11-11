@@ -1271,11 +1271,8 @@ Promise<Uint8Array>: validate v4, exact byte size, application partition bounds 
 @esp-vision/device-core/node
 ------------------------------------------------------------------
 
-``defaultPython``
-    Platform default Python executable: ``python`` on Windows and ``python3`` elsewhere.
-
-``listSerial({ python = defaultPython, signal, timeout = 10000 } = {}, dependencies = {})``
-    Enumerate OS serial ports with pyserial. Requires Python and pyserial; the optional dependency object can inject the process runner.
+``listSerial({ signal, timeout = 10000 } = {}, dependencies = {})``
+    Passively enumerate OS serial ports through npm native bindings; no Python or port opening.
 
 ``filterSerialPorts(ports, { platform = process.platform, allPorts = false } = {})``
     Filter OS-enumerated records by platform path and USB descriptor hints without opening ports or claiming firmware identity.
@@ -1284,25 +1281,24 @@ Promise<Uint8Array>: validate v4, exact byte size, application partition bounds 
     Convert one serial descriptor into an unprobed interface/address candidate with USB metadata; descriptor classification is not device identity.
 
 ``transportFor(entry, options = {})``
-    Create a passive TCP or serial byte transport for an inventory entry; serial options may select ``python``.
+    Create a passive TCP or serial byte transport for an inventory entry.
 
 ``inventory(options = {}, dependencies = {})``
-    Return ``{ devices, warnings, sourcesAvailable }`` from serial enumeration and LAN discovery. Defaults to a passive scan; ``probe: true`` connects to each candidate. Use ``timeout``, ``interfaces``, ``python``, ``allPorts`` and ``signal`` to control the scan.
+    Return ``{ devices, warnings, sourcesAvailable }`` from serial enumeration and LAN discovery. Defaults to a passive scan; ``probe: true`` connects to each candidate. Use ``timeout``, ``interfaces``, ``allPorts`` and ``signal`` to control the scan.
 
 Passive native USB ROM entries return ``status: rom`` and ``identity: null`` without opening or resetting the device. With ``probe: true``, Core verifies the ROM factory MAC and security mode, clears the target-specific software download latch, then requests normal SPI boot once. It does not load a stub, erase or read Flash. Only a unique endpoint matching both factory MAC and physical USB location may receive the subsequent runtime handshake. ``romProbe`` records ``attempted``, ``outcome`` (``runtime``, ``rom`` or ``no-runtime``), selected MAC/location and reset/cleanup diagnostics. A device already returned to runtime is probed without another reset. No returned runtime remains ``unidentified`` with ROM_RUNTIME_NOT_FOUND; a returned ROM remains ``rom``. Neither outcome proves installed firmware presence or absence. An unbootable application may require physical BOOT/RESET before installation. Only a successful ESP-VISION handshake establishes firmware identity; serial/session ownership conflicts return ``busy``.
 
-``nodeAdapterAssets()``
-    Return a frozen object of ``serial`` and ``rom`` URLs for ``node_serial.py`` and ``node_rom.py``. Node bundlers must copy both assets beside the bundled entry point at its expected asset paths.
+Core 0.8 removes ``defaultPython``, ``nodeAdapterAssets`` and the Python helper files. Bundlers must preserve npm native loaders and prebuilds; see the CLI build script.
 
 ``tcpTransport({ host, port })``
     Return a passive Node TCP byte adapter. Core opens it during ``device.connect({ role: 'tcp' })``.
 
-``serialTransport({ serial, python })``
-    Return the shared Node/Python serial byte adapter. Use an explicit serial device name/path and an interpreter with pyserial (for example ``python3``). Core opens/closes it; choose role ``usj``, ``usb`` or ``uart`` for the actual interface. The adapters carry bytes, not another device session.
+``serialTransport({ serial })``
+    Return the npm native serial byte adapter. Use an explicit path and role ``usj``, ``usb`` or ``uart``. Core opens/closes it and owns the device session.
 
 
-``openNodeRom({ port, python?, signal? })``
-    Return the built-in ROM adapter without opening the port. Use with ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })`` for both installation and application updates. The adapter requires separately installed Python esptool==5.6.0, whose stub read request and ACK/MD5 parser are covered by the compatibility checks; python defaults to python3 on Unix and python on Windows. Core manages initialize, validation, writing/verification, reset and disconnect. Available from SDK 0.3.0; it is Node-only, not a runtime serialTransport or a TCP OTA adapter.
+``openNodeRom({ port, signal?, logger?, baudRate?, onStatus? })``
+    Return the built-in ROM adapter without opening the port. Use with ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })`` for both installation and application updates. The adapter shares the browser esptool-js engine and requires no host Python. Core manages initialize, validation, writing/verification, reset and disconnect. Available from SDK 0.3.0; it is Node-only, not a runtime serialTransport or a TCP OTA adapter.
 
 @esp-vision/device-core/discovery
 ------------------------------------------------------------------
@@ -1365,7 +1361,7 @@ After verified writing, flash returns ``{ verified: true, needsReset: boolean }`
 ------------------------------------------------------------------
 
 ``openBrowserRom({ port, logger = {}, signal?, expectedMac? })``
-    Included in SDK 0.6.0. Return a passive browser ROM adapter for a selected Web Serial ``SerialPort``. Request the port in the user gesture and release any runtime connection first. ``initialize()`` lazily loads official ``esptool-js@0.7.1``, opens/detects the chip and exposes ``chipName/chipFamily/chipRevision``; it does not start a stub. The adapter implements ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` for ``firmware.update``. Core checks the approved image and ROM security before starting the stub and owns all writing/verification/reset semantics. ``logger`` optionally provides ``log/error/debug`` functions. ``signal`` cancels initialization and region erase. Core also checks cancellation after erase and before firmware writing; once writing starts, verification/reset finishes as before. ``disconnect()`` is idempotent and releases the port; initialization failures also close acquired resources. A disconnected adapter cannot be reused. Use a browser bundler; direct upstream native ESM loading is unsupported. See :doc:`integration` for the complete example. This subpath imports no Node modules; the root and Node paths do not load this browser backend.
+    Included in SDK 0.6.0. Return a passive browser ROM adapter for a selected Web Serial ``SerialPort``. Request the port in the user gesture and release any runtime connection first. ``initialize()`` lazily loads official ``esptool-js@0.7.1``, opens/detects the chip and exposes ``chipName/chipFamily/chipRevision``; it does not start a stub. The adapter implements ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` for ``firmware.update``. Core checks the approved image and ROM security before starting the stub and owns all writing/verification/reset semantics. ``logger`` optionally provides ``log/error/debug`` functions. ``signal`` cancels initialization and region erase. Core also checks cancellation after erase and before firmware writing; once writing starts, verification/reset finishes as before. ``disconnect()`` is idempotent and releases the port; initialization failures also close acquired resources. A disconnected adapter cannot be reused. Use a browser bundler; direct upstream native ESM loading is unsupported. See :doc:`integration` for the complete example. This subpath imports no Node modules; Node uses the same ROM engine through its own serial adapter.
 
     Core 0.7.0 also exposes ``chipMac``: ``null`` before qualification, then the factory MAC as 12 lowercase hexadecimal characters, matching the Node adapter. The pinned official chip ``readMac(loader)`` primitive supplies the value. Optional ``expectedMac`` accepts exactly 12 hexadecimal characters (uppercase is normalized); separators, whitespace, ``null`` and non-string values synchronously reject before port access. The host must obtain the selected runtime's verified factory MAC, for example a validated ``machine.unique_id()`` known to match that board's factory MAC; arbitrary legacy ``deviceId`` values or USB VID/PID do not establish this association. If the value cannot be verified, use an explicitly user-selected manual ROM workflow rather than infer an automatic association. A first mismatch or recovery to a different family/revision/MAC returns ROM_IDENTITY_CHANGED, closes the adapter and prevents another stub, erase or write; malformed MAC replies return ROM_IDENTITY_INVALID. These codes are retained on USB-OTG rather than being replaced with manual-download guidance. Omitting the option preserves manual initial ROM selection, but subsequent synchronization remains bound to that first device.
 
@@ -1386,6 +1382,6 @@ The browser ROM adapter resets through the active flash stub after verification.
 Node ROM readback safety
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Node Flash reads default to one outstanding 1024-byte packet. The adapter forwards the shared firmware workflow's packet budget to the external esptool reader and restores its temporary instance settings after each read. Partition-table validation uses the same bounded path before any application write; unsupported versions or reader layouts fail before writing. A short read, timeout or digest error fails the operation without replaying it.
+Node and browser Flash reads use one outstanding 1024-byte packet and verify each bounded command's trailing MD5. Node retains large-read support by splitting requests into at most 64 KiB commands; legacy packet/window options are upper budgets. Partition-table validation uses this same path before writing. A short read, timeout or digest error fails without replay.
 
 If a read-only initialization fails while a previously observed native ROM device is re-enumerating, Core passively waits for up to five seconds. Only the unique runtime with the same factory MAC and physical USB location may receive one verified bootloader request. Ambiguous or conflicting identities cannot trigger a handoff. This recovery never repeats a submitted bootloader request or a Flash read/write.

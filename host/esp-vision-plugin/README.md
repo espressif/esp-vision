@@ -4,7 +4,7 @@ The plugin combines the standalone ESP-VISION Device CLI, the official online Kn
 
 ## Requirements
 
-Use Codex, Claude Code, or WorkBuddy, Node.js 22 or newer on PATH, a local shell executor, and network access to `https://mcp.vision.espressif.com/mcp`. Serial operations also require Python 3 with `pyserial` and access to the selected port. Firmware flashing requires Python `esptool>=5.3,<6`. TCP device operations do not require serial Python support. Commands run on the computer that can reach the board; cloud-only execution cannot access that computer's USB port.
+Use Codex, Claude Code, or WorkBuddy, Node.js 22 or newer on PATH, a local shell executor, and network access to `https://mcp.vision.espressif.com/mcp`. Serial operations use bundled npm native bindings and require access to the selected port. Firmware flashing uses the shared esptool-js backend without host Python. Commands run on the computer that can reach the board; cloud-only execution cannot access that computer's USB port.
 
 ## Install from npm
 
@@ -38,7 +38,7 @@ WorkBuddy's `manual-install-required` result confirms export preparation, not na
 
 ## Device CLI and Knowledge MCP
 
-The plugin includes a dependency-closed `cli/device-cli.mjs` bundle with its Python serial and ROM adapters and original dependency notices. The Skill runs that installed copy by absolute path and selects commands for the user's request. It does not require the user to install the CLI package globally or through `npx`. The separate `@esp-vision/device-cli` npm package remains available for people who want the shell tool outside Codex or Claude Code.
+The plugin includes a dependency-closed `cli/device-cli.mjs` bundle with npm native serial bindings, the shared esptool-js ROM adapter and original dependency notices. The Skill runs that installed copy by absolute path and selects commands for the user's request. It does not require the user to install the CLI package globally or through `npx`. The separate `@esp-vision/device-cli` npm package remains available for people who want the shell tool outside Codex or Claude Code.
 
 The Knowledge MCP is hosted at `https://mcp.vision.espressif.com/mcp`; firmware documentation is not copied into the package. The plugin's only MCP connection is that online Knowledge MCP. Its tools provide read-only documentation lookup and do not submit issues or anonymous feedback. Report functional problems through [GitHub Issues](https://github.com/espressif/esp-vision/issues); prepare a template-based English draft and obtain user authorization before submitting it or its attachments. Follow [SECURITY.md](https://github.com/espressif/esp-vision/security/policy) for private vulnerability reporting. The Agent retains its own AI loop and uses a local shell executor for device operations.
 
@@ -57,7 +57,7 @@ After a CLI operation, inspect the result before retrying if it timed out, was c
 | QoderWork export | `.qoder-plugin/plugin.json`, Skill and `qoder.md` | Declarative Knowledge MCP setup |
 | WorkBuddy Expert export | `.codebuddy-plugin/plugin.json`, Agent and Skill in one ZIP | Declared `.mcp.json` dependency, remote `http`; platform parsing and activation require target-host acceptance |
 
-Codex and Claude discover the same `skills/esp-vision-development/SKILL.md`. The legacy WorkBuddy adapter receives a format-adapted copy in the ZIP, with its documented `@references/` syntax and a persistent absolute path to the installed `cli/device-cli.mjs`. Its ZIP also carries the full dependency-closed CLI, official logo and provenance, and license notices. All hosts use the same installed CLI artifact. Packaging checks manifest/version integrity, absence of an embedded device MCP, and isolated CLI `--help` and `inspect` runs using a fake Python serial runner, including the copy extracted from the WorkBuddy ZIP. This does not substitute for app activation and acceptance; WorkBuddy's Skill import and Knowledge MCP connection require the documented UI steps.
+Codex and Claude discover the same `skills/esp-vision-development/SKILL.md`. The legacy WorkBuddy adapter receives a format-adapted copy in the ZIP, with its documented `@references/` syntax and a persistent absolute path to the installed `cli/device-cli.mjs`. Its ZIP also carries the full dependency-closed CLI, official logo and provenance, and license notices. All hosts use the same installed CLI artifact. Packaging checks manifest/version integrity, absence of an embedded device MCP, and isolated CLI `--help` and passive `inspect` runs, including the copy extracted from the WorkBuddy ZIP. This does not substitute for app activation and acceptance; WorkBuddy's Skill import and Knowledge MCP connection require the documented UI steps.
 
 ## Build and package
 
@@ -87,7 +87,7 @@ npm --prefix host/esp-vision-plugin run build:workbuddy-expert -- --output-dir "
 
 The Node.js builder reuses the existing ZIP encoder and the validated plugin's CLI, Python helpers and license texts. It writes `esp-vision-workbuddy-expert-<version>.zip`, a SHA-256 sidecar and a receipt listing file digests, without overwriting existing artifacts. Output must be outside the plugin source. To export an already built, verified plugin from another directory, pass `--source /absolute/prebuilt/plugin`; templates still come from this checkout. No Python build script or image conversion tool is required. The committed 512×512 avatar retains the official vector camera symbol; its source and provenance accompany the export.
 
-The ZIP contains bilingual Expert metadata with the original publisher identity **Espressif Systems (Shanghai) CO LTD**, contact `libo@espressif.com`, an Agent, preloaded Skill and its application reference, and the official Knowledge MCP dependency. Instructions use `${CODEBUDDY_PLUGIN_ROOT}` and a checked installed-Skill fallback instead of the export machine's absolute paths. No Device MCP is added. Node.js 22+, Python/pyserial for serial access, and esptool for flashing remain runtime requirements.
+The ZIP contains bilingual Expert metadata with the original publisher identity **Espressif Systems (Shanghai) CO LTD**, contact `libo@espressif.com`, an Agent, preloaded Skill and its application reference, and the official Knowledge MCP dependency. Instructions use `${CODEBUDDY_PLUGIN_ROOT}` and a checked installed-Skill fallback instead of the export machine's absolute paths. No Device MCP is added. Node.js 22+ and access to the selected port are required; the bundled serial and flashing backends need no host Python.
 
 #### Maintainer constraints
 

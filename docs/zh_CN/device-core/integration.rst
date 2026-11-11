@@ -19,7 +19,7 @@ Device Core 源码在 ESP-VISION 固件仓库的 ``host/device-core/`` 维护。
    npm view @esp-vision/device-core@0.6.0 version dist.integrity
    npm install '@esp-vision/device-core@~0.6.0'
 
-Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析包名，以及 Web Serial 或二进制 WebSocket 桥。Device Core 不附带串口驱动、网络桥、模型或 IDE UI。Node 串口枚举需要安装 pyserial 的 Python；Node mDNS 发现使用 ``multicast-dns``。单独的 Device CLI 以 ``@esp-vision/device-cli@0.1.0`` 安装，是 Agent 设备操作的受支持命令。固定 npm 版本并更新 lockfile。
+Node 主机基线是 Node.js 22。浏览器需要打包器或 import map 解析包名，以及 Web Serial 或二进制 WebSocket 桥。Device Core 不附带串口驱动、网络桥、模型或 IDE UI。Node 串口枚举使用可选 npm 原生绑定；Node mDNS 发现使用 ``multicast-dns``。单独的 Device CLI 以 ``@esp-vision/device-cli`` 安装，是 Agent 设备操作的受支持命令。固定 npm 版本并更新 lockfile。
 
 应用、Core 与传输的职责
 -----------------------
@@ -203,7 +203,7 @@ Node 安装可选 ``multicast-dns`` peer 后使用：
        console.log(await device.inspect({ fields: ['identity'] }))
    } finally { await device.disconnect() }
 
-应用调用 ``device.discover()``。``createNodeDiscovery()`` 和 ``createBridgeDiscovery()`` 返回 provider，契约为 ``list({ timeout, signal })``，不提供 ``discover()``；通过 ``createDevice({ discovery: provider })`` 注入。SDK 0.5.1 从 ``@esp-vision/device-core/node`` 导出 ``inventory``、``listSerial``、``filterSerialPorts``、``serialEntry``、``transportFor``、``defaultPython`` 和 ``nodeAdapterAssets``。默认 inventory 只枚举，不连接；传输构造也不会打开连接。串口枚举需要 pyserial。见 :doc:`advanced`。
+应用调用 ``device.discover()``。``createNodeDiscovery()`` 和 ``createBridgeDiscovery()`` 返回 provider，契约为 ``list({ timeout, signal })``，不提供 ``discover()``；通过 ``createDevice({ discovery: provider })`` 注入。SDK 0.8 从 ``@esp-vision/device-core/node`` 导出 ``inventory``、``listSerial``、``filterSerialPorts``、``serialEntry``、``transportFor``。默认 inventory 只枚举，不连接；传输构造也不会打开连接。串口枚举使用 npm 原生预编译模块，无需主机 Python。见 :doc:`advanced`。
 
 .. code-block:: javascript
 

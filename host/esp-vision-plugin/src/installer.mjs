@@ -124,8 +124,8 @@ async function collectPayload(root) {
   for (const required of [
     'assets/esp-vision-logo.png',
     'cli/device-cli.mjs',
-    'cli/node_serial.py',
-    'cli/node_rom.py',
+    'cli/native/bindings.cjs',
+    'cli/native/package.json',
     'skills/esp-vision-development/SKILL.md',
     'skills/esp-vision-development/references/application-workflow.md',
     'workbuddy/mcp.json',

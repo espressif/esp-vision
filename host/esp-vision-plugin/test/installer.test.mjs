@@ -260,8 +260,8 @@ test('WorkBuddy installation prepares a local ZIP and MCP file, then reports man
   assert.doesNotMatch(skill, /Offer the user three reporting choices/)
   assert.doesNotMatch(skill, /PLUGIN_ROOT|CLAUDE_PLUGIN_ROOT|<plugin-root>/)
   assert.ok(files.has(`${prefix}scripts/cli/device-cli.mjs`))
-  assert.ok(files.has(`${prefix}scripts/cli/node_serial.py`))
-  assert.ok(files.has(`${prefix}scripts/cli/node_rom.py`))
+  assert.ok(files.has(`${prefix}scripts/cli/native/bindings.cjs`))
+  assert.ok(files.has(`${prefix}scripts/cli/native/package.json`))
   assert.ok(files.has(`${prefix}assets/esp-vision-logo.png`))
   assert.deepEqual(files.get(`${prefix}assets/esp-vision-logo.png`), await readFile(join(packageRoot, 'assets/esp-vision-logo.png')))
   assert.ok(files.has(`${prefix}assets/PROVENANCE.md`))
@@ -353,7 +353,7 @@ test('WorkBuddy refuses to overwrite modified export artifacts and can recover a
   assert.equal(JSON.parse(await readFile(recovered.mcpConfig, 'utf8')).mcpServers['esp-vision-knowledge'].type, 'streamableHttp')
 })
 
-test('the exported WorkBuddy ZIP extracts and its bundled CLI runs help and mocked serial inspection', async () => {
+test('the exported WorkBuddy ZIP extracts and its bundled CLI runs help and native serial enumeration', async () => {
   const dataDirectory = join(testRoot, 'workbuddy extracted CLI data')
   const result = await installPlugin({ client: 'workbuddy', dataDirectory, packageRoot })
   const extracted = join(testRoot, 'WorkBuddy ZIP extracted with spaces')
@@ -364,19 +364,16 @@ test('the exported WorkBuddy ZIP extracts and its bundled CLI runs help and mock
     cwd: testRoot, timeout: 15000, maxBuffer: 2 * 1024 * 1024, windowsHide: true,
   })
   assert.match(help, /esp-vision-device inspect/)
-  if (process.platform !== 'win32') {
-    const fakePython = join(testRoot, 'workbuddy-fake-python')
-    await writeFile(fakePython, '#!/usr/bin/env node\nif (!process.argv[2]?.replaceAll("\\\\", "/").endsWith("/node_serial.py")) process.exit(91)\nprocess.stdout.write("[]\\n")\n')
-    await chmod(fakePython, 0o755)
+  {
     const { stdout } = await execFile(process.execPath, [
-      extractedCli, 'inspect', '--interface', 'serial', '--python', fakePython, '--json',
+      extractedCli, 'inspect', '--interface', 'serial', '--json',
     ], {
       cwd: testRoot, timeout: 15000, maxBuffer: 2 * 1024 * 1024, windowsHide: true,
     })
     const inspection = JSON.parse(stdout)
     assert.equal(inspection.ok, true)
     assert.equal(inspection.command, 'inspect')
-    assert.deepEqual(inspection.result.devices, [])
+    assert.ok(Array.isArray(inspection.result.devices))
     assert.equal(inspection.result.sourcesAvailable, 1)
   }
 })

@@ -78,7 +78,7 @@ for (const catalog of ['.agents/plugins/marketplace.json', '.claude-plugin/marke
 }
 
 const cli = resolve(pluginRoot, 'cli')
-for (const name of ['device-cli.mjs', 'node_serial.py', 'node_rom.py', 'licenses']) await access(resolve(cli, name))
+for (const name of ['device-cli.mjs', 'native/bindings.cjs', 'native/prebuilds', 'licenses']) await access(resolve(cli, name))
 // Common npm dependencies use lowercase license filenames. Preserve their
 // actual notices rather than treating package metadata as the license text.
 for (const name of ['ansi-regex-license', 'multicast-dns-LICENSE']) {

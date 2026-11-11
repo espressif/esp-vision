@@ -2,7 +2,7 @@
 
 `@esp-vision/device-cli` installs the `esp-vision-device` command for device discovery, inspection, configuration, control, firmware updates, Python execution, device file operations, JPEG capture, sequential batch plans, and bounded event watches. It is an optional host interface backed by the same `@esp-vision/device-core` package used by ESP-VISION clients.
 
-Requires Node.js 22 or newer. Serial access requires Python with `pyserial`; firmware flashing requires Python `esptool==5.6.0`. LAN discovery uses the bundled multicast-DNS client. Check the selected interpreter with `PYTHON --version` and `PYTHON -c "import serial"`; install pyserial there with `PYTHON -m pip install pyserial` (replace `PYTHON` with that executable). Windows Python Launcher users can use `--python py` and `py -m pip install pyserial`. A failed serial setup gets a bounded environment diagnosis after connection cleanup; successful connections, TCP operations, help, and offline firmware checks do not start it. Busy/access-denied errors keep their port-specific guidance; an unknown adapter failure is not proof of missing Python or pyserial.
+Requires Node.js 22 or newer. Serial access uses bundled npm native bindings; firmware flashing uses the same esptool-js backend as the website. No host Python, pyserial or Python esptool installation is required. LAN discovery uses the bundled multicast-DNS client. Port permissions and ownership still apply. The deprecated `--python` option is accepted but ignored for compatibility.
 
 Run `esp-vision-device --help` for the command reference, or `esp-vision-device --help --json` for the versioned machine-readable command, output, and limit capabilities envelope.
 
@@ -60,3 +60,7 @@ Status, Python output, firmware phases, cancellation, errors, and duration are N
 Inspect JSON output uses the same versioned envelope as other commands. Human-readable inspect output remains a terminal table.
 
 Device paths such as `/models` stay absolute device paths on Windows. Git Bash/MSYS may rewrite them; use PowerShell or prefix the individual command with `MSYS2_ARG_CONV_EXCL="*"`, supplying local paths in Windows form. Quoting the device path alone does not prevent conversion. Invalid device paths now fail before connecting, with a shell hint for Windows host paths.
+
+## Coordinated source builds
+
+Before Core 0.8.0 is published, use `node tools/ci/mcp/install_host.mjs --output <project-artifact-directory>` from the repository root, then build the CLI. The tracked Core lock intentionally has no registry URL or integrity for the unpublished version; the installer qualifies an exact local tarball and records its hash without changing that lock. Other dependencies keep their registry locks. Publish Core first, refresh the CLI registry lock from that published version, then rebuild and qualify CLI/plugin artifacts before publishing their versions. The publishing gate rejects a missing or mismatched registry integrity.

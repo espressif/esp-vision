@@ -10,14 +10,14 @@ device_cli_checks:
     npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends python3 python3-serial
+    - apt-get install -y --no-install-recommends udev
   script:
     - export TMPDIR="$CI_PROJECT_DIR/.cache/host-tmp" TMP="$CI_PROJECT_DIR/.cache/host-tmp" TEMP="$CI_PROJECT_DIR/.cache/host-tmp"
     - mkdir -p "$TMPDIR"
     - node tools/ci/mcp/install_host.mjs --output .cache/host-artifacts
     - npm --prefix host/device-cli run build
     - npm --prefix host/device-cli test
-    - node --test tools/ci/mcp/test_install_host.mjs tools/ci/mcp/test_release_npm.mjs tools/ci/mcp/test_package_plugin_release.mjs
+    - node --test tools/ci/mcp/test_install_host.mjs tools/ci/mcp/test_release_npm.mjs tools/ci/mcp/test_package_plugin_release.mjs tools/ci/mcp/test_resolve_core_release_lock.mjs
     - CI_COMMIT_TAG=2026.11.06 CI_COMMIT_REF_PROTECTED=true node --test tools/ci/mcp/test_release_npm.mjs
     - export ESP_VISION_NPM_TARBALL_DIR="$CI_PROJECT_DIR/.cache/host-npm-tarballs"
     - node tools/ci/mcp/release_npm.mjs --dry-run --package host/device-cli
@@ -47,21 +47,23 @@ package_device_cli_npm:
       changes:
         - "host/device-cli/**/*"
         - "tools/ci/mcp/release_npm.mjs"
+        - "tools/ci/mcp/resolve_core_release_lock.mjs"
         - ".gitlab/ci/host-tools.yml"
     - when: never
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends python3 python3-serial
+    - apt-get install -y --no-install-recommends udev
   script:
     - export TMPDIR="$CI_PROJECT_DIR/.cache/host-release-tmp" TMP="$CI_PROJECT_DIR/.cache/host-release-tmp" TEMP="$CI_PROJECT_DIR/.cache/host-release-tmp"
     - mkdir -p "$TMPDIR"
+    - node tools/ci/mcp/resolve_core_release_lock.mjs
     - npm --prefix host/device-cli ci --ignore-scripts --no-audit --no-fund
     - npm --prefix host/device-cli run build
     - npm --prefix host/device-cli test
     - export ESP_VISION_NPM_TARBALL_DIR="$CI_PROJECT_DIR/.cache/cli-release-tarballs"
     - node tools/ci/mcp/release_npm.mjs --dry-run --package host/device-cli
   artifacts:
-    paths: [.cache/cli-release-tarballs/]
+    paths: [.cache/cli-release-tarballs/, host/device-cli/package-lock.json]
     expire_in: 1 month
 
 publish_device_cli_npm:
@@ -84,11 +86,12 @@ publish_device_cli_npm:
       changes:
         - "host/device-cli/**/*"
         - "tools/ci/mcp/release_npm.mjs"
+        - "tools/ci/mcp/resolve_core_release_lock.mjs"
         - ".gitlab/ci/host-tools.yml"
     - when: never
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends python3 python3-serial
+    - apt-get install -y --no-install-recommends udev
   script:
     - export TMPDIR="$CI_PROJECT_DIR/.cache/host-release-tmp" TMP="$CI_PROJECT_DIR/.cache/host-release-tmp" TEMP="$CI_PROJECT_DIR/.cache/host-release-tmp"
     - mkdir -p "$TMPDIR"

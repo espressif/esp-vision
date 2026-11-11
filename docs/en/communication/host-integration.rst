@@ -150,7 +150,7 @@ Drain reduces observed old data; it neither proves every device/USB/host buffer 
 One hardware-test entry point
 -----------------------------
 
-Run from the repository root with Node.js 22. Serial mode also needs an executable Python with ``pyserial``; TCP mode does not depend on Python. First verify identity and camera on an online device, then run all checks on USB:
+Run from the repository root with Node.js 22. Serial mode uses npm native bindings; neither serial nor TCP requires host Python. First verify identity and camera on an online device, then run all checks on USB:
 
 .. code-block:: console
 

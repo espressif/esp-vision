@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2026 ESP-VISION-IDE
 // SPDX-License-Identifier: Apache-2.0
 import { build } from 'esbuild'
-import { nodeAdapterAssets } from '@esp-vision/device-core/node'
-import { chmod, copyFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -54,6 +53,7 @@ async function packageMetadataFromInput(input, name) {
 async function originalLegalComments(metafile) {
   const comments = new Map()
   for (const input of Object.keys(metafile.inputs)) {
+    if (input.startsWith('native-loader:')) continue
     const source = await readFile(resolve(root, input), 'utf8')
     for (const match of source.matchAll(/\/\*[\s\S]*?\*\/|\/\/[^\r\n]*/g)) {
       const comment = match[0].trim()
@@ -81,6 +81,7 @@ async function copyOriginalLicenses(metafile) {
   const records = []
   const bundledPackages = new Map()
   for (const input of Object.keys(metafile.inputs)) {
+    if (input.startsWith('native-loader:')) continue
     const name = packageNameFromInput(input)
     if (name && name !== '@esp-vision/device-core' && !bundledPackages.has(name)) bundledPackages.set(name, input)
   }
@@ -113,6 +114,40 @@ async function copyOriginalLicenses(metafile) {
 
 await rm(dist, { recursive: true, force: true })
 await mkdir(dist, { recursive: true })
+// Keep the original npm native binaries; bundle their JS loader beside them.
+// No install-time compilation or Python subprocess runs in the delivered CLI.
+const corePackage = await packageRoot('@esp-vision/device-core', root)
+const nativePackage = await packageRoot('@serialport/bindings-cpp', corePackage.directory)
+const nativeDirectory = join(dist, 'native')
+await mkdir(nativeDirectory)
+const nativeBundle = await build({
+  entryPoints: [require.resolve('@serialport/bindings-cpp', { paths: [corePackage.directory] })],
+  outfile: join(nativeDirectory, 'bindings.cjs'), bundle: true, platform: 'node', format: 'cjs', target: 'node22',
+  legalComments: 'inline', metafile: true,
+  plugins: [{ name: 'native-loader-root', setup(builder) {
+    builder.onResolve({ filter: /^node-gyp-build$/ }, () => ({ path: 'loader', namespace: 'native-loader' }))
+    builder.onLoad({ filter: /.*/, namespace: 'native-loader' }, () => ({
+      contents: `const load = require(${JSON.stringify(require.resolve('node-gyp-build/node-gyp-build.js', { paths: [nativePackage.directory] }))}); module.exports = () => load(__dirname);`,
+      loader: 'js', resolveDir: root,
+    }))
+  } }],
+})
+await cp(join(nativePackage.directory, 'prebuilds'), join(nativeDirectory, 'prebuilds'), { recursive: true })
+await copyFile(join(nativePackage.directory, 'LICENSE'), join(nativeDirectory, 'LICENSE'))
+await writeFile(join(nativeDirectory, 'package.json'), JSON.stringify({ name: nativePackage.manifest.name, version: nativePackage.manifest.version, license: nativePackage.manifest.license }) + '\n')
+// Koffi 2 includes portable prebuilds in one npm archive. Preserve its loader
+// and Linux binaries verbatim; only Linux USJ's modem ioctl fallback uses it.
+const koffi = await packageRoot('koffi', corePackage.directory)
+const koffiDirectory = join(nativeDirectory, 'koffi')
+await mkdir(koffiDirectory)
+for (const file of ['index.js', 'package.json', 'LICENSE.txt']) await copyFile(join(koffi.directory, file), join(koffiDirectory, file))
+for (const entry of await readdir(join(koffi.directory, 'build/koffi'))) {
+  if (/^(linux|musl)_/.test(entry)) await cp(join(koffi.directory, 'build/koffi', entry), join(koffiDirectory, 'build/koffi', entry), { recursive: true })
+}
+for (const file of ['src/cnoke/LICENSE.txt', 'vendor/node-api-headers/LICENSE', 'vendor/node-addon-api/LICENSE.md']) {
+  await mkdir(dirname(join(koffiDirectory, file)), { recursive: true })
+  await copyFile(join(koffi.directory, file), join(koffiDirectory, file))
+}
 const bundle = await build({
   entryPoints: [join(root, 'src/cli.js')],
   outfile: join(dist, 'device-cli.mjs'),
@@ -126,15 +161,17 @@ const bundle = await build({
   sourcemap: false,
   legalComments: 'inline',
   metafile: true,
+  plugins: [{ name: 'external-native-backend', setup(builder) {
+    builder.onResolve({ filter: /^@serialport\/bindings-cpp$/ }, () => ({ path: './native/bindings.cjs', external: true }))
+    builder.onResolve({ filter: /^koffi$/ }, () => ({ path: './native/koffi/index.js', external: true }))
+  } }],
 })
-const adapters = nodeAdapterAssets()
-for (const [key, filename] of [['serial', 'node_serial.py'], ['rom', 'node_rom.py']]) {
-  const asset = adapters[key]
-  if (!(asset instanceof URL) || asset.protocol !== 'file:') throw new Error(`Core node adapter ${key} must be a file URL`)
-  await copyFile(fileURLToPath(asset), join(dist, filename))
-}
 await chmod(join(dist, 'device-cli.mjs'), 0o755)
-await copyOriginalLicenses(bundle.metafile)
+const addonApi = await packageRoot('node-addon-api', nativePackage.directory)
+await copyOriginalLicenses({ inputs: { ...bundle.metafile.inputs, ...nativeBundle.metafile.inputs,
+  [relative(root, join(koffi.directory, 'index.js'))]: {},
+  [relative(root, join(addonApi.directory, 'napi.h'))]: {},
+} })
 
 // Keep the metadata synchronized with the exact Core package used to build.
 const core = await packageRoot('@esp-vision/device-core', root)
@@ -145,4 +182,4 @@ if (cliManifest.espVision?.deviceCore !== cliManifest.devDependencies?.['@esp-vi
 }
 await copyFile(join(core.directory, 'LICENSE'), join(root, 'LICENSE'))
 await copyFile(join(core.directory, 'NOTICE'), join(root, 'DEVICE_CORE_NOTICE.md'))
-console.log('Built dist/device-cli.mjs with bundled Node dependencies and Python adapters.')
+console.log('Built dist/device-cli.mjs with shared esptool-js and npm native serial binaries (no host Python).')

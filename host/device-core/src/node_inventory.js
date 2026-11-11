@@ -1,25 +1,23 @@
 // SPDX-FileCopyrightText: 2026 ESP-VISION-IDE
 // SPDX-License-Identifier: Apache-2.0
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-import { fileURLToPath } from 'node:url'
+import { serialBinding, serialPortInfo, boundedSerial } from './node_serial.js'
 import { createNodeDiscovery } from './network_discovery_node.js'
 import { createDevice } from './index.js'
 import { serialTransport, tcpTransport } from './node_transport.js'
 
-export const defaultPython = process.platform === 'win32' ? 'python' : 'python3'
-export async function listSerial({ python = defaultPython, signal, timeout = 10000 } = {}, dependencies = {}) {
+export async function listSerial({ signal, timeout = 10000 } = {}, dependencies = {}) {
   if (!Number.isFinite(timeout) || timeout <= 0) throw new RangeError('Serial enumeration timeout must be positive')
   try {
-    const run = dependencies.execFile ?? promisify(execFile)
-    const { stdout } = await run(python, [fileURLToPath(new URL('./node_serial.py', import.meta.url)), '--list'], { signal, timeout, maxBuffer: 1024 * 1024, windowsHide: true })
-    const ports = JSON.parse(stdout)
-    if (!Array.isArray(ports)) throw new Error('Invalid serial list')
-    return ports
+    return await boundedSerial(async () => {
+      const binding = await (dependencies.binding ?? serialBinding)()
+      const ports = await binding.list()
+      if (!Array.isArray(ports)) throw new Error('Invalid serial list')
+      return Promise.all(ports.map(port => serialPortInfo(port, dependencies)))
+    }, { signal, timeout })
   } catch (cause) {
     if (signal?.aborted) throw signal.reason
-    if (cause?.code === 'ETIMEDOUT') throw Object.assign(new Error('Serial enumeration timed out'), { code: 'TIMEOUT', cause })
-    throw Object.assign(new Error('Serial enumeration unavailable: install Python and pyserial, or select --python'), { code: 'SERIAL_UNAVAILABLE', cause })
+    if (cause?.code === 'TIMEOUT' || cause?.code === 'SERIAL_BACKEND_UNAVAILABLE') throw cause
+    throw Object.assign(new Error('Serial enumeration unavailable; check the npm serial backend and OS permissions'), { code: 'SERIAL_UNAVAILABLE', cause })
   }
 }
 // Filter OS-enumerated ports, never infer device existence from a name alone.
@@ -53,13 +51,13 @@ export function serialEntry(port) {
   const rom = vid === 0x303a && [2, 9, 18, 32].includes(pid)
   const kind = vid === 0x303a && pid === 0x1001 ? 'usj'
     : [0x10c4, 0x1a86, 0x0403, 0x067b].includes(vid) ? 'uart'
-    : vid === 0x303a && /esp.vision/i.test(port.product ?? '') ? 'usb'
+    : vid === 0x303a && ([0x4003, 0x4023].includes(pid) || /esp.vision/i.test(port.product ?? '')) ? 'usb'
     : usb ? 'serial' : 'uart'
   return { interface: kind, address: port.path, status: rom ? 'rom' : 'unprobed', identity: null, usb: { vendorId: vid ?? null, productId: pid ?? null, serialNumber: port.serialNumber ?? null, product: port.product ?? null, manufacturer: port.manufacturer ?? null }, interfaceSource: 'descriptor-candidate' }
 }
 export function transportFor(entry, options = {}) {
   return entry.interface === 'tcp' ? tcpTransport({ host: entry.host, port: entry.port })
-    : serialTransport({ serial: entry.address, role: entry.interface, python: options.python ?? defaultPython })
+    : serialTransport({ serial: entry.address, role: entry.interface })
 }
 export async function inventory(options = {}, dependencies = {}) {
   const { signal, timeout = 3000, probe = false, interfaces = ['all'] } = options
@@ -73,7 +71,7 @@ export async function inventory(options = {}, dependencies = {}) {
       rows.push(...filterSerialPorts(ports, { platform: dependencies.platform ?? process.platform, allPorts: options.allPorts }).map(serialEntry).filter(row => matches(row.interface)))
       sourcesAvailable++
     }
-    catch (error) { if (signal?.aborted) throw error; warnings.push({ source: 'serial', code: error.code ?? 'SERIAL_UNAVAILABLE', message: 'Serial enumeration unavailable; check Python/pyserial and access permissions' }) }
+    catch (error) { if (signal?.aborted) throw error; warnings.push({ source: 'serial', code: error.code ?? 'SERIAL_UNAVAILABLE', message: 'Serial enumeration unavailable; check the npm serial backend and access permissions' }) }
   })())
   if (matches('tcp')) tasks.push((async () => {
     try {
@@ -92,7 +90,7 @@ export async function inventory(options = {}, dependencies = {}) {
         const selected = ports.filter(port => port.path === row.address)
         if (selected.length !== 1) throw Object.assign(new Error('Selected ROM port is no longer unique'), { code: 'ROM_PORT_LOST' })
         const probeRom = dependencies.probeRom ?? (await import('./node_rom_probe.js')).probeNodeRom
-        const result = await probeRom(selected[0], { python: options.python ?? defaultPython, timeout: options.probeTimeout ?? 5000, signal })
+        const result = await probeRom(selected[0], { timeout: options.probeTimeout ?? 5000, signal })
         row.romProbe = result.probe
         if (!result.port || result.probe.outcome !== 'runtime') {
           row.status = result.port ? 'rom' : 'unidentified'

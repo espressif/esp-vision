@@ -5,11 +5,23 @@ The CLI bundle includes the following third-party packages. Their original licen
 | Package | Version | License | License file |
 | --- | --- | --- | --- |
 | @leichtgewicht/ip-codec | 2.0.5 | MIT | `leichtgewicht__ip-codec-LICENSE` |
+| @serialport/bindings-cpp | 13.0.0 | MIT | `serialport__bindings-cpp-LICENSE` |
+| @serialport/bindings-interface | 1.2.2 | MIT | `serialport__bindings-interface-LICENSE` |
+| @serialport/parser-delimiter | 12.0.0 | MIT | `serialport__parser-delimiter-LICENSE` |
+| @serialport/parser-readline | 12.0.0 | MIT | `serialport__parser-readline-LICENSE` |
 | ansi-regex | 6.4.0 | MIT | `ansi-regex-license` |
+| atob-lite | 2.0.0 | MIT | `atob-lite-LICENSE.md` |
+| debug | 4.4.0 | MIT | `debug-LICENSE` |
 | dns-packet | 5.6.1 | MIT | `dns-packet-LICENSE` |
 | emoji-regex | 10.6.0 | MIT | `emoji-regex-LICENSE-MIT.txt` |
+| esptool-js | 0.7.1 | Apache-2.0 | `esptool-js-LICENSE` |
 | get-east-asian-width | 1.7.0 | MIT | `get-east-asian-width-license` |
+| koffi | 2.16.3 | MIT | `koffi-LICENSE.txt` |
+| ms | 2.1.3 | MIT | `ms-license.md` |
 | multicast-dns | 7.2.5 | MIT | `multicast-dns-LICENSE` |
+| node-addon-api | 8.3.0 | MIT | `node-addon-api-LICENSE.md` |
+| node-gyp-build | 4.8.4 | MIT | `node-gyp-build-LICENSE` |
+| pako | 2.2.0 | (MIT AND Zlib) | `pako-LICENSE` |
 | smol-toml | 1.9.1 | BSD-3-Clause | `smol-toml-LICENSE` |
 | string-width | 7.2.0 | MIT | `string-width-license` |
 | strip-ansi | 7.2.0 | MIT | `strip-ansi-license` |
@@ -112,23 +124,31 @@ Bundled from: `node_modules/smol-toml/dist/date.js`, `node_modules/smol-toml/dis
 
 ### Source notice 6
 
-Bundled from: `node_modules/@esp-vision/device-core/src/firmware_feed.js`, `node_modules/@esp-vision/device-core/src/firmware_flash.js`, `node_modules/@esp-vision/device-core/src/index.js`, `node_modules/@esp-vision/device-core/src/network_discovery.js`, `node_modules/@esp-vision/device-core/src/network_discovery_node.js`, `node_modules/@esp-vision/device-core/src/node_inventory.js`, `node_modules/@esp-vision/device-core/src/node_rom.js`, `node_modules/@esp-vision/device-core/src/node_transport.js`, `src/cli.js`
+Bundled from: `node_modules/pako/dist/pako.esm.mjs`
+
+```text
+/*! pako 2.2.0 https://github.com/nodeca/pako @license (MIT AND Zlib) */
+```
+
+### Source notice 7
+
+Bundled from: `node_modules/@esp-vision/device-core/src/firmware_feed.js`, `node_modules/@esp-vision/device-core/src/firmware_flash.js`, `node_modules/@esp-vision/device-core/src/index.js`, `node_modules/@esp-vision/device-core/src/network_discovery.js`, `node_modules/@esp-vision/device-core/src/network_discovery_node.js`, `node_modules/@esp-vision/device-core/src/node_inventory.js`, `node_modules/@esp-vision/device-core/src/node_rom.js`, `node_modules/@esp-vision/device-core/src/node_rom_port.js`, `node_modules/@esp-vision/device-core/src/node_transport.js`, `src/cli.js`
 
 ```text
 // SPDX-FileCopyrightText: 2026 ESP-VISION-IDE
 ```
 
-### Source notice 7
+### Source notice 8
 
-Bundled from: `node_modules/@esp-vision/device-core/src/firmware_io.js`, `node_modules/@esp-vision/device-core/src/firmware_release.js`, `node_modules/@esp-vision/device-core/src/node.js`, `src/serial_diagnostics.js`
+Bundled from: `node_modules/@esp-vision/device-core/src/browser_rom_compat.js`, `node_modules/@esp-vision/device-core/src/device_capture.js`, `node_modules/@esp-vision/device-core/src/firmware_io.js`, `node_modules/@esp-vision/device-core/src/firmware_partitions.js`, `node_modules/@esp-vision/device-core/src/firmware_release.js`, `node_modules/@esp-vision/device-core/src/jpeg_validate.js`, `node_modules/@esp-vision/device-core/src/node.js`, `node_modules/@esp-vision/device-core/src/node_rom.js`, `node_modules/@esp-vision/device-core/src/node_rom_probe.js`, `node_modules/@esp-vision/device-core/src/node_serial.js`, `node_modules/@esp-vision/device-core/src/node_signals.js`, `node_modules/@esp-vision/device-core/src/rom_identity.js`, `node_modules/@esp-vision/device-core/src/rom_loader.js`, `node_modules/@esp-vision/device-core/src/rom_md5.js`, `node_modules/@esp-vision/device-core/src/rom_reset.js`, `src/serial_diagnostics.js`
 
 ```text
 // SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 ```
 
-### Source notice 8
+### Source notice 9
 
-Bundled from: `node_modules/@esp-vision/device-core/src/device_files.js`, `node_modules/@esp-vision/device-core/src/device_python.js`, `node_modules/@esp-vision/device-core/src/firmware_feed.js`, `node_modules/@esp-vision/device-core/src/firmware_flash.js`, `node_modules/@esp-vision/device-core/src/firmware_io.js`, `node_modules/@esp-vision/device-core/src/firmware_release.js`, `node_modules/@esp-vision/device-core/src/index.js`, `node_modules/@esp-vision/device-core/src/network_discovery.js`, `node_modules/@esp-vision/device-core/src/network_discovery_node.js`, `node_modules/@esp-vision/device-core/src/node.js`, `node_modules/@esp-vision/device-core/src/node_inventory.js`, `node_modules/@esp-vision/device-core/src/node_rom.js`, `node_modules/@esp-vision/device-core/src/node_transport.js`, `src/cli.js`, `src/serial_diagnostics.js`
+Bundled from: `node_modules/@esp-vision/device-core/src/browser_rom_compat.js`, `node_modules/@esp-vision/device-core/src/device_capture.js`, `node_modules/@esp-vision/device-core/src/device_files.js`, `node_modules/@esp-vision/device-core/src/device_python.js`, `node_modules/@esp-vision/device-core/src/firmware_feed.js`, `node_modules/@esp-vision/device-core/src/firmware_flash.js`, `node_modules/@esp-vision/device-core/src/firmware_io.js`, `node_modules/@esp-vision/device-core/src/firmware_partitions.js`, `node_modules/@esp-vision/device-core/src/firmware_release.js`, `node_modules/@esp-vision/device-core/src/index.js`, `node_modules/@esp-vision/device-core/src/jpeg_validate.js`, `node_modules/@esp-vision/device-core/src/network_discovery.js`, `node_modules/@esp-vision/device-core/src/network_discovery_node.js`, `node_modules/@esp-vision/device-core/src/node.js`, `node_modules/@esp-vision/device-core/src/node_inventory.js`, `node_modules/@esp-vision/device-core/src/node_rom.js`, `node_modules/@esp-vision/device-core/src/node_rom_port.js`, `node_modules/@esp-vision/device-core/src/node_rom_probe.js`, `node_modules/@esp-vision/device-core/src/node_serial.js`, `node_modules/@esp-vision/device-core/src/node_signals.js`, `node_modules/@esp-vision/device-core/src/node_transport.js`, `node_modules/@esp-vision/device-core/src/rom_identity.js`, `node_modules/@esp-vision/device-core/src/rom_loader.js`, `node_modules/@esp-vision/device-core/src/rom_md5.js`, `node_modules/@esp-vision/device-core/src/rom_reset.js`, `src/cli.js`, `src/serial_diagnostics.js`
 
 ```text
 // SPDX-License-Identifier: Apache-2.0

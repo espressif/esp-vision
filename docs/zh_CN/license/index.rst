@@ -21,9 +21,13 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - 在 ESP-VISION 中的作用
      - 许可证
    * - `esptool-js 0.7.1 <https://github.com/espressif/esptool-js/tree/v0.7.1>`__
-     - ``host/device-core/package.json`` 依赖，仅 ``src/browser_rom.js`` 加载
-     - 官方浏览器 Web Serial ROM 后端；上游 ``src/targets/stub_flasher/README.md`` 标明 stub 来源为 esp-flasher-stub v1.2.2（set 2）
+     - ``host/device-core/package.json`` 依赖，由 ``src/rom_loader.js`` 延迟加载
+     - 浏览器 Web Serial 与 Node 共用的官方 ROM 后端；上游 ``src/targets/stub_flasher/README.md`` 标明 stub 来源为 esp-flasher-stub v1.2.2（set 2）
      - Apache-2.0（安装包 ``LICENSE``）；stub 二进制双许可 Apache-2.0/MIT。作为依赖安装，实例级适配不修改上游源文件。间接依赖 pako 保留其 MIT/Zlib 声明，atob-lite 保留 MIT。
+   * - @serialport/bindings-cpp 13.0.0; Koffi 2.16.3
+     - ``host/device-core/package.json`` optional dependencies; CLI/plugin native bundles
+     - 原生串口与 Linux USJ 控制线；原版 npm 预编译二进制和加载器
+     - MIT; original package licenses and Koffi Node API/cnoke notices retained in portable bundles
    * - Device Core 主机 SDK
      - ``host/device-core``
      - EV-MUX v4 主机通信、Python、资源文件、发现及图像接入

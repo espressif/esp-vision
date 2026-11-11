@@ -1,16 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict'
+import test from 'node:test'
+import * as api from '../src/node.js'
 import { readFile } from 'node:fs/promises'
-import { test } from 'node:test'
-import { nodeAdapterAssets } from '../src/node.js'
 
-test('public Node asset URLs identify the exact passive SDK adapters', async () => {
-  const assets = nodeAdapterAssets()
-  assert.ok(Object.isFrozen(assets))
-  assert.deepEqual(Object.keys(assets).sort(), ['rom', 'serial'])
-  assert.match(await readFile(assets.serial, 'utf8'), /serial/)
-  assert.match(await readFile(assets.rom, 'utf8'), /esptool/)
-  assets.serial.pathname = '/changed-by-consumer'
-  assert.ok(nodeAdapterAssets().serial.pathname.endsWith('/node_serial.py'))
+test('Node API no longer exports interpreter configuration or Python assets', async () => {
+  assert.equal('defaultPython' in api, false)
+  assert.equal('nodeAdapterAssets' in api, false)
+  for (const file of ['node_serial.py', 'node_rom.py']) await assert.rejects(readFile(new URL('../src/' + file, import.meta.url)), { code: 'ENOENT' })
 })

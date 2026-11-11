@@ -17,8 +17,9 @@ await rm(cli, { recursive: true, force: true })
 await rm(resolve(pluginRoot, 'server'), { recursive: true, force: true })
 await mkdir(cli, { recursive: true })
 await Promise.all([
-  ...['device-cli.mjs', 'node_serial.py', 'node_rom.py'].map(name =>
+  ...['device-cli.mjs'].map(name =>
     copyFile(resolve(built, name), resolve(cli, name))),
+  cp(resolve(built, 'native'), resolve(cli, 'native'), { recursive: true }),
   copyFile(resolve(cliPackage, 'DEVICE_CORE_NOTICE.md'), resolve(pluginRoot, 'DEVICE_CORE_NOTICE.md')),
   cp(resolve(cliPackage, 'licenses'), resolve(cli, 'licenses'), { recursive: true }),
 ])

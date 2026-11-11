@@ -62,14 +62,9 @@ try {
   assert.match(help, /esp-vision-device inspect/)
   assert.match(help, /esp-vision-device python/)
 
-  if (process.platform === 'win32') {
-    process.stdout.write('Isolated CLI help smoke passed; injected serial runner smoke is skipped on Windows.\n')
-  } else {
-    const fakePython = resolve(tempRoot, 'fake-python')
-    await writeFile(fakePython, '#!/usr/bin/env node\nif (!process.argv[2]?.replaceAll("\\\\", "/").endsWith("/node_serial.py")) process.exit(91)\nprocess.stdout.write("[]\\n")\n')
-    await chmod(fakePython, 0o755)
+  {
     const { stdout, stderr } = await execFile(process.execPath, [
-      cli, 'inspect', '--interface', 'serial', '--python', fakePython, '--json',
+      cli, 'inspect', '--interface', 'serial', '--json',
     ], {
       cwd: isolatedPlugin, env, timeout: 15000, maxBuffer: 2 * 1024 * 1024, windowsHide: true,
     })
@@ -78,12 +73,12 @@ try {
     assert.equal(result.schemaVersion, 1)
     assert.equal(result.ok, true)
     assert.equal(result.command, 'inspect')
-    assert.deepEqual(result.result.devices, [])
+    assert.ok(Array.isArray(result.result.devices))
     assert.equal(result.result.sourcesAvailable, 1)
     const stderrEvents = stderr.trim().split('\n').map(line => JSON.parse(line))
     assert.ok(stderrEvents.length >= 1)
     assert.ok(stderrEvents.every(event => event.schemaVersion === 1 && typeof event.event === 'string'))
-    process.stdout.write('Isolated CLI help and inspect smoke passed with the injected serial runner.\n')
+    process.stdout.write('Isolated CLI help and inspect smoke passed with the native serial backend.\n')
   }
 
   const workbuddyData = resolve(tempRoot, 'workbuddy data with spaces')
@@ -99,7 +94,7 @@ try {
   const skillRoot = 'esp-vision-development/'
   assert.ok(skillFiles.has(`${skillRoot}SKILL.md`))
   assert.ok(skillFiles.has(`${skillRoot}scripts/cli/device-cli.mjs`))
-  assert.ok(skillFiles.has(`${skillRoot}scripts/cli/node_serial.py`))
+  assert.ok(skillFiles.has(`${skillRoot}scripts/cli/native/bindings.cjs`))
   assert.ok(skillFiles.has(`${skillRoot}assets/esp-vision-logo.png`))
   assert.ok(skillFiles.has(`${skillRoot}assets/PROVENANCE.md`))
   assert.ok(skillFiles.has(`${skillRoot}references/application-workflow.md`))
@@ -116,17 +111,16 @@ try {
     cwd: tempRoot, env, timeout: 15000, maxBuffer: 2 * 1024 * 1024, windowsHide: true,
   })
   assert.match(extractedHelp, /esp-vision-device inspect/)
-  if (process.platform !== 'win32') {
-    const fakePython = resolve(tempRoot, 'fake-python')
+  {
     const { stdout: extractedInspect } = await execFile(process.execPath, [
-      extractedCli, 'inspect', '--interface', 'serial', '--python', fakePython, '--json',
+      extractedCli, 'inspect', '--interface', 'serial', '--json',
     ], {
       cwd: tempRoot, env, timeout: 15000, maxBuffer: 2 * 1024 * 1024, windowsHide: true,
     })
     const result = JSON.parse(extractedInspect)
     assert.equal(result.ok, true)
     assert.equal(result.command, 'inspect')
-    assert.deepEqual(result.result.devices, [])
+    assert.ok(Array.isArray(result.result.devices))
   }
   process.stdout.write('WorkBuddy export and extracted Skill CLI smoke passed; UI activation remains manual.\n')
 } finally {

@@ -62,7 +62,7 @@ Unified Core hardware checks
 
 Protocol and application hardware tests use the single ``npm run test:hardware`` entry point in ``host/device-core``, calling the public ``createDevice()`` API. Camera, file and LCD checks share Core rather than maintaining independent host protocol clients or an Agent smoke entry point. The serial adapter only carries bytes, while TCP uses Node sockets; no Agent installation is needed.
 
-Use Node.js 22. Serial mode needs Python with ``pyserial``; ``--python`` selects its interpreter. Keep all outputs inside the project directory. Run these commands from the repository root:
+Use Node.js 22. Serial mode uses npm native bindings; no host Python is required. Keep all outputs inside the project directory. Run these commands from the repository root:
 
 .. code-block:: console
 

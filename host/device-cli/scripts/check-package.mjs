@@ -14,7 +14,6 @@ if (args.length !== 2 || args[0] !== '--tarball') throw new Error('Usage: node s
 const tarball = resolve(args[1])
 const workspace = await mkdtemp(join(artifactRoot, 'device-cli-package-check-'))
 const install = join(workspace, 'installed')
-const python = join(workspace, 'python-list')
 await mkdir(install, { recursive: true })
 
 function run(command, commandArgs, cwd) {
@@ -37,8 +36,6 @@ function run(command, commandArgs, cwd) {
 
 const tarballHeader = await readFile(tarball)
 assert.equal(tarballHeader.subarray(0, 2).toString('hex'), '1f8b', 'Expected an npm gzip tarball')
-await writeFile(python, '#!/bin/sh\ncase "$1" in */node_serial.py) test -f "$1" ;; *) exit 91 ;; esac\nprintf "[]\\n"\n')
-await chmod(python, 0o755)
 run('npm', ['install', '--prefix', install, '--no-save', '--no-package-lock', '--ignore-scripts', '--no-audit', '--no-fund', tarball], root)
 const bin = join(install, 'node_modules/.bin/esp-vision-device')
 const helpOutput = run(bin, ['--help', '--json'], install)
@@ -50,13 +47,13 @@ assert.equal(helpEnvelope.command, 'help')
 assert.ok(helpEnvelope.result.capabilities.commands.python.includes('--source CODE'))
 assert.ok(helpEnvelope.result.capabilities.commands.watch)
 assert.equal(helpEnvelope.result.capabilities.output.events, 'NDJSON on stderr')
-const output = run(bin, ['inspect', '--interface', 'serial', '--python', python, '--json'], install)
+const output = run(bin, ['inspect', '--interface', 'serial', '--json'], install)
 const envelope = JSON.parse(output)
 assert.deepEqual(Object.keys(envelope), ['schemaVersion', 'ok', 'command', 'result'])
 assert.equal(envelope.schemaVersion, 1)
 assert.equal(envelope.ok, true)
 assert.equal(envelope.command, 'inspect')
-assert.deepEqual(envelope.result.devices, [])
+assert.ok(Array.isArray(envelope.result.devices))
 assert.equal(envelope.result.sourcesAvailable, 1)
 // Exercise the installed ESM bundle's real CJS mDNS dependencies and UDP
 // lifecycle. An empty LAN is valid; a dependency-loading failure is not.
@@ -82,8 +79,12 @@ for (const [command, args] of [
 }
 const packageFiles = run('tar', ['-tzf', tarball], root).split(/\r?\n/)
 for (const required of [
-  'package/dist/device-cli.mjs', 'package/dist/node_serial.py', 'package/dist/node_rom.py',
+  'package/dist/device-cli.mjs', 'package/dist/native/bindings.cjs', 'package/dist/native/package.json',
+  'package/dist/native/koffi/index.js', 'package/dist/native/koffi/build/koffi/linux_x64/koffi.node',
+  'package/dist/native/koffi/vendor/node-api-headers/LICENSE',
   'package/LICENSE', 'package/DEVICE_CORE_NOTICE.md', 'package/THIRD_PARTY_NOTICES.md',
   'package/licenses/smol-toml-LICENSE',
 ]) assert.ok(packageFiles.includes(required), `Tarball is missing ${required}`)
+assert.ok(!packageFiles.some(path => /node_(rom|serial)\.py$/.test(path)))
+for (const platform of ['linux-x64', 'darwin-x64+arm64', 'win32-x64', 'win32-arm64']) assert.ok(packageFiles.some(path => path.includes(`/native/prebuilds/${platform}/`) && path.endsWith('.node')))
 console.log(`Installed tarball passed: ${tarball}`)
