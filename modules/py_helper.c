@@ -48,11 +48,14 @@ image_t *py_helper_arg_to_image(const mp_obj_t arg, uint32_t flags) {
     if ((flags & ARG_IMAGE_ALLOC) && MP_OBJ_IS_STR(arg)) {
         #if defined(IMLIB_ENABLE_IMAGE_FILE_IO)
         const char *path = mp_obj_str_get_str(arg);
-        file_t fp;
+        file_t fp = {0};
         image = m_malloc(sizeof(image_t));
         img_read_settings_t rs;
+        file_guard_t guard;
+        file_guard_begin(&guard, &fp);
         imlib_read_geometry(&fp, image, path, &rs);
         file_close(&fp);
+        nlr_pop_jump_callback(false);
         image_alloc(image, image_size(image));
         imlib_load_image(image, path);
         #else

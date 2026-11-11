@@ -1359,7 +1359,9 @@ void jpeg_read_pixels(file_t *fp, image_t *img) {
 }
 
 void jpeg_read(image_t *img, const char *path) {
-    file_t fp;
+    file_t fp = {0};
+    file_guard_t guard;
+    file_guard_begin(&guard, &fp);
     jpg_read_settings_t rs;
 
     // Do not use file buffering here.
@@ -1372,10 +1374,13 @@ void jpeg_read(image_t *img, const char *path) {
 
     jpeg_read_pixels(&fp, img);
     file_close(&fp);
+    nlr_pop_jump_callback(false);
 }
 
 void jpeg_write(image_t *img, const char *path, int quality) {
-    file_t fp;
+    file_t fp = {0};
+    file_guard_t guard;
+    file_guard_begin(&guard, &fp);
     file_open(&fp, path, false, FA_WRITE | FA_CREATE_ALWAYS);
     if (IM_IS_JPEG(img)) {
         file_write(&fp, img->pixels, img->size);
@@ -1390,5 +1395,6 @@ void jpeg_write(image_t *img, const char *path, int quality) {
         fb_free(); // frees alloc in jpeg_compress()
     }
     file_close(&fp);
+    nlr_pop_jump_callback(false);
 }
 #endif //IMLIB_ENABLE_IMAGE_FILE_IO)

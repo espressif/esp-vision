@@ -52,6 +52,8 @@ void *fb_alloc0(uint32_t size, int hints);
 void *fb_alloc_all(uint32_t *size, int hints);
 void *fb_alloc0_all(uint32_t *size, int hints);
 void fb_free(void);
+// Release an owned file buffer without disturbing newer allocations or marks.
+void fb_free_buffer(void *ptr);
 void fb_free_all(void);
 
 #endif /* ESP_VISION_IMLIB_FB_ALLOC_H */

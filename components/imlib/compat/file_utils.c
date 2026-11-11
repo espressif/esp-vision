@@ -39,47 +39,76 @@
 #define FF_MIN(x, y)    (((x) < (y))?(x):(y))
 
 // File buffering support
+static file_t *file_buffer_owner = NULL;
 static uint32_t file_buffer_offset = 0;
 static uint8_t *file_buffer_pointer = 0;
 static uint32_t file_buffer_size = 0;
 static uint32_t file_buffer_index = 0;
 
-static inline void file_cleanup(file_t *fp) {
-    if (fp && fp->fp != MP_OBJ_NULL) {
+static void file_buffer_discard(file_t *fp) {
+    if (file_buffer_owner == fp && file_buffer_pointer != NULL) {
+        uint8_t *allocation = file_buffer_pointer - file_buffer_offset;
+        // Unregister before freeing: exception cleanup must never flush this data.
         file_buffer_init0();
-        mp_stream_close(fp->fp);
-        fp->fp = MP_OBJ_NULL;
+        fb_free_buffer(allocation);
     }
+}
+
+void file_abort(file_t *fp) {
+    if (fp == NULL) {
+        return;
+    }
+    file_buffer_discard(fp);
+    mp_obj_t stream = fp->fp;
+    fp->fp = MP_OBJ_NULL;
+    if (stream != MP_OBJ_NULL) {
+        // Closing a VFS stream may itself raise. Preserve the original error and
+        // make repeated cleanup harmless, including nested file guards.
+        nlr_buf_t nlr;
+        if (nlr_push(&nlr) == 0) {
+            mp_stream_close(stream);
+            nlr_pop();
+        }
+    }
+}
+
+static void file_guard_cleanup(void *ctx) {
+    file_abort(((file_guard_t *) ctx)->fp);
+}
+
+void file_guard_begin(file_guard_t *guard, file_t *fp) {
+    guard->fp = fp;
+    nlr_push_jump_callback(&guard->callback, file_guard_cleanup);
 }
 
 // Error/exception functions
 NORETURN static void file_read_fail(file_t *fp) {
-    file_cleanup(fp);
+    file_abort(fp);
     mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Failed to read requested bytes!"));
 }
 
 NORETURN static void file_write_fail(file_t *fp) {
-    file_cleanup(fp);
+    file_abort(fp);
     mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Failed to write requested bytes!"));
 }
 
 NORETURN static void file_expect_fail(file_t *fp) {
-    file_cleanup(fp);
+    file_abort(fp);
     mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Unexpected value read!"));
 }
 
 NORETURN void file_raise_format(file_t *fp) {
-    file_cleanup(fp);
+    file_abort(fp);
     mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("Unsupported format!"));
 }
 
 NORETURN void file_raise_corrupted(file_t *fp) {
-    file_cleanup(fp);
+    file_abort(fp);
     mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("File corrupted!"));
 }
 
 NORETURN void file_raise_error(file_t *fp, mp_rom_error_text_t msg) {
-    file_cleanup(fp);
+    file_abort(fp);
     mp_raise_msg(&mp_type_OSError, msg);
 }
 
@@ -120,6 +149,7 @@ static size_t file_write_helper(file_t *fp, const void *buf, size_t len) {
 }
 
 void file_buffer_init0() {
+    file_buffer_owner = NULL;
     file_buffer_offset = 0;
     file_buffer_pointer = 0;
     file_buffer_size = 0;
@@ -131,13 +161,23 @@ void file_buffer_on(file_t *fp) {
         return;
     }
 
+    if (file_buffer_owner != NULL) {
+        mp_raise_msg(&mp_type_OSError, MP_ERROR_TEXT("File buffer is already in use"));
+    }
+    file_guard_t guard;
+    file_guard_begin(&guard, fp);
     off_t current_pos = file_seek_helper(fp, 0, SEEK_CUR);
-    file_buffer_offset = current_pos % 4;
-    file_buffer_pointer = (uint8_t *) fb_alloc_all(&file_buffer_size, FB_ALLOC_PREFER_SIZE) + file_buffer_offset;
-    if (!file_buffer_size) {
+    uint32_t offset = current_pos % 4;
+    uint32_t size = 0;
+    uint8_t *allocation = fb_alloc_all(&size, FB_ALLOC_PREFER_SIZE);
+    if (allocation == NULL || size <= offset) {
+        fb_free_buffer(allocation);
         mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("No memory!"));
     }
-    file_buffer_size -= file_buffer_offset;
+    file_buffer_owner = fp;
+    file_buffer_offset = offset;
+    file_buffer_pointer = allocation + offset;
+    file_buffer_size = size - offset;
     file_buffer_index = 0;
 
     if (fp->flags & FA_READ) {
@@ -152,20 +192,23 @@ void file_buffer_on(file_t *fp) {
             file_read_fail(fp);
         }
     }
+    nlr_pop_jump_callback(false);
 }
 
 void file_buffer_off(file_t *fp) {
-    // Attempt flush after clearing globals
-    if (file_buffer_index && fp && fp->fp && (fp->flags & FA_WRITE)) {
+    if (fp == NULL || file_buffer_owner != fp) {
+        return;
+    }
+    file_guard_t guard;
+    file_guard_begin(&guard, fp);
+    if (file_buffer_index && fp->fp != MP_OBJ_NULL && (fp->flags & FA_WRITE)) {
         size_t bytes = file_write_helper(fp, file_buffer_pointer, file_buffer_index);
         if (bytes != file_buffer_index) {
-            fb_free();
             file_write_fail(fp);
         }
     }
-
-    fb_free();
-    file_buffer_init0();
+    file_buffer_discard(fp);
+    nlr_pop_jump_callback(false);
 }
 
 OMV_ATTR_ALWAYS_INLINE static void file_fill(file_t *fp) {
@@ -206,6 +249,8 @@ void file_open(file_t *fp, const char *path, bool buffered, uint32_t flags) {
     // Initialize fp to safe state in case open fails
     fp->fp = MP_OBJ_NULL;
     fp->flags = 0;
+    file_guard_t guard;
+    file_guard_begin(&guard, fp);
 
     // Reject unsupported FA_READ | FA_WRITE without creation/append flags
     // This combination would silently truncate the file (mode "wb")
@@ -243,13 +288,15 @@ void file_open(file_t *fp, const char *path, bool buffered, uint32_t flags) {
     if (buffered) {
         file_buffer_on(fp);
     }
+    nlr_pop_jump_callback(false);
 }
 
 void file_close(file_t *fp) {
     if (fp && fp->fp != MP_OBJ_NULL) {
-        if (file_buffer_pointer) {
-            file_buffer_off(fp);
-        }
+        // file_buffer_off protects its flush and releases only this file's
+        // buffer. Preserve the stream if close fails, so persistent ImageIO
+        // files can retry; temporary files have an enclosing file guard.
+        file_buffer_off(fp);
         mp_stream_close(fp->fp);
         fp->fp = MP_OBJ_NULL;
     }
@@ -289,7 +336,7 @@ void file_sync(file_t *fp) {
 }
 
 size_t file_tell(file_t *fp) {
-    if (file_buffer_pointer) {
+    if (file_buffer_owner == fp && file_buffer_pointer) {
         off_t stream_pos = file_seek_helper(fp, 0, SEEK_CUR);
         if (fp->flags & FA_READ) {
             return stream_pos - file_buffer_size + file_buffer_index;
@@ -301,7 +348,7 @@ size_t file_tell(file_t *fp) {
 }
 
 size_t file_size(file_t *fp) {
-    if (file_buffer_pointer) {
+    if (file_buffer_owner == fp && file_buffer_pointer) {
         off_t current_pos = file_seek_helper(fp, 0, SEEK_CUR);
         off_t file_end = file_seek_helper(fp, 0, SEEK_END);
         file_seek_helper(fp, current_pos, SEEK_SET);
@@ -319,7 +366,7 @@ size_t file_size(file_t *fp) {
 }
 
 bool file_eof(file_t *fp) {
-    if (file_buffer_pointer && (fp->flags & FA_READ)) {
+    if (file_buffer_owner == fp && file_buffer_pointer && (fp->flags & FA_READ)) {
         return file_buffer_index >= file_buffer_size;
     }
     off_t current_pos = file_seek_helper(fp, 0, SEEK_CUR);
@@ -336,7 +383,7 @@ void file_read(file_t *fp, void *data, size_t size) {
     if (data == NULL) {
         // Skip bytes
         uint8_t byte;
-        if (file_buffer_pointer) {
+        if (file_buffer_owner == fp && file_buffer_pointer) {
             for (size_t i = 0; i < size; i++) {
                 file_fill(fp);
                 byte = file_buffer_pointer[file_buffer_index++];
@@ -352,7 +399,7 @@ void file_read(file_t *fp, void *data, size_t size) {
         return;
     }
 
-    if (file_buffer_pointer) {
+    if (file_buffer_owner == fp && file_buffer_pointer) {
         if (size <= 4) {
             for (size_t i = 0; i < size; i++) {
                 file_fill(fp);
@@ -382,7 +429,7 @@ void file_write(file_t *fp, const void *data, size_t size) {
         return;
     }
 
-    if (file_buffer_pointer) {
+    if (file_buffer_owner == fp && file_buffer_pointer) {
         // Buffer writes for performance
         while (size) {
             uint32_t file_buffer_space_left = file_buffer_size - file_buffer_index;

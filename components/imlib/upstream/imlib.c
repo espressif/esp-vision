@@ -658,6 +658,9 @@ static save_image_format_t imblib_parse_extension(image_t *img, const char *path
 }
 
 bool imlib_read_geometry(file_t *fp, image_t *img, const char *path, img_read_settings_t *rs) {
+    fp->fp = MP_OBJ_NULL;
+    file_guard_t guard;
+    file_guard_begin(&guard, fp);
     uint8_t magic[4];
     file_open(fp, path, false, FA_READ | FA_OPEN_EXISTING);
     file_read(fp, &magic, 4);
@@ -692,17 +695,22 @@ bool imlib_read_geometry(file_t *fp, image_t *img, const char *path, img_read_se
         file_raise_format(NULL);
     }
     imblib_parse_extension(img, path); // Enforce extension!
+    // The caller owns the open file after geometry succeeds.
+    nlr_pop_jump_callback(false);
     return vflipped;
 }
 #endif  //IMLIB_ENABLE_IMAGE_FILE_IO
 
 #if defined(IMLIB_ENABLE_IMAGE_FILE_IO)
 void imlib_load_image(image_t *img, const char *path) {
-    file_t fp;
+    file_t fp = {0};
+    file_guard_t guard;
+    file_guard_begin(&guard, &fp);
     uint8_t magic[4];
     file_open(&fp, path, false, FA_READ | FA_OPEN_EXISTING);
     file_read(&fp, &magic, 4);
     file_close(&fp);
+    nlr_pop_jump_callback(false);
 
     if ((magic[0] == 'P')
         && ((magic[1] == '2') || (magic[1] == '3')
@@ -733,10 +741,13 @@ void imlib_save_image(image_t *img, const char *path, rectangle_t *roi, int qual
             ppm_write_subimg(img, path, roi);
             break;
         case FORMAT_RAW: {
-            file_t fp;
+            file_t fp = {0};
+            file_guard_t guard;
+            file_guard_begin(&guard, &fp);
             file_open(&fp, path, false, FA_WRITE | FA_CREATE_ALWAYS);
             file_write(&fp, img->pixels, img->w * img->h);
             file_close(&fp);
+            nlr_pop_jump_callback(false);
             break;
         }
         case FORMAT_JPG:
@@ -756,11 +767,14 @@ void imlib_save_image(image_t *img, const char *path, rectangle_t *roi, int qual
                 png_write(img, new_path);
                 fb_free();
             } else if (IM_IS_BAYER(img)) {
-                file_t fp;
+                file_t fp = {0};
+                file_guard_t guard;
+                file_guard_begin(&guard, &fp);
                 char *new_path = strcat(strcpy(fb_alloc(strlen(path) + 5, FB_ALLOC_NO_HINT), path), ".raw");
                 file_open(&fp, new_path, false, FA_WRITE | FA_CREATE_ALWAYS);
                 file_write(&fp, img->pixels, img->w * img->h);
                 file_close(&fp);
+                nlr_pop_jump_callback(false);
                 fb_free();
             } else {
                 // RGB or GS, save as BMP.
