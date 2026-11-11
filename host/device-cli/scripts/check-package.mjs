@@ -58,6 +58,14 @@ assert.equal(envelope.ok, true)
 assert.equal(envelope.command, 'inspect')
 assert.deepEqual(envelope.result.devices, [])
 assert.equal(envelope.result.sourcesAvailable, 1)
+// Exercise the installed ESM bundle's real CJS mDNS dependencies and UDP
+// lifecycle. An empty LAN is valid; a dependency-loading failure is not.
+const network = JSON.parse(run(bin, ['inspect', '--interface', 'tcp', '--timeout', '250', '--json'], install))
+assert.equal(network.ok, true)
+assert.equal(network.command, 'inspect')
+assert.equal(network.result.sourcesAvailable, 1)
+assert.deepEqual(network.result.warnings, [])
+assert.ok(Array.isArray(network.result.devices))
 for (const [command, args] of [
   ['python', ['python', '--path', '/app.py', '--completion', 'start', '--timeout', '100']],
   ['control', ['control', '--action', 'stop', '--mode', 'soft']],

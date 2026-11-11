@@ -29,6 +29,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Restore LAN auto-discovery in the packaged CLI and plugin by providing Node's CommonJS loader in the ESM bundle; retain discovery failure diagnostics and check real mDNS initialization from the installed CLI tarball.
+
 - Use a Mermaid extension version compatible with the Python version in the documentation CI image.
 
 - Isolate the GitHub PR sync metadata test from action-only dependencies so host CI can run it without installing GitLab or GitPython packages.
