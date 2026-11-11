@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Add a bilingual AI development guide at `how-to/esp-vision-plugin` with goal-focused prompts, assistant setup and marketplace installation, first-use firmware download and flashing, Python vision applications, Wi-Fi development, USB camera output and conversational iteration. Include a bilingual first-time Wi-Fi setup walkthrough covering website, AI-assisted and CLI provisioning over USB, connection verification, LAN access and troubleshooting.
+
 - Add SC101IOT DVP camera support on ESP32_S31_MOSAICO alongside OV3640.
 
 - Add ESP32_P4X_VISION hardware CI.
