@@ -32,6 +32,10 @@ ESP-VISION 自有代码（``platform/``、大部分 ``modules/``、``boards/`` �
      - ``host/device-core/tests/fixtures/device-checks.py``
      - 从固件测试迁入的真机验收函数，不包含在 npm 包中
      - Apache-2.0，保留原版权声明
+   * - `sync-pr-to-gitlab <https://github.com/espressif/sync-pr-to-gitlab>`__ (6ea5db6)
+     - ``.github/actions/sync-pr-to-gitlab``
+     - GitHub PR 到 GitLab MR 的同步，移除 Jira 专用元数据；保留上游 Python 版权和许可证声明
+     - Apache-2.0
    * - `MicroPython <https://github.com/micropython/micropython>`__ v1.28.0
      - ``lib/micropython``
      - Python 运行时与 ESP32 port 基线

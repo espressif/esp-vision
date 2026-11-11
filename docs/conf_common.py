@@ -17,6 +17,7 @@ from esp_docs.conf_docs import *  # noqa: F403, F401
 # Keep a reference to ESP-Docs' own ``setup`` so our hook can chain to it
 # instead of shadowing it (the wildcard import above brings it into scope).
 _esp_docs_setup = globals().get('setup')
+extensions = list(extensions) + ['sphinxcontrib.mermaid']
 
 # Make the documentation generators importable.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

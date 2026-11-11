@@ -45,7 +45,7 @@ v4 still uses `EVMUX/1` framing. Hosts must implement explicit acquisition and k
   <img src="docs/_static/esp-vision-architecture-adaptive.svg" alt="ESP-VISION layered architecture" width="960" height="1048">
 </picture>
 
-IDE and custom SDK applications use Device Core directly. AI clients and independent agents use the plugin Skill, invoke its bundled Device CLI for local device operations, and query the official online Knowledge MCP over HTTPS. Device CLI uses Device Core; EV-MUX connects the SDK to device firmware. See [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html) for the role of each layer.
+IDE and custom SDK applications use Device Core directly. AI clients and independent agents use the plugin Skill, invoke its bundled Device CLI for local device operations, and query the official online Knowledge MCP over HTTPS. Device CLI uses Device Core; EV-MUX connects the SDK to device firmware. See [License inventory](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/license/index.html) for the role of each layer.
 
 For AI clients, the [local plugin](host/esp-vision-plugin/README.md) bundles a fixed [Device CLI](host/device-cli/README.md) and connects to the official online Knowledge MCP. The main repository owns knowledge/server artifacts; website deploys verified immutable images. See [MCP architecture and release flow](docs/mcp-release.md). Install a published version with `npx -y @esp-vision/plugin install codex` or `npx -y @esp-vision/plugin install claude`. For WorkBuddy, `npx -y @esp-vision/plugin install workbuddy` prepares a local Skill ZIP and official Knowledge MCP configuration; complete the documented imports in the WorkBuddy UI.
 
@@ -136,10 +136,4 @@ The EV-MUX TCP interface provides wireless debugging on trusted local networks a
 - [Web IDE](https://ide.vision.espressif.com/)
 - [Examples](example/)
 - [Customize firmware features](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/how-to/customize-firmware.html)
-- [Solution architecture and licensing](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/architecture/index.html)
-
-The OV2710 timer lifecycle adaptation (`platform/ov2710_lifecycle.inc`, `tools/prepare_ov2710.py`) prepares a checked copy of the Apache-2.0 `ov2710.c` from esp_cam_sensor 2.4.0 (commit `8fc931636ffa937c89cab53b53f4ce380190c1a4`, source SHA-256 `4a9af395151527b156b1d685c39b298502490f33a8391a641a51ac72b3bc8876`). Its verbatim test fixture (`tools/tests/fixtures/ov2710/upstream.c`) and generated copy retain the original header; the managed component remains unchanged. See the [license inventory](docs/en/license/index.rst).
-
-The native CDC/MSC/UVC descriptor overlay (`overlay/micropython/shared/tinyusb/mp_usbd_descriptor.c`) derives from MicroPython v1.28.0 and retains its MIT license and notices.
-
-The TinyUSB UVC transfer adaptation (`overlay/micropython/shared/tinyusb/esp_vision_video_transfer.inc`) and its verbatim test fixture (`tools/tests/tinyusb_video_stubs/upstream_transfer.c`) derive from the MIT-licensed `video_device.c` in espressif/tinyusb 0.19.0~3 (commit `ab4a1817907ed865b10a712b5e03e5e0a9902df5`). They retain its original copyright and license header. The build prepares a checked source copy without modifying the managed component; the [license inventory](docs/en/license/index.rst) records this adaptation.
+- [License inventory](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/license/index.html)

@@ -14,17 +14,22 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Consolidate third-party license and source details in the bilingual license inventory instead of repeating them at the end of the README files.
+
 - Update the WorkBuddy Expert package introduction with bilingual project, hardware, adaptation and usage information.
 
 - Give the QoderWork plugin the distinct package name `esp-vision-plugin` to avoid the occupied `esp-vision` name, and replace its public-facing README with project, hardware, adaptation and usage information.
 
 - Update the ESP-IDF 5.5, 6.0 and 6.1 component manifests to esp_video 2.5.0 and esp_h264 1.4.*.
-
 - Prepare Device Core 0.7.1 as an independent npm patch release for faster complete installation and ROM-to-runtime firmware detection; retain the existing firmware and plugin release lifecycle.
 
 - Speed up complete firmware installation by trusting checked, partition-bounded FFAT erase commands without erased-range reads, and reuse official esptool whole-write MD5 verification receipts in Node/browser adapters instead of transferring firmware back to the host. Keep SHA-256 qualification before writing and full readback for custom adapters without receipts.
 
 ### Fixed
+
+- Use a Mermaid extension version compatible with the Python version in the documentation CI image.
+
+- Isolate the GitHub PR sync metadata test from action-only dependencies so host CI can run it without installing GitLab or GitPython packages.
 
 - Enforce the shared-repository content boundary with agent guidance, ignore rules and index checks in pre-commit, GitLab CI and GitHub CI; replace developer-specific paths and shell setup in maintained documentation with configurable workspace instructions.
 
@@ -47,6 +52,7 @@ This release adds S31 USB-OTG automatic ROM entry, verified complete installatio
 
 ### Added
 
+- Added a maintainer-triggered GitHub PR to GitLab MR synchronization workflow adapted from Espressif's sync action, with bilingual contribution and review guides.
 - Exercise P4/S31 production download control handling with the Core serial opening policy and the complete official USB-JTAG sequence, including repeated/coalesced requests and the final 50 ms deferral; separately model why a Linux opening with cached DTR/RTS both disabled can request a normal reset, without changing firmware policy or claiming measured kernel signals.
 
 - Use the S31 ROM digital-system reset for software download entry after later-registered shutdown cleanup, allowing ROM to reinitialize retained USB-OTG state; register the restart hook before USB/machine/network startup independently of the CDC timer, fail explicitly on registration errors, and retain normal S31/P4/S3 reset behavior.

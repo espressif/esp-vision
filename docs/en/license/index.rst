@@ -32,6 +32,10 @@ The following table lists the direct dependencies most relevant to redistributio
      - ``host/device-core/tests/fixtures/device-checks.py``
      - Hardware acceptance functions migrated from the firmware tests; included in the npm package for shared hardware checks
      - Apache-2.0 (original notice retained)
+   * - `sync-pr-to-gitlab <https://github.com/espressif/sync-pr-to-gitlab>`__ (6ea5db6)
+     - ``.github/actions/sync-pr-to-gitlab``
+     - GitHub PR to GitLab MR synchronization, adapted to remove Jira-specific metadata; original Python copyright and license notice retained
+     - Apache-2.0
    * - `MicroPython <https://github.com/micropython/micropython>`__ v1.28.0
      - ``lib/micropython``
      - Python runtime and ESP32 port baseline

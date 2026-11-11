@@ -15,6 +15,7 @@ PROTECTED_RST_DIRECTIVES = {
     'code-block',
     'csv-table',
     'literalinclude',
+    'mermaid',
     'raw',
     'seqdiag',
     'toctree',
