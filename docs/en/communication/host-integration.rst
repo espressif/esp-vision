@@ -3,6 +3,82 @@ Host integration, Wi-Fi configuration and recovery
 
 :link_to_translation:`zh_CN:[中文]`
 
+First-time Wi-Fi setup and wireless connection
+--------------------------------------------------------------------------------
+
+Connect a Wi-Fi-capable board running compatible ESP-VISION firmware to your computer with a USB data cable. The computer and board need a mutually reachable LAN. See :doc:`network-discovery` for board support and :doc:`../how-to/esp-vision-plugin` for first-time firmware installation.
+
+Set up Wi-Fi on the website
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You can also configure Wi-Fi directly on the `ESP-VISION website <https://vision.espressif.com/>`_ without installing local host tools.
+
+1. Connect the board over USB and leave ESP-VISION firmware running normally. Open the website in a desktop browser supporting Web Serial, such as Chrome or Edge, and find the browser flashing panel.
+2. Under “Flash Mode”, choose “Configure Wi-Fi Only”, click “Connect Serial”, and select the board's running serial port in the browser dialog.
+3. Under “Device Wi-Fi setup”, enter the Wi-Fi SSID and password, then click “Save”.
+4. Wait for “Wi-Fi Connected” and the TCP address. The configuration is saved on the board for automatic reconnection after power-on. To check again, click “Read Status Again”.
+5. Click “Disconnect” to release the website's device connection, then connect your AI assistant or another host tool to the board over the LAN.
+
+“Configure Wi-Fi Only” updates network settings without reinstalling firmware. Use it directly when compatible firmware is already installed; after first-time firmware installation, you can also complete setup on the website's follow-up Wi-Fi page.
+
+Set up Wi-Fi with an AI assistant
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+After installing the ESP-VISION plugin, describe what you want:
+
+.. note::
+
+   Connect my board to Wi-Fi so I can update its program and view the camera over a wireless connection.
+
+1. Keep USB connected, give the assistant the Wi-Fi name, and follow the password-entry prompt.
+2. Wait for the assistant to confirm setup and report the board's LAN address. Initial setup needs time to obtain an IP address and save the configuration.
+3. Continue with an application request over the wireless connection, such as “Track red objects with the camera and show me the result on my computer.”
+4. Once the wireless connection works, you can use a separate power supply suitable for the board. On subsequent boots, the board reconnects using its saved configuration.
+
+Set up Wi-Fi with the CLI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For manual setup, install Device CLI and its serial dependencies as described in :doc:`../device-core/cli`. In the commands below, replace the example values ``COM3``, ``MyWiFi`` and ``192.168.1.100`` with the discovered serial port, your network name and the IP address reported by the board.
+
+1. Find the board connected over USB:
+
+   .. code-block:: console
+
+      esp-vision-device inspect --interface serial
+
+2. Configure Wi-Fi and enable the network service; enter the password at the terminal prompt, which hides your input:
+
+   .. code-block:: console
+
+      esp-vision-device configure --port COM3 --ssid "MyWiFi" --network-enabled true --timeout 60000
+
+   The command waits for the network configuration transaction to finish, with the wait budget set to 60 seconds here. It returns ``ok: true`` on success; setup succeeds only after obtaining an IP address and saving the configuration. For non-interactive input, see ``--password-stdin`` in the CLI reference.
+
+3. Check the board's network status and address over USB:
+
+   .. code-block:: console
+
+      esp-vision-device inspect --port COM3 --fields identity,network
+
+   Check that ``network`` reports ``enabled`` and ``configured`` as ``true`` and ``state`` as ``online``, then note ``ipv4``. If a command times out or fails, inspect this status and errors in ``operation`` / ``lastOperation`` before deciding whether to configure again.
+
+4. Discover LAN devices and verify wireless access using the reported IP address:
+
+   .. code-block:: console
+
+      esp-vision-device inspect --interface tcp
+      esp-vision-device inspect --tcp 192.168.1.100:3232 --fields identity,network
+
+   Compare identity with the USB result to confirm it is the same board. Once connected, CLI file management, Python script execution and image capture can use ``--tcp``; see :doc:`preview-debug` for continuous image preview. Keep the board powered during wireless development; firmware flashing still uses USB serial.
+
+If setup fails or the board is not discovered
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Incorrect password or network not found: check the Wi-Fi name, password, signal and the board's supported frequency bands, then configure again over USB.
+* Connected but unable to obtain an IP address: check the router's DHCP service and inspect network status over USB.
+* The board has an IP address but is missing from discovery: try connecting directly to that IP; check LAN reachability, guest-network isolation, firewall rules and mDNS filtering.
+* Address changes or connection drops: discover the board again; if it remains unreachable, keep USB power and connectivity and use the network status command above to investigate.
+
 Recommended host stack
 ----------------------
 

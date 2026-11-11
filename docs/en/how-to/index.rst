@@ -8,6 +8,7 @@ Task-oriented guides for extending ESP-VISION.
 .. toctree::
    :maxdepth: 1
 
+   esp-vision-plugin
    add-python-module
    contribute
    customize-firmware

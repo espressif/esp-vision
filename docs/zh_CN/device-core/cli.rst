@@ -5,6 +5,8 @@
 
 独立 npm 包 ``@esp-vision/device-cli`` 安装 ``esp-vision-device`` 命令。CLI 使用公开的 ``@esp-vision/device-core`` API，支持设备发现与管理、Python 执行、设备文件、图像采集、批处理计划和限时事件监视。需要 Node.js 22 或更高版本。
 
+插件安装以及 AI 查找、烧录、开发和验证的 prompt 示例，参见 :doc:`../how-to/esp-vision-plugin`。
+
 安装与宿主机要求
 ----------------------------------------
 
@@ -38,6 +40,8 @@ Runtime 中的 ``scriptRunning`` 和 ``run`` 表示当前 SDK 会话跟踪的工
 
 网络配置、控制与固件
 ----------------------------------------
+
+首次配网、确认联网和切换无线连接的完整步骤见 :doc:`../communication/host-integration`。
 
 .. code-block:: console
 

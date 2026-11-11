@@ -5,6 +5,8 @@ Device management CLI
 
 The standalone ``@esp-vision/device-cli`` npm package installs ``esp-vision-device``. The CLI uses the public ``@esp-vision/device-core`` API and supports discovery, device management, Python execution, device files, capture, batch plans, and bounded event watches. Requires Node.js 22 or newer.
 
+For plugin installation and AI-assisted discovery, flashing, development and verification prompts, see :doc:`../how-to/esp-vision-plugin`.
+
 Installation and host requirements
 ----------------------------------------
 
@@ -38,6 +40,8 @@ Runtime fields ``scriptRunning`` and ``run`` reflect work tracked by the current
 
 Configuration, control, and firmware
 ----------------------------------------
+
+For first-time Wi-Fi setup, connection checks and switching to wireless access, see :doc:`../communication/host-integration`.
 
 .. code-block:: console
 

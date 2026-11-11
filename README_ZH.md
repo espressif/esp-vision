@@ -49,7 +49,7 @@ IDE 和自定义 SDK 应用直接使用 Device Core。AI 客户端与独立 Agen
 
 [许可证清单](docs/zh_CN/license/index.rst)记录了上游组件与适配文件，包括用于 EV-MUX 会话隔离、保留 MIT 许可证的 MicroPython 执行与线程 overlay。
 
-面向 AI 客户端，[本地插件](host/esp-vision-plugin/README.md)内置固定版本的 [Device CLI](host/device-cli/README.md)，并连接官方在线 Knowledge MCP。主仓生成知识与服务产物，website 部署经过验证的不可变镜像。参见 [MCP 架构及发布流程](docs/mcp-release.md)。通过 `npx -y @esp-vision/plugin install codex` 或 `npx -y @esp-vision/plugin install claude` 安装已发布版本。WorkBuddy 用户运行 `npx -y @esp-vision/plugin install workbuddy` 准备本地 Skill ZIP 和官方 Knowledge MCP 配置，再按说明在 WorkBuddy 界面完成导入。
+面向 AI 客户端，[本地插件](host/esp-vision-plugin/README.md)内置固定版本的 [Device CLI](host/device-cli/README.md)，并连接官方在线 Knowledge MCP。通过 [AI 开发指南](docs/zh_CN/how-to/esp-vision-plugin.rst)接入助手，用自然语言完成设备发现、固件与模型准备以及 Python 应用开发。WorkBuddy 和 QoderWork 用户可在应用市场搜索 `esp-vision`，指南中列出了对应条目。
 
 ## 主机工具包
 
