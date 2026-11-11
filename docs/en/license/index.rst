@@ -21,9 +21,13 @@ The following table lists the direct dependencies most relevant to redistributio
      - Role in ESP-VISION
      - License
    * - `esptool-js 0.7.1 <https://github.com/espressif/esptool-js/tree/v0.7.1>`__
-     - ``host/device-core/package.json`` dependency; loaded only by ``src/browser_rom.js``
-     - Official browser Web Serial ROM backend; upstream ``src/targets/stub_flasher/README.md`` identifies esp-flasher-stub v1.2.2 (set 2)
+     - ``host/device-core/package.json`` dependency; loaded lazily by ``src/rom_loader.js``
+     - Shared browser Web Serial / Node ROM backend; upstream ``src/targets/stub_flasher/README.md`` identifies esp-flasher-stub v1.2.2 (set 2)
      - Apache-2.0 (installed package ``LICENSE``); stub binaries dual Apache-2.0/MIT. Installed as a dependency; per-instance adapters do not modify upstream source. Transitive pako retains its MIT/Zlib notices; atob-lite retains MIT.
+   * - @serialport/bindings-cpp 13.0.0; Koffi 2.16.3
+     - ``host/device-core/package.json`` optional dependencies; CLI/plugin native bundles
+     - Native serial access and Linux USJ modem controls; original npm prebuilds and loaders
+     - MIT; original package licenses and Koffi Node API/cnoke notices retained in portable bundles
    * - Device Core host SDK
      - ``host/device-core``
      - EV-MUX v4 host communication, Python, resource files, discovery and images

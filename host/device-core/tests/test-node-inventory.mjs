@@ -3,11 +3,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  defaultPython, filterSerialPorts, inventory, listSerial, serialEntry, transportFor,
+  filterSerialPorts, inventory, listSerial, serialEntry, transportFor,
 } from '../src/node.js'
 
 test('the public Node entry point exposes passive inventory and serial adapters', () => {
-  assert.equal(typeof defaultPython, 'string')
   assert.equal(typeof listSerial, 'function')
   assert.equal(typeof filterSerialPorts, 'function')
   assert.equal(typeof serialEntry, 'function')
@@ -32,40 +31,23 @@ test('LAN discovery failures retain the original loading or socket diagnostic', 
   }
 })
 
-test('serial listing passes a bounded non-opening enumeration request to Python', async () => {
-  const controller = new AbortController()
-  let invocation
-  const ports = await listSerial({ python: 'python-test', signal: controller.signal, timeout: 2345 }, {
-    async execFile(command, args, options) {
-      invocation = { command, args, options }
-      return { stdout: '[{"path":"/dev/ttyACM0","vendorId":1234}]' }
-    },
-  })
-
-  assert.deepEqual(ports, [{ path: '/dev/ttyACM0', vendorId: 1234 }])
-  assert.equal(invocation.command, 'python-test')
-  assert.match(invocation.args[0], /node_serial\.py$/)
-  assert.deepEqual(invocation.args.slice(1), ['--list'])
-  assert.equal(invocation.options.signal, controller.signal)
-  assert.equal(invocation.options.timeout, 2345)
-  assert.equal(invocation.options.maxBuffer, 1024 * 1024)
-  assert.equal(invocation.options.windowsHide, true)
+test('npm enumeration normalizes USB IDs without opening a device', async () => {
+  let opened = false
+  const ports = await listSerial({}, { platform: 'win32', binding: async () => ({
+    list: async () => [{ path: 'COM9', vendorId: '303a', productId: '1001', locationId: 'Port_#0003.Hub_#0001' }],
+    open: () => { opened = true },
+  }) })
+  assert.equal(ports[0].vendorId, 0x303a)
+  assert.equal(ports[0].productId, 0x1001)
+  assert.equal(ports[0].location, 'Port_#0003.Hub_#0001')
+  assert.equal(opened, false)
 })
 
-test('serial enumeration reports a bounded-process timeout and preserves cancellation', async () => {
-  const timedOut = Object.assign(new Error('private process details'), { code: 'ETIMEDOUT' })
-  await assert.rejects(
-    listSerial({ timeout: 250 }, { execFile: async () => { throw timedOut } }),
-    error => error.code === 'TIMEOUT' && error.cause === timedOut && !error.message.includes('private'),
-  )
-
-  const controller = new AbortController()
-  const reason = new Error('cancelled')
-  const pending = listSerial({ signal: controller.signal }, {
-    execFile: async (_command, _args, options) => new Promise((_resolve, reject) => {
-      options.signal.addEventListener('abort', () => reject(reason), { once: true })
-    }),
-  })
+test('serial enumeration bounds stalled native calls and preserves cancellation', async () => {
+  const binding = async () => ({ list: () => new Promise(() => {}) })
+  await assert.rejects(listSerial({ timeout: 10 }, { binding }), { code: 'TIMEOUT' })
+  const controller = new AbortController(), reason = new Error('cancelled')
+  const pending = listSerial({ signal: controller.signal }, { binding })
   controller.abort(reason)
   await assert.rejects(pending, error => error === reason)
 })

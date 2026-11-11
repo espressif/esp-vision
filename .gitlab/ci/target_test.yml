@@ -5,7 +5,8 @@
 # the tagged runner and test it. See tools/ci/flash_and_test.py.
 #
 # Runner: docker executor. mise installs Node 22; the image supplies
-# Python, pyserial and esptool. The runner must
+# Python, pyserial and esptool for firmware flashing. Install the SDK npm
+# dependencies before its runtime probes. The runner must
 # pass the board's serial device into the container. With more than one board
 # attached, pin ESPPORT per job; otherwise the port is auto-detected.
 
@@ -38,6 +39,10 @@
     - mise install node@22
     - eval "$(mise env --shell bash node@22)"
     - node --version
+    - apt-get update
+    - apt-get install -y --no-install-recommends udev
+    - npm --prefix host/device-core install --include=optional --ignore-scripts --no-audit --no-fund --package-lock=false --registry=https://registry.npmjs.org/
+    - node --input-type=module -e "await (await import('./host/device-core/src/node_serial.js')).serialBinding()"
     - python3 -c "import esptool, serial; print('esptool', esptool.__version__, '/ pyserial', serial.__version__)"
   script:
     # Exists up front so a failure before the capture still uploads something.

@@ -40,15 +40,11 @@ MSYS2_ARG_CONV_EXCL='*' node -e 'console.log(JSON.stringify(process.argv.slice(1
 
 Keep the shell/OS, verified CLI path, original command/error and argument output as evidence. If `/models` already reaches Node unchanged, investigate the actual path validation and device storage result rather than attributing the error to MSYS. Do not retry a device change or interrupt a running application merely to test this hypothesis.
 
-**Q: On Windows, camera capture returns `SERIAL_ERROR`, but Python is installed. What should I check?**
+**Q: Serial access fails. Do I need Python or pyserial?**
 
-A: A serial-adapter failure does not establish a camera or firmware defect. Check the Python command actually used by the CLI, its pyserial dependency and access to the selected port. In [GitHub issue #17](https://github.com/espressif/esp-vision/issues/17), a Qoder session reported Python 3.14.5 available through the Windows `py` launcher while the default `python` command failed; repeating the intended capture with `--python py` succeeded. This is a reported workaround for that environment, not proof that every serial error has the same cause. Preserve the original error. Read the installed CLI's `--help`, and use an explicitly verified interpreter through `--python` for the intended operation; do not change the selected device or reset it to diagnose a host dependency.
+A: The bundled CLI uses npm native serial bindings and the shared esptool-js flasher. No host Python is required. Check the exact error: a missing native backend requires reinstalling the complete plugin or CLI for the host platform; access-denied and busy errors require checking port permissions and ownership. Preserve the original error and do not reset the board or force takeover to diagnose host dependencies. Read the installed CLI's help because older plugin versions used a different backend.
 
-For a user-selected serial endpoint and verified installed CLI path, the PowerShell form is `node "$CLI" capture camera --port "$PORT" --output "$OUTPUT" --python py`. Set CLI, PORT and OUTPUT from verified installation, explicit user selection and the workspace output path; do not copy the issue's COM9 as a default. Camera capture may still fail for independent device or firmware reasons.
-
-**Q: How should I check or install pyserial?**
-
-A: Only perform dependency checks when relevant to the observed adapter error. Explain their purpose first. If `py` is the chosen interpreter, use `py --version` and `py -c "import serial; print(serial.__version__)"` as separate checks. Use the same interpreter for dependency installation, such as `py -m pip install pyserial`, through the host's required approval flow. For an explicit Python executable, use that executable with `-m pip`; an unrelated bare `pip` may install into another environment. Do not claim a dependency is missing based only on a generic `SERIAL_ERROR` or `ENUMERATION_UNAVAILABLE`.
+For a user-selected serial endpoint and verified installed CLI path, the PowerShell form is `node "$CLI" capture camera --port "$PORT" --output "$OUTPUT"`. Set CLI, PORT and OUTPUT from verified installation, explicit user selection and the workspace output path. Camera capture may still fail for independent device or firmware reasons. The deprecated `--python` option is ignored by the new CLI.
 
 **Q: The host blocks a diagnostic command. Is that a device failure?**
 

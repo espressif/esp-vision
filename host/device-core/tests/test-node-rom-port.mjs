@@ -41,7 +41,7 @@ function fixture(options = {}) {
     serialTransport(request) { return request },
     createDevice(request) { calls.creates += 1; calls.transport = request.transport; return device },
   }
-  const run = (overrides = {}) => prepareNodeRomPort({ port: '/dev/ttyACM0', python: 'selected-python', timeout: 200, signal: controller.signal, ...overrides }, dependencies)
+  const run = (overrides = {}) => prepareNodeRomPort({ port: '/dev/ttyACM0', timeout: 200, signal: controller.signal, ...overrides }, dependencies)
   const recover = (previous, overrides = {}) => recoverNodeRomPort(previous, { python: 'selected-python', timeout: 200, signal: controller.signal, ...overrides }, dependencies)
   return { calls, run, recover, controller, now: () => clock }
 }
@@ -87,7 +87,7 @@ test('verified native runtime transitions once and binds only matching ROM seria
   assert.equal(result.transition.observed, 'rom')
   assert.equal(result.transition.cleanup.ok, true)
   assert.equal(f.calls.connect.length, 1)
-  assert.deepEqual(f.calls.transport, { serial: '/dev/ttyACM0', role: 'usb', python: 'selected-python' })
+  assert.deepEqual(f.calls.transport, { serial: '/dev/ttyACM0', role: 'usb' })
   assert.equal(f.calls.connect[0].probeRepl, false)
   assert.equal(f.calls.connect[0].autoBaud, false)
   assert.equal(f.calls.connect[0].role, 'usb')

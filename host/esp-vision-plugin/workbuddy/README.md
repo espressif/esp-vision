@@ -18,7 +18,7 @@ The official WorkBuddy documentation describes both user-level and project-level
 
 ## Device access
 
-The imported Skill invokes the verified Device CLI copy at `{{CLI_PATH}}`. It requires Node.js 22 or newer and local shell execution on the computer that can access the board. Serial operations additionally require Python 3 with `pyserial`; firmware flashing requires `esptool>=5.3,<6`. TCP operations do not require serial Python support. The ZIP also carries the dependency-closed CLI under `esp-vision-development/scripts/cli/` for inspection or separate local use.
+The imported Skill invokes the verified Device CLI copy at `{{CLI_PATH}}`. It requires Node.js 22 or newer and local shell execution on the computer that can access the board. Serial operations use bundled npm native bindings; flashing uses shared esptool-js. Host Python is not required. The ZIP also carries the dependency-closed CLI under `esp-vision-development/scripts/cli/` for inspection or separate local use.
 
 The Skill asks for explicit device targets and preserves the existing consent, application workflow, safe connection, and result verification behavior. It never starts a device MCP process.
 

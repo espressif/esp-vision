@@ -42,7 +42,7 @@ try {
   const { DeviceSession } = await import('@esp-vision/device-core/session');
   const { FirmwareFlashSession, loadOfficialFirmware, loadReleaseManifest } = await import('@esp-vision/device-core/firmware');
   if (typeof loadOfficialFirmware !== 'function' || typeof loadReleaseManifest !== 'function') throw new Error('Missing public release manifest readers');
-  const { defaultPython, filterSerialPorts, inventory, listSerial, serialEntry, tcpTransport, serialTransport, transportFor, openNodeRom } = await import('@esp-vision/device-core/node');
+  const { filterSerialPorts, inventory, listSerial, serialEntry, tcpTransport, serialTransport, transportFor, openNodeRom } = await import('@esp-vision/device-core/node');
   const { openBrowserRom } = await import('@esp-vision/device-core/browser');
   if (typeof openBrowserRom !== 'function' || typeof openBrowserRom({ port: { open() { throw new Error('Not opened'); }, close() {} } }).initialize !== 'function') throw new Error('Missing passive browser ROM adapter');
   const romPort = { open() { throw new Error('Not opened'); }, close() {} };
@@ -54,7 +54,7 @@ try {
   await browserRom.disconnect();
   if (typeof tcpTransport !== 'function' || typeof serialTransport !== 'function') throw new Error('Missing public Node transports');
   if (typeof inventory !== 'function' || typeof listSerial !== 'function' || typeof filterSerialPorts !== 'function'
-      || typeof serialEntry !== 'function' || typeof transportFor !== 'function' || typeof defaultPython !== 'string') throw new Error('Missing public Node inventory APIs');
+      || typeof serialEntry !== 'function' || typeof transportFor !== 'function') throw new Error('Missing public Node inventory APIs');
   const { createNodeDiscovery } = await import('@esp-vision/device-core/discovery/node');
   const { EventEmitter } = await import('node:events');
   let queries = 0;
@@ -67,10 +67,10 @@ try {
   if (typeof openNodeRom !== 'function' || typeof openNodeRom({ port: 'not-opened' }).initialize !== 'function') throw new Error('Missing passive Node ROM adapter');
   // Constructors must be passive: these endpoints need not exist to create adapters.
   api.createDevice({ transport: tcpTransport({ host: '127.0.0.1', port: 1 }) });
-  api.createDevice({ transport: serialTransport({ python: 'python3', serial: 'not-opened' }) });
+  api.createDevice({ transport: serialTransport({ serial: 'not-opened' }) });
   if (typeof DeviceSession !== 'function' || typeof FirmwareFlashSession !== 'function') throw new Error('Missing host adapter APIs');`
   execFileSync(process.execPath, ['--input-type=module', '-e', script], { cwd: consumer, stdio: 'pipe' })
-  for (const required of ['src/node_serial.py', 'src/jpeg_validate.js', 'src/rom_identity.js', 'scripts/run-tests.mjs', 'tests/hardware-check.mjs', 'tests/device-checks.mjs', 'tests/jpeg-fixtures.mjs', 'tests/test-jpeg-validation.mjs', 'tests/fixtures/device-checks.py']) {
+  for (const required of ['src/node_serial.js', 'src/jpeg_validate.js', 'src/rom_identity.js', 'scripts/run-tests.mjs', 'tests/hardware-check.mjs', 'tests/device-checks.mjs', 'tests/jpeg-fixtures.mjs', 'tests/test-jpeg-validation.mjs', 'tests/fixtures/device-checks.py']) {
     assert.ok(packed.files.some(({ path }) => path === required), `Missing installed check asset: ${required}`)
   }
   const unitOutput = execFileSync(...npmCommand(['test']), { cwd: installed, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })

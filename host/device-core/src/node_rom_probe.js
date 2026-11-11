@@ -11,7 +11,7 @@ const isRom = port => port.vendorId === 0x303a && ROM_PIDS.has(port.productId)
 const errorInfo = error => ({ code: error.code ?? 'ROM_PROBE_FAILED', message: error.message })
 
 /** Active detection only: one identity-bound ROM -> normal SPI boot attempt. */
-export async function probeNodeRom(selected, { python, timeout = 5000, signal } = {}, dependencies = {}) {
+export async function probeNodeRom(selected, { timeout = 5000, signal } = {}, dependencies = {}) {
   const mac = normalizeMac(selected.serialNumber), usbLocation = location(selected.location)
   if (!isRom(selected) || !mac || !usbLocation) throw fail('ROM_PORT_IDENTITY_REQUIRED', 'ROM detection requires a MAC and physical USB location')
   if (!Number.isSafeInteger(timeout) || timeout <= 0) throw new RangeError('ROM probe timeout must be positive')
@@ -28,11 +28,11 @@ export async function probeNodeRom(selected, { python, timeout = 5000, signal } 
   const result = { attempted: false, outcome: 'not-attempted', mac, location: usbLocation, selectedPort: selected.path }
   let loader, lastRom = null
   try {
-    loader = open({ port: selected.path, python, signal: activeSignal }, {
+    loader = open({ port: selected.path, signal: activeSignal }, {
       // Never turn a stale probe selection into a bootloader request against a
       // runtime. ROM initialization recovery must not replay this SPI attempt.
       async preparePort() {
-        const ports = await enumerate({ python, signal: activeSignal, timeout: Math.max(1, Math.ceil(deadline - now())) })
+        const ports = await enumerate({ signal: activeSignal, timeout: Math.max(1, Math.ceil(deadline - now())) })
         const current = ports.filter(same)
         if (current.length === 1 && !isRom(current[0])) throw Object.assign(fail('ROM_ALREADY_RUNTIME', 'Selected device already returned to runtime'), { runtime: current[0] })
         const matches = ports.filter(port => port.path === selected.path && isRom(port) && same(port))
@@ -62,7 +62,7 @@ export async function probeNodeRom(selected, { python, timeout = 5000, signal } 
     loader = null
     while (now() < deadline) {
       activeSignal.throwIfAborted()
-      const ports = await enumerate({ python, signal: activeSignal, timeout: Math.max(1, Math.ceil(deadline - now())) })
+      const ports = await enumerate({ signal: activeSignal, timeout: Math.max(1, Math.ceil(deadline - now())) })
       activeSignal.throwIfAborted()
       if (now() >= deadline) break
       const matches = ports.filter(same)

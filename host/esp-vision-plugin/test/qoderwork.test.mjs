@@ -80,8 +80,8 @@ test('QoderWork candidate roundtrips deterministically with original runtime/lic
   assert.match(reference, /does not access a device/)
   assert.doesNotMatch(reference, /export MSYS2_ARG_CONV_EXCL/)
 
-  assert.match(reference, /--python py/)
-  assert.match(reference, /not proof that every serial error has the same cause/)
+  assert.match(reference, /No host Python is required/)
+  assert.match(reference, /do not reset the board or force takeover/)
   assert.match(reference, /ENUMERATION_UNAVAILABLE.*not that no device exists/)
   assert.match(reference, /Knowledge MCP provides read-only documentation queries/)
   assert.match(reference, /https:\/\/github\.com\/espressif\/esp-vision\/security\/policy/)
@@ -160,7 +160,7 @@ test('QoderWork archive permissions are deterministic across source umasks', { s
   t.after(() => rm(temp, { recursive: true, force: true }))
   const source = resolve(temp, 'source')
   await cp(root, source, { recursive: true })
-  const nonexecutables = ['assets/esp-vision-logo.png', 'cli/node_serial.py']
+  const nonexecutables = ['assets/esp-vision-logo.png', 'cli/native/bindings.cjs']
   // Choose an existing license rather than assuming a specific vendored license filename.
   const provenanceBuild = async output => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '--eval',
     `import { buildQoderArchive } from ${JSON.stringify(new URL('../scripts/qoderwork.mjs', import.meta.url).href)}; console.log(JSON.stringify(await buildQoderArchive({sourceRoot:process.argv[1],outputDirectory:process.argv[2]})))`, source, output],

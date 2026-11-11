@@ -1271,11 +1271,8 @@ Promise<Uint8Array>，校验 v4、精确字节数、应用分区边界和 SHA-25
 @esp-vision/device-core/node
 ------------------------------------------------------------------
 
-``defaultPython``
-    平台默认 Python 可执行文件：Windows 为 ``python``，其他系统为 ``python3``。
-
-``listSerial({ python = defaultPython, signal, timeout = 10000 } = {}, dependencies = {})``
-    使用 pyserial 枚举系统串口。需要 Python 与 pyserial；可选依赖对象允许注入进程执行器。
+``listSerial({ signal, timeout = 10000 } = {}, dependencies = {})``
+    通过 npm 原生绑定被动枚举系统串口，无需 Python，也不打开端口。
 
 ``filterSerialPorts(ports, { platform = process.platform, allPorts = false } = {})``
     按平台路径及 USB 描述符提示筛选系统枚举记录，不打开端口，也不认定固件身份。
@@ -1284,25 +1281,24 @@ Promise<Uint8Array>，校验 v4、精确字节数、应用分区边界和 SHA-25
     将串口描述符转换为未探测的接口/地址候选并附带 USB 元数据；描述符分类不等于设备身份。
 
 ``transportFor(entry, options = {})``
-    为枚举项创建被动 TCP 或串口字节传输；串口选项可指定 ``python``。
+    为枚举项创建被动 TCP 或串口字节传输。
 
 ``inventory(options = {}, dependencies = {})``
-    从串口枚举和局域网发现返回 ``{ devices, warnings, sourcesAvailable }``。默认只扫描，不连接；``probe: true`` 会连接每个候选。可用 ``timeout``、``interfaces``、``python``、``allPorts`` 和 ``signal`` 控制扫描。
+    从串口枚举和局域网发现返回 ``{ devices, warnings, sourcesAvailable }``。默认只扫描，不连接；``probe: true`` 会连接每个候选。可用 ``timeout``、``interfaces``、``allPorts`` 和 ``signal`` 控制扫描。
 
 被动枚举原生 USB ROM 接口时返回 ``status: rom``、``identity: null``，不打开端口、不复位。主动 ``probe: true`` 检测先核对 ROM 出厂 MAC 和安全模式，清除对应芯片的软件强制下载标记，再尝试一次正常 SPI 启动；不加载 stub、不擦写或读取 Flash。只对 MAC 和物理 USB 位置均匹配的唯一端口重新进行运行态握手。``romProbe`` 记录 ``attempted``、``outcome``（``runtime``、``rom`` 或 ``no-runtime``）、目标身份及复位/清理诊断；设备已经回到运行态时不再复位。没有运行端口返回时标为 ``unidentified`` 并报告 ROM_RUNTIME_NOT_FOUND，重新返回 ROM 时仍标为 ``rom``，两者均不直接断言固件有无。应用不可启动时，安装前可能需要通过 BOOT/RESET 重新进入下载模式。只有成功的 ESP-VISION 握手才能确认固件身份；串口或会话占用返回 ``busy``。
 
-``nodeAdapterAssets()``
-    返回包含 ``serial`` 和 ``rom`` URL 的冻结对象，分别指向 ``node_serial.py`` 与 ``node_rom.py``。Node 打包器须将两个资源复制到已约定的打包入口旁路径。
+Core 0.8 移除 ``defaultPython``、``nodeAdapterAssets`` 与 Python 辅助文件。打包器须保留 npm 原生加载器和预编译文件，参考 CLI 构建脚本。
 
 ``tcpTransport({ host, port })``
     返回被动构造的 Node TCP 字节适配器。由 Core 在 ``device.connect({ role: 'tcp' })`` 时打开。
 
-``serialTransport({ serial, python })``
-    返回共用的 Node/Python 串口字节适配器。指定设备名称/路径及已安装 pyserial 的解释器（例如 ``python3``）；由 Core 打开和关闭，按实际接口选择 ``usj``、``usb`` 或 ``uart`` 角色。适配器只传字节，不维护另一套设备会话。
+``serialTransport({ serial })``
+    返回 npm 原生串口字节适配器。显式指定端口及 ``usj``、``usb`` 或 ``uart`` 角色，由 Core 打开、关闭并管理设备会话。
 
 
-``openNodeRom({ port, python?, signal? })``
-    返回内置 ROM 适配器，创建时不打开端口。用于 ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })``，安装与应用更新共用。需要独立安装 Python esptool==5.6.0，其 stub 读取请求与 ACK/MD5 解析器已经过兼容性验证；Unix 默认 python3，Windows 默认 python。Core 负责初始化、校验、写入及写后校验、复位与释放。SDK 0.3.0 新增，仅用于 Node；区别于运行态 serialTransport，也不是 TCP OTA。
+``openNodeRom({ port, signal?, logger?, baudRate?, onStatus? })``
+    返回内置 ROM 适配器，创建时不打开端口。用于 ``device.firmware.update({ openLoader: ({ signal }) => openNodeRom({ port, signal }), ... })``，安装与应用更新共用。适配器与浏览器共用 esptool-js 引擎，不再需要主机 Python。Core 负责初始化、校验、写入及写后校验、复位与释放。SDK 0.3.0 新增，仅用于 Node；区别于运行态 serialTransport，也不是 TCP OTA。
 
 @esp-vision/device-core/discovery
 ------------------------------------------------------------------
@@ -1365,7 +1361,7 @@ FirmwareFlashSession.flash 返回值
 ------------------------------------------------------------------
 
 ``openBrowserRom({ port, logger = {}, signal?, expectedMac? })``
-    SDK 0.6.0 包含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载官方 ``esptool-js@0.7.1``，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、写后校验和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化和范围擦除；Core 还在擦除后及开始写固件前检查取消。固件写入一旦开始，仍按原策略完成校验与复位。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块，根与 Node 入口也不加载浏览器后端。
+    SDK 0.6.0 包含此入口。为用户选择的 Web Serial ``SerialPort`` 返回被动 ROM 适配器；应在用户手势内申请端口，先释放已有运行时连接。``initialize()`` 延迟加载官方 ``esptool-js@0.7.1``，打开端口、识别芯片并提供 ``chipName/chipFamily/chipRevision``，不启动 stub。适配器实现 ``initialize/getSecurityInfo/runStub/hardReset/disconnect`` 供 ``firmware.update`` 使用；Core 校验镜像与 ROM 安全模式后才启动 stub，统一负责写入、写后校验和复位。``logger`` 可提供 ``log/error/debug``；``signal`` 取消初始化和范围擦除；Core 还在擦除后及开始写固件前检查取消。固件写入一旦开始，仍按原策略完成校验与复位。``disconnect()`` 幂等释放端口，初始化失败也清理资源；关闭后不可复用。须使用浏览器打包器，不支持直接加载上游原生 ESM。完整示例见 :doc:`integration`。此入口不加载 Node 模块；Node 通过自身串口适配器使用同一个 ROM 引擎。
 
     Core 0.7.0 另提供 ``chipMac``：资格确认前为 ``null``，之后为与 Node 适配器一致的 12 位小写十六进制 factory MAC，由固定版本官方芯片的 ``readMac(loader)`` 原语读取。可选 ``expectedMac`` 只接受恰好 12 位十六进制字符（大写归一为小写）；分隔符、空白、``null`` 及非字符串值会在访问端口前同步拒绝。宿主须获取选中运行态设备经过核验的 factory MAC，例如已验证与该板 factory MAC 一致的 ``machine.unique_id()``；任意历史 ``deviceId`` 或 USB VID/PID 都不能证明这种关联。无法核验时应使用用户明确选择的手动 ROM 流程，不能推测自动关联。首次不匹配，或恢复同步发现芯片家族、修订、MAC 改变时，返回 ROM_IDENTITY_CHANGED、关闭适配器，不再启动另一个 stub、擦除或写入；MAC 返回值不完整时返回 ROM_IDENTITY_INVALID。USB-OTG 保留这些错误码，不替换成手动下载提示。不传此选项仍支持手动选择首次 ROM，但后续同步继续绑定首次设备。
 
@@ -1386,6 +1382,6 @@ FirmwareFlashSession.flash 返回值
 Node ROM 回读安全边界
 ~~~~~~~~~~~~~~~~~~~~~
 
-Node Flash 读取默认只允许一个未确认的 1024 字节包。适配器将共享固件工作流的读包预算传给外部 esptool 读取器，并在每次读取后恢复临时实例设置。写入应用前的分区表校验也使用同一有界读取路径；不支持的版本或读取器布局会在任何写入前失败。读取不完整、超时或摘要错误都会结束本次操作，不自动重放。
+Node 与浏览器 Flash 读取均只允许一个未确认的 1024 字节包，并校验每个有界命令的尾部 MD5。Node 保留大范围读取能力，内部拆分为至多 64 KiB 的命令；旧读包与窗口参数作为预算上限。写入前的分区表校验使用同一路径。读取不完整、超时或摘要错误均失败，不自动重放。
 
 若先前已观察到的原生 ROM 设备正在重新枚举，只读初始化失败后 Core 会被动等待至多五秒。只有工厂 MAC 与物理 USB 位置均相同、且唯一出现的运行态设备才可收到一次经过身份验证的 bootloader 请求。身份歧义或冲突不会触发引导切换；该恢复不会重复已经提交的 bootloader 请求或 Flash 读写。

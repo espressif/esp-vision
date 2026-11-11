@@ -1,159 +1,139 @@
 // SPDX-FileCopyrightText: 2026 ESP-VISION-IDE
+// SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 // SPDX-License-Identifier: Apache-2.0
-import { spawn } from 'node:child_process'
-import { createInterface } from 'node:readline'
-import { fileURLToPath } from 'node:url'
-import { defaultPython } from './node_inventory.js'
 import { prepareNodeRomPort, recoverNodeRomPort } from './node_rom_port.js'
+import { listSerial } from './node_inventory.js'
+import { NodeSerialPort, boundedSerial } from './node_serial.js'
 
-export function openNodeRom({ port, python = defaultPython, signal } = {}, dependencies = {}) {
-  if (!port) throw new TypeError('Firmware update requires a local --port')
+const fail = (code, message = code) => Object.assign(new Error(message), { code })
+
+/** Passive Node adapter. All ROM commands use the browser's esptool-js engine. */
+export function openNodeRom({ port, signal, logger, baudRate = 'auto', onStatus } = {}, dependencies = {}) {
+  if (typeof port !== 'string' || !port) throw new TypeError('Firmware update requires a local --port')
+  let raw, serial, initialized = false, initializing = false, closed = false, busy = false, stub
   const lifecycle = new AbortController()
-  signal = signal ? AbortSignal.any([signal, lifecycle.signal]) : lifecycle.signal
-  let child, input, pending, sequence = 0, closed = false, initializing = false, romReady = false, stubReady = false
-  const fail = code => Object.assign(new Error(code === 'ESPTOOL_UNAVAILABLE' ? 'Install Python esptool==5.6.0 for the built-in flasher' : 'ROM operation failed'), { code })
-  const reject = code => { if (pending) { clearTimeout(pending.timer); pending.reject(fail(code)); pending = null } }
-  function rpc(method, args = [], timeout = 180000) {
-    if (closed) return Promise.reject(fail('ROM_CLOSED'))
-    if (!child || (method !== 'initialize' && !romReady)) return Promise.reject(fail('ROM_NOT_INITIALIZED'))
-    if (pending) return Promise.reject(fail('ROM_BUSY'))
-    return new Promise((resolve, rejectPromise) => {
-      const id = ++sequence
-      pending = { id, resolve, reject: rejectPromise, timer: setTimeout(() => { reject('ROM_TIMEOUT'); void loader.disconnect() }, timeout) }
-      child.stdin.write(JSON.stringify({ id, method, args }) + '\n', error => { if (error) reject('ROM_IO_FAILED') })
-    })
+  const activeSignal = signal ? AbortSignal.any([signal, lifecycle.signal]) : lifecycle.signal
+  const ready = () => {
+    if (closed) throw fail('ROM_CLOSED')
+    if (!initialized) throw fail('ROM_NOT_INITIALIZED')
+    return raw
   }
-  async function closeProcess() {
-    const process = child
-    child = null; romReady = stubReady = false; reject('ROM_CLOSED'); input?.close(); input = null
-    if (!process || process.exitCode !== null) return
-    await new Promise(resolve => {
-      const timer = setTimeout(() => { process.kill(); resolve() }, 2000)
-      process.once('exit', () => { clearTimeout(timer); resolve() })
-      process.stdin.end()
-    })
+  const closeRaw = async () => {
+    await serial?.close()
+    await raw?.disconnect()
+    raw = serial = stub = null
+    initialized = false
   }
-  function startProcess(selected) {
-    signal.throwIfAborted()
-    const process = (dependencies.spawn ?? spawn)(python, ['-u', fileURLToPath(new URL('./node_rom.py', import.meta.url)), selected.port], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true })
-    child = process
-    const active = action => { if (child === process) action() }
-    process.on('error', () => active(() => reject('ESPTOOL_UNAVAILABLE')))
-    process.on('exit', () => active(() => reject('ROM_CLOSED')))
-    process.stdin.on('error', () => active(() => reject('ROM_IO_FAILED')))
-    input = createInterface({ input: process.stdout })
-    input.on('line', line => {
-      if (child !== process) return
+  async function start(selected) {
+    activeSignal.throwIfAborted()
+    const ports = await (dependencies.listSerial ?? listSerial)({ signal: activeSignal })
+    const descriptor = ports.find(item => item.path === selected.port) ?? { path: selected.port }
+    const { createSerialLoader, serialRomInterface } = await import('./rom_loader.js')
+    serial = (dependencies.createPort ?? (info => new NodeSerialPort(info)))(descriptor)
+    const kind = serialRomInterface(serial)
+    // Preserve an existing stub. Only proven UART/USJ descriptors permit reset.
+    const modes = ['no_reset', ...(['uart', 'usb-jtag'].includes(kind) ? ['default_reset'] : [])]
+    for (const [index, mode] of modes.entries()) {
+      raw = await (dependencies.createLoader ?? createSerialLoader)(serial, logger, {
+        signal: activeSignal, expectedMac: selected.expectedMac ?? undefined, baudRate, onStatus, connectMode: mode,
+      })
       try {
-        const message = JSON.parse(line)
-        if (message.error && !message.id) return reject(message.error)
-        if (!pending || message.id !== pending.id) return
-        const operation = pending; pending = null; clearTimeout(operation.timer)
-        if (message.error) operation.reject(Object.assign(fail(message.error), { operation: message.method, cause: message.detail })); else operation.resolve(message.result)
-      } catch { reject('ROM_RESPONSE_INVALID') }
-    })
-    return rpc('initialize')
+        await boundedSerial(() => raw.initialize(), { signal: activeSignal, timeout: 30000 })
+        activeSignal.throwIfAborted()
+        if (selected.expectedMac && raw.chipMac !== selected.expectedMac) throw fail('ROM_IDENTITY_CHANGED')
+        return
+      } catch (error) {
+        await serial.close(); await raw.disconnect()
+        activeSignal.throwIfAborted()
+        if (index === modes.length - 1 || ['ROM_IDENTITY_CHANGED', 'ROM_IDENTITY_INVALID', 'ROM_PORT_LOST'].includes(error.code)) throw error
+      }
+    }
   }
-  const loader = {
+  const run = async operation => {
+    ready()
+    if (busy) throw fail('ROM_BUSY')
+    busy = true
+    try { return await operation() }
+    catch (error) { await adapter.disconnect(); throw error }
+    finally { busy = false }
+  }
+  const requireStub = () => {
+    ready()
+    if (!stub?.IS_STUB) throw fail('ROM_STUB_REQUIRED')
+    return stub
+  }
+  const adapter = {
+    get chipName() { return raw?.chipName ?? null },
+    get chipFamily() { return raw?.chipFamily ?? null },
+    get chipRevision() { return raw?.chipRevision ?? null },
+    get chipMac() { return raw?.chipMac ?? null },
+    get IS_STUB() { return initialized && !!stub?.IS_STUB },
+    get interface() { return raw?.interface ?? null },
+    get baudRate() { return raw?.baudRate ?? null },
     async initialize() {
-      signal.throwIfAborted()
       if (closed) throw fail('ROM_CLOSED')
-      if (initializing || child) throw fail('ROM_ALREADY_INITIALIZED')
+      if (initializing || initialized) throw fail('ROM_ALREADY_INITIALIZED')
+      activeSignal.throwIfAborted()
       initializing = true
       let selected
-      const cancelled = () => { reject('CANCELLED'); void loader.disconnect() }
-      signal.addEventListener('abort', cancelled, { once: true })
       try {
-        selected = await (dependencies.preparePort ?? prepareNodeRomPort)({ port, python, signal })
-        signal.throwIfAborted()
-        let identity
-        try { identity = await startProcess(selected) }
+        selected = await (dependencies.preparePort ?? prepareNodeRomPort)({ port, signal: activeSignal })
+        try { await start(selected) }
         catch (error) {
-          await closeProcess()
-          signal.throwIfAborted()
-          // No writes have been accepted. A ROM/stub can return to its app
-          // between enumeration and SYNC. Recover only after observing that
-          // same physical device's runtime; never repeat a previous handoff.
-          if (error.code !== 'ROM_OPERATION_FAILED' || error.operation !== 'initialize'
-              || !selected.expectedMac || selected.transition?.observed !== 'rom'
-              || selected.transition.requested !== false) throw error
-          const recovered = await (dependencies.recoverPort ?? recoverNodeRomPort)(selected, { python, signal })
+          await closeRaw()
+          activeSignal.throwIfAborted()
+          // Recovery observes a known ROM returning to the same runtime.
+          // Never retry a write or repeat an earlier boot request.
+          if (['ROM_IDENTITY_CHANGED', 'ROM_IDENTITY_INVALID', 'SERIAL_BACKEND_UNAVAILABLE'].includes(error.code)
+              || !selected.expectedMac || selected.transition?.observed !== 'rom' || selected.transition.requested !== false) throw error
+          const recovered = await (dependencies.recoverPort ?? recoverNodeRomPort)(selected, { signal: activeSignal })
           if (!recovered) throw error
           selected = recovered
-          selected.transition.previousInitialization = { code: error.code, operation: error.operation, detail: String(error.cause ?? '').slice(0, 1024) }
-          signal.throwIfAborted()
-          identity = await startProcess(selected)
+          selected.transition.previousInitialization = { code: error.code ?? 'ROM_INITIALIZE_FAILED', message: error.message }
+          await start(selected)
         }
-        if (selected.expectedMac && identity.chipMac !== selected.expectedMac) {
-          throw Object.assign(new Error('ROM MAC differs from the selected USB device'), { code: 'ROM_IDENTITY_CHANGED' })
-        }
-        Object.assign(loader, identity, { port: selected.port, usbTransition: selected.transition })
-        romReady = true
+        activeSignal.throwIfAborted()
+        adapter.port = selected.port; adapter.usbTransition = selected.transition
+        initialized = true
       } catch (error) {
-        if (error && typeof error === 'object' && selected?.transition) error.transition ??= selected.transition
-        await loader.disconnect()
+        if (selected?.transition) error.transition ??= selected.transition
+        await adapter.disconnect()
         throw error
-      } finally { initializing = false; signal.removeEventListener('abort', cancelled) }
+      } finally { initializing = false }
     },
-    flashId: () => rpc('flashId'),
-    getSecurityInfo: () => rpc('security'),
-    get IS_STUB() { return romReady && stubReady },
-    async runStub() {
-      stubReady = false
-      try {
-        const result = await rpc('stub')
-        if (result?.stubRunning !== true) throw fail('ROM_STUB_REQUIRED')
-        stubReady = true
-        return loader
-      } catch (error) { await loader.disconnect(); throw error }
-    },
-    async eraseRegion(address, size) {
-      if (!Number.isSafeInteger(address) || address < 0 || address % 4096 !== 0
-          || !Number.isSafeInteger(size) || size <= 0 || size > 0xffffffff || size % 4096 !== 0
-          || address + size > 0x100000000) throw new RangeError('ROM erase requires a positive, sector-aligned 32-bit address range')
-      if (closed) throw fail('ROM_CLOSED')
-      if (!romReady) throw fail('ROM_NOT_INITIALIZED')
-      if (!stubReady) throw fail('ROM_STUB_REQUIRED')
-      const cancelled = () => { reject('CANCELLED'); void loader.disconnect() }
-      signal.addEventListener('abort', cancelled, { once: true })
-      try {
-        signal.throwIfAborted()
-        // esptool 5.6.0 permits 40 seconds per decimal MB. Large FFAT regions
-        // must not inherit the shorter generic RPC timeout.
-        await rpc('eraseRegion', [address, size], Math.max(180000, Math.ceil(size / 1000000 * 40000) + 30000))
-        signal.throwIfAborted()
-        if (closed || !stubReady) throw fail('ROM_CLOSED')
-      } catch (error) { await loader.disconnect(); throw error }
-      finally { signal.removeEventListener('abort', cancelled) }
-    },
-    async readFlash(offset, bytes, progress, options) {
-      if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(bytes) || bytes <= 0 || bytes > 0xffffffff
-          || offset + bytes > 0x100000000) throw new RangeError('ROM read requires a positive 32-bit address range')
+    getSecurityInfo: () => run(() => raw.getSecurityInfo()),
+    readRegister: address => run(() => raw.readRegister(address)),
+    writeRegister: (address, value, mask) => run(() => raw.writeRegister(address, value, mask)),
+    hardReset: () => run(() => raw.hardReset()),
+    async runStub() { return run(async () => { stub = await raw.runStub(); return adapter }) },
+    flashId: () => run(() => requireStub().flashId()),
+    eraseRegion: (address, size) => run(() => requireStub().eraseRegion(address, size)),
+    flashData: (bytes, progress, offset) => run(() => requireStub().flashData(bytes, progress, offset)),
+    async readFlash(offset, bytes, progress, options = {}) {
+      if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(bytes) || bytes <= 0 || bytes > 0xffffffff || offset + bytes > 0x100000000) throw new RangeError('ROM read requires a positive 32-bit address range')
       if (progress !== undefined && typeof progress !== 'function') throw new TypeError('ROM read progress must be a function')
-      if (options !== undefined && (!options || typeof options !== 'object' || Array.isArray(options))) throw new TypeError('ROM read options must be an object')
-      if (options && Object.keys(options).some(key => !['blockSize', 'maxInFlight', 'chunkSize'].includes(key))) throw new TypeError('Unsupported ROM read option')
-      const blockSize = options?.blockSize === undefined ? 1024 : options.blockSize
-      const maxInFlight = options?.maxInFlight === undefined ? 1 : options.maxInFlight
-      if (![1024, 4096].includes(blockSize) || !Number.isSafeInteger(maxInFlight) || maxInFlight < 1 || maxInFlight > 64) throw new RangeError('ROM read requires 1024 or 4096 byte blocks and 1..64 outstanding packets')
-      if (options?.chunkSize !== undefined && (!Number.isSafeInteger(options.chunkSize) || options.chunkSize <= 0 || bytes > options.chunkSize)) throw new RangeError('ROM read exceeds the requested chunk size')
-      const data = new Uint8Array(Buffer.from(await rpc('read', [offset, bytes, { blockSize, maxInFlight }]), 'base64'))
-      if (data.length !== bytes) throw Object.assign(fail('ROM_READ_LENGTH'), { operation: 'read' })
-      progress?.(data, data.length, bytes)
-      return data
+      if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['blockSize', 'maxInFlight', 'chunkSize'].includes(key))) throw new TypeError('Unsupported ROM read option')
+      if (![1024, 4096].includes(options.blockSize ?? 1024) || !Number.isSafeInteger(options.maxInFlight ?? 1) || (options.maxInFlight ?? 1) < 1 || (options.maxInFlight ?? 1) > 64) throw new RangeError('Invalid ROM read packet budget')
+      if (options.chunkSize !== undefined && (!Number.isSafeInteger(options.chunkSize) || options.chunkSize <= 0 || bytes > options.chunkSize)) throw new RangeError('ROM read exceeds the requested chunk size')
+      return run(async () => {
+        const reader = requireStub(), data = new Uint8Array(bytes)
+        // The shared engine uses one outstanding 1 KiB packet, within every
+        // supported caller budget. Bound each command and verify its digest.
+        for (let position = 0; position < bytes;) {
+          activeSignal.throwIfAborted()
+          const chunk = await reader.readFlash(offset + position, Math.min(65536, bytes - position))
+          data.set(chunk, position); position += chunk.length
+          progress?.(chunk, position, bytes)
+        }
+        return data
+      })
     },
-    async flashData(bytes, progress, offset) {
-      const receipt = await rpc('write', [offset, Buffer.from(bytes).toString('base64')])
-      progress(bytes.byteLength, bytes.byteLength)
-      return receipt
-    },
-    readRegister: address => rpc('readRegister', [address]),
-    writeRegister: (address, value, mask) => rpc('writeRegister', [address, value, mask]),
-    hardReset: () => rpc('reset'),
     async disconnect() {
       if (closed) return
-      closed = true; lifecycle.abort(fail('ROM_CLOSED'))
-      await closeProcess()
+      closed = true
+      lifecycle.abort(fail('ROM_CLOSED'))
+      await closeRaw()
     },
   }
-  return loader
+  return adapter
 }

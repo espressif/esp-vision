@@ -52,7 +52,7 @@ test('Cursor ZIP retains complete runtime, metadata and guidance and runs after 
   assert.match(skill, /Search existing issues first/)
   assert.match(skill, /explicit user authorization before submitting or uploading/)
   assert.match(skill, /MSYS2_ARG_CONV_EXCL/)
-  assert.match(reference, /--python py/)
+  assert.match(reference, /No host Python is required/)
   assert.match(reference, /Knowledge MCP provides read-only documentation queries/)
   assert.match(await text('README.md'), /~\/\.cursor\/plugins\/local\//)
   assert.match(await text('README.md'), /cursor\.com\/marketplace\/publish/)
@@ -75,13 +75,10 @@ test('Cursor ZIP retains complete runtime, metadata and guidance and runs after 
   assert.equal(rejected.status, 2, rejected.stderr)
   assert.match(JSON.parse(rejected.stdout).error.message, /MSYS2_ARG_CONV_EXCL/)
   assert.doesNotMatch(rejected.stderr, /connecting/)
-  if (process.platform !== 'win32') {
-    const python = resolve(temp, 'fake python')
-    await writeFile(python, `#!${process.execPath}\nif (!process.argv[2]?.endsWith('/node_serial.py')) process.exit(91)\nprocess.stdout.write('[]\\n')\n`)
-    await chmod(python, 0o755)
-    const result = JSON.parse(execFileSync(process.execPath, [cli, 'inspect', '--interface', 'serial', '--python', python, '--json'], { encoding: 'utf8', cwd: temp }))
+  {
+    const result = JSON.parse(execFileSync(process.execPath, [cli, 'inspect', '--interface', 'serial', '--json'], { encoding: 'utf8', cwd: temp }))
     assert.equal(result.ok, true)
-    assert.deepEqual(result.result.devices, [])
+    assert.ok(Array.isArray(result.result.devices))
     assert.equal(result.result.sourcesAvailable, 1)
   }
 })

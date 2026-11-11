@@ -30,3 +30,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Browser and Node ROM flashing use the separately installed esptool-js 0.7.1 package,
+Copyright (c) 2023 Espressif Systems (Shanghai) Co. Ltd., Apache License 2.0.
+The package's esp-flasher-stub v1.2.2 set-2 binaries retain their upstream
+dual Apache-2.0/MIT terms. Its pako (MIT/Zlib) and atob-lite (MIT) dependencies
+retain their own notices. No upstream source or stub binary is vendored here.
+The S31 native-USB watchdog reset adapter uses the register sequence also
+implemented by Apache-2.0 esptool-js P4 watchdog support.
+
+Node serial access uses @serialport/bindings-cpp 13.0.0 (MIT).
+Linux USB-Serial-JTAG modem controls use Koffi 2.16.3 (MIT).
+Portable CLI/plugin bundles preserve original loaders, binaries and licenses,
+including Koffi cnoke and Node API header notices.

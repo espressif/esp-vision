@@ -16,9 +16,7 @@
    esp-vision-device --help
    esp-vision-device inspect
 
-串口访问需要安装带 ``pyserial`` 的 Python。Windows 默认使用 ``python``，macOS/Linux 默认使用 ``python3``；可通过 ``--python`` 选择其它解释器。固件烧录还需要在该解释器中安装 ``esptool==5.6.0``。局域网发现使用 CLI 内置的 multicast-DNS 客户端。
-
-使用 ``--python`` 指定的同一个解释器执行 ``PYTHON --version`` 和 ``PYTHON -c "import serial"``，将 ``PYTHON`` 替换成该可执行程序；通过 ``PYTHON -m pip install pyserial`` 在该解释器中安装依赖。Windows Python Launcher 用户可使用 ``--python py`` 和 ``py -m pip install pyserial``。串口初始化失败并清理连接后，CLI 会运行有时间上限的环境诊断；不会打开端口、尝试其他解释器或安装软件包。正常连接、纯 TCP 操作、帮助和离线固件检查不会启动该诊断。缺少解释器、缺少 pyserial、同名 ``serial`` 模块冲突会给出不同提示；端口占用或权限错误仍提示检查端口。其他失败不会被直接判定为缺少依赖。混合发现中串口失败仍会保留可用的局域网结果及串口警告。
+串口访问使用随包 npm 原生绑定，烧录使用与网站共用的 esptool-js 后端，无需安装主机 Python、pyserial 或 Python esptool。仍需 Node.js 22+、系统驱动和串口权限。局域网发现使用内置 multicast-DNS。已废弃的 ``--python`` 参数兼容接受但不再生效。后端缺失、权限不足和端口占用分别给出提示；普通串口错误不能直接判定为设备故障。
 
 发现与检查
 ----------------------------------------
@@ -58,7 +56,7 @@ Runtime 中的 ``scriptRunning`` 和 ``run`` 表示当前 SDK 会话跟踪的工
 
 配置 Wi-Fi 时会隐藏密码提示输入；非交互环境可用 ``--password-stdin`` 从标准输入读取。没有命令行密码参数，配置结果也不会包含凭据。reset 必须指定 ``--mode soft`` 或 ``--mode hard``；收到确认不代表设备已重新连接。
 
-固件检查默认使用官方版本源；``--catalog`` 可指定本地目录文件或 HTTPS URL。离线检查需要 ``--board``，也可用 ``--current-version`` 指定当前版本。更新必须指定本地 ``--port`` 和明确的 ``--version``；内置串口烧录器使用 ``esptool==5.6.0``。TCP 不是 OTA。默认 ``--mode update`` 只写应用并保留现有分区布局和用户数据。``--mode install`` 需要 ``--board``。CLI 捆绑 Core 0.7.0 或更新版本时，会清除内部 ``ffat`` 文件并写完整镜像，镜像也可能替换 NVS 配置；不擦除 SD 卡。旧版 CLI 包仍使用其原有安装行为；CLI 独立发布，不会自动获得新版 Core，依赖清空能力前应确认捆绑版本。空白设备应使用可进入 ROM 下载模式的 USJ/UART 串口。``--image`` 提供本地固件字节，但不会绕过版本完整性校验。
+固件检查默认使用官方版本源；``--catalog`` 可指定本地目录文件或 HTTPS URL。离线检查需要 ``--board``，也可用 ``--current-version`` 指定当前版本。更新必须指定本地 ``--port`` 和明确的 ``--version``；内置串口烧录器使用 ``esptool-js@0.7.1``。TCP 不是 OTA。默认 ``--mode update`` 只写应用并保留现有分区布局和用户数据。``--mode install`` 需要 ``--board``。CLI 捆绑 Core 0.7.0 或更新版本时，会清除内部 ``ffat`` 文件并写完整镜像，镜像也可能替换 NVS 配置；不擦除 SD 卡。旧版 CLI 包仍使用其原有安装行为；CLI 独立发布，不会自动获得新版 Core，依赖清空能力前应确认捆绑版本。空白设备应使用可进入 ROM 下载模式的 USJ/UART 串口。``--image`` 提供本地固件字节，但不会绕过版本完整性校验。
 
 Python 执行
 ----------------------------------------

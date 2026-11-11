@@ -7,11 +7,11 @@ export { tcpTransport, serialTransport } from '../src/node_transport.js'
 import { createDevice } from '../src/index.js'
 import { DEVICE_CHECKS, runDeviceChecks, saveJpeg } from './device-checks.mjs'
 
-export const usage = 'Usage: npm run test:hardware -- (--tcp HOST[:PORT] | --serial PATH) [--role usj|usb|uart] [--python PYTHON] [--expect-board BOARD] [--expect-firmware-version VERSION] [--write] [--capture] [--checks all|CSV] [--require-all] [--frames N] [--framesize QVGA] [--pixformat RGB565] [--quality 60] [--frame-timeout SECONDS] [--display-hold SECONDS] [--output CAMERA.jpg] [--screen-output LCD.jpg] [--model MODEL.espdl] [--model-sha256 HEX] [--timeout MILLISECONDS]'
+export const usage = 'Usage: npm run test:hardware -- (--tcp HOST[:PORT] | --serial PATH) [--role usj|usb|uart] [--expect-board BOARD] [--expect-firmware-version VERSION] [--write] [--capture] [--checks all|CSV] [--require-all] [--frames N] [--framesize QVGA] [--pixformat RGB565] [--quality 60] [--frame-timeout SECONDS] [--display-hold SECONDS] [--output CAMERA.jpg] [--screen-output LCD.jpg] [--model MODEL.espdl] [--model-sha256 HEX] [--timeout MILLISECONDS]'
 const fail = (code, message) => Object.assign(new Error(message), { code })
 
 export function parseArgs(args) {
-  const options = { timeout: 60000, write: false, capture: false, python: 'python3', frames: 30, framesize: 'QVGA', pixformat: 'RGB565', quality: 60, frameTimeout: 25, displayHold: 0 }
+  const options = { timeout: 60000, write: false, capture: false, frames: 30, framesize: 'QVGA', pixformat: 'RGB565', quality: 60, frameTimeout: 25, displayHold: 0 }
   let explicitTimeout = false
   for (let index = 0; index < args.length; index++) {
     const option = args[index]

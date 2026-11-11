@@ -13,7 +13,7 @@ ESP-VISION 是乐鑫开源的低代码端侧 AI 与计算机视觉项目，基�
 ## 开始使用
 
 - 在 WorkBuddy 中连接官方知识服务，即可查询文档；知识查询需要网络，但不需要连接设备。
-- 设备操作需要支持本地命令执行的 WorkBuddy 桌面环境和 Node.js 22 或更高版本。串口连接需要 Python 和 `pyserial`；烧录固件还需要 `esptool>=5.3,<6`。设备使用还需要串口权限或可用的 TCP 网络。
+- 设备操作需要支持本地命令执行的 WorkBuddy 桌面环境和 Node.js 22 或更高版本。串口连接使用随包 npm 原生绑定，烧录使用共享 esptool-js 后端，无需主机 Python。设备使用还需要串口权限或可用的 TCP 网络。
 - 可以尝试：“查询我的开发板支持哪些 ESP-VISION 视觉 API”“检查我指定设备的固件和连接状态”“帮我部署并验证一个视觉应用”。设备操作前请明确指定目标设备。
 
 ## 了解更多
@@ -29,6 +29,6 @@ ESP-VISION is an open-source, low-code edge AI and computer vision project from 
 
 Board configurations cover ESP32-P4, ESP32-S3 and ESP32-S31, including ESP32-P4X-EYE, ESP32-P4X-Function-EV-Board, ESP32-P4X-Vision, ESP32-S3-EYE, AtomS3R-M12 and ESP32-S31 Chatbot, Korvo and Mosaico. Features vary by board and firmware; see the [supported boards](https://docs.espressif.com/projects/esp-vision/en/latest/esp32p4/target-support/index.html). To add another board, use `boards/TEMPLATE` and existing board configurations in the [open-source repository](https://github.com/espressif/esp-vision) as a starting point, adapt its hardware and build and validate the firmware.
 
-Connect the official knowledge service in WorkBuddy for documentation queries. Device operations require a WorkBuddy desktop environment with local execution and Node.js 22 or newer; serial access also needs Python and `pyserial`, while flashing requires `esptool>=5.3,<6`. Select the device explicitly before running device operations.
+Connect the official knowledge service in WorkBuddy for documentation queries. Device operations require a WorkBuddy desktop environment with local execution and Node.js 22 or newer; serial access uses bundled npm native bindings and flashing uses shared esptool-js, without host Python. Select the device explicitly before running device operations.
 
 Visit the [ESP-VISION website](https://vision.espressif.com/), [documentation](https://docs.espressif.com/projects/esp-vision/en/latest/) or [Web IDE](https://ide.vision.espressif.com/). License information for the project and third-party components is included with the Expert and in the repository.
