@@ -1,15 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Make hardware-check fixture uploads idempotent and acknowledged, verify source integrity and installation, and bound timeout recovery. Report bootstrap diagnostics and blocked dependent checks separately without allowing a failed prerequisite or cleanup to pass hardware acceptance.
+
 ## 0.8.0
 
 ### Changed
 
 - Replace host Python serial/enumeration and esptool subprocesses with npm native serial bindings and the shared esptool-js ROM engine used by the browser. Preserve identity, security, partition, verification and reset checks; remove defaultPython, nodeAdapterAssets and Python helper assets.
 - Package serial prebuilds in CLI and plugin artifacts, with a Linux USJ modem-control fallback that does not issue unsupported BREAK commands.
-
-## [Unreleased]
-
-### Changed
 
 - Speed up complete firmware installation by trusting checked, partition-bounded FFAT erase commands without erased-range reads, and reuse official esptool whole-write MD5 verification receipts in Node/browser adapters instead of transferring firmware back to the host. Keep SHA-256 qualification before writing and full readback for custom adapters without receipts.
 

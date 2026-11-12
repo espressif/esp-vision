@@ -31,6 +31,9 @@ device_core_checks:
         compare_to: 'refs/heads/master'
         paths: *device_core_changes
   script:
+    # Fixture bootstrap fault injection executes real Python on the host.
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3
     - cd host/device-core
     - export TMPDIR="$CI_PROJECT_DIR/.cache/device-core-tmp" TMP="$CI_PROJECT_DIR/.cache/device-core-tmp" TEMP="$CI_PROJECT_DIR/.cache/device-core-tmp"
     - mkdir -p "$TMPDIR"

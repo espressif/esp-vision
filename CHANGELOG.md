@@ -31,6 +31,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Allow explicitly opted-in hardware CI for a single matching board/IDF build with `ESP_VISION_TEST_HARDWARE=1`; keep ordinary targeted builds and SDK-only runs from flashing devices, and install Python for executable fixture fault injection in Device Core CI.
+
+- Diagnose shared hardware-check fixture bootstrap failures by phase, chunk offset, duration and last acknowledged operation; report dependent checks as blocked while failing the job. Transfer Python source idempotently with session/content acknowledgements, verify its SHA-256 and installation, and bound timeout recovery without replaying a partially installed fixture.
+
 - Restore LAN auto-discovery in the packaged CLI and plugin by providing Node's CommonJS loader in the ESM bundle; retain discovery failure diagnostics and check real mDNS initialization from the installed CLI tarball.
 
 - Close image files and unregister their owned buffers before exception cleanup releases native memory, including mismatched extensions and failed reads/writes; release conversion allocations when codecs, drawing, or destination allocation fail.

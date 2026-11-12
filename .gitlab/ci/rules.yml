@@ -86,6 +86,7 @@
 # API/web SDK verification: ESP_VISION_DEVICE_CORE_ONLY=1.
 # Final firmware matrix: ESP_VISION_BUILD_FIRMWARE=1 (omit TEST_BOARD).
 # Targeted bin: ESP_VISION_TEST_BOARD + ESP_VISION_TEST_IDF_IMAGE.
+# Add ESP_VISION_TEST_HARDWARE=1 to run only the matching HIL job as well.
 #
 # Use ordinary push changes against the previous commit, including master;
 # compare new-branch and non-push pipelines to master explicitly because GitLab
@@ -107,12 +108,15 @@
         compare_to: 'refs/heads/master'
         paths: *firmware_changes
 
-# HIL consumes the same firmware matrix. Targeted-bin and SDK-only runs cannot
-# enqueue HIL jobs whose literal firmware artifact dependencies were omitted.
+# HIL consumes the same firmware matrix. Targeted hardware runs opt in explicitly
+# and select the same board/IDF pair, keeping literal artifact dependencies valid.
 .rules:test:target:
   rules:
-    - if: '$ESP_VISION_DEVICE_CORE_ONLY == "1" || $CI_COMMIT_TAG =~ /^device-core-v/ || $ESP_VISION_TEST_BOARD'
+    - if: '$ESP_VISION_DEVICE_CORE_ONLY == "1" || $CI_COMMIT_TAG =~ /^device-core-v/'
       when: never
+    - if: '$ESP_VISION_TEST_BOARD && ($ESP_VISION_TEST_HARDWARE != "1" || $BOARD != $ESP_VISION_TEST_BOARD || $IDF_IMAGE != $ESP_VISION_TEST_IDF_IMAGE)'
+      when: never
+    - if: '$ESP_VISION_TEST_BOARD && $ESP_VISION_TEST_HARDWARE == "1"'
     - if: '$ESP_VISION_BUILD_FIRMWARE == "1"'
     - if: '$CI_COMMIT_TAG'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'

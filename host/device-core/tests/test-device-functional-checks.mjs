@@ -14,10 +14,10 @@ import { DEFAULT_ESPDL_MODEL, DEFAULT_ESPDL_SHA256, DEVICE_CHECKS, parseCheckRes
 import { jpegFixture } from './jpeg-fixtures.mjs'
 
 function devicePeer({ results = {}, board = 'TEST', screenFails = false } = {}) {
-  const files = new Map(), calls = [], listeners = new Map()
+  const files = new Map(), calls = [], listeners = new Map(), fixtureChunks = new Map()
   let modelNonce, modelBytes, modelPath, modelOffset = 0
   return {
-    calls, files, listeners,
+    calls, files, listeners, fixtureChunks,
     async inspect({ fields }) { calls.push(['inspect', fields]); return { identity: { board, firmwareVersion: 'test' }, capabilities: { protocol: { evMuxVersion: 4 }, features: ['storage.writer.lease'], limits: { replInputMax: EV_REPL_INPUT_MAX_BYTES } }, runtime: { vmReady: true }, storage: { flash: { present: true, mounted: false, writable: false } } } },
     files: Object.assign(files, {
       async list() { throw new Error('Runtime checks must not access storage') },
@@ -26,7 +26,27 @@ function devicePeer({ results = {}, board = 'TEST', screenFails = false } = {}) 
     }),
     python: { async execute({ source }) {
       calls.push(['execute', source])
-      if (source.includes("={'_source':[],'_fixture_nonce':")) modelNonce = JSON.parse(source.slice(source.indexOf("'_fixture_nonce':") + 17, -1))
+      if (source.includes("={'_source':{},'_fixture_nonce':")) modelNonce = JSON.parse(/'_fixture_nonce':("[^"]+")/.exec(source)[1])
+      const scoped = /^exec\((.*),_evhil_[a-z0-9]+\)$/.exec(source)
+      if (scoped) {
+        const body = JSON.parse(scoped[1])
+        const phase = /\[_fixture_nonce,'([^']+)',/.exec(body)?.[1]
+        if (phase) {
+          let data
+          if (phase === 'init') data = 0
+          else if (phase === 'chunk') {
+            const match = /_source.setdefault\((\d+),(.+)\)\]\]\)\)$/.exec(body)
+            const offset = Number(match[1]), chunk = JSON.parse(match[2])
+            if (!fixtureChunks.has(offset)) fixtureChunks.set(offset, chunk)
+            data = [offset, fixtureChunks.get(offset)]
+          } else {
+            const text = [...fixtureChunks.values()].join(''), digest = createHash('sha256').update(text).digest('hex')
+            data = phase === 'assemble' ? Buffer.byteLength(text) : phase === 'verify' ? digest : [digest, true, 0, false]
+          }
+          return { ok: true, output: '__EVHILFIXTURE__' + JSON.stringify([modelNonce, phase, data]) }
+        }
+        return { ok: true, output: '' }
+      }
       const model = /\['model_command'\]\((.*)\)$/.exec(source)
       if (model) {
         const [operation, ...args] = JSON.parse('[' + model[1] + ']')
@@ -80,14 +100,13 @@ test('functional checks load fixtures in RAM despite unmounted storage and consu
   await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'memory,preview,orientation']), { nonce: 'abc123', report: value => reports.push(value) })
   const commands = device.calls.filter(call => call[0] === 'execute').map(call => call[1])
   assert.ok(commands.every(source => evReplExecInputBytes(source) <= EV_REPL_INPUT_MAX_BYTES))
-  assert.equal(commands.filter(source => source.startsWith("exec(''.join(")).length, 1)
-  const loader = commands.filter(source => source.includes("['_source']") || source.includes("={'_source':"))
-  const uploaded = loader.filter(source => source.includes("['_source'].append(")).map(source => JSON.parse(source.slice(source.indexOf('.append(') + 8, -1))).join('')
+  assert.equal(commands.filter(source => source.includes('exec(_text,globals())')).length, 1)
+  const uploaded = [...device.fixtureChunks.values()].join('')
   assert.equal(uploaded, await readFile(new URL('./fixtures/device-checks.py', import.meta.url), 'utf8'))
   assert.equal(device.files.size, 0)
   assert.equal(device.listeners.size, 0)
   assert.equal(reports.find(result => result.check === 'preview').data.received, 1)
-  assert.deepEqual(reports.at(-1), { check: 'summary', passed: 3, failed: 0, skipped: 0 })
+  assert.deepEqual(reports.at(-1), { check: 'summary', passed: 3, failed: 0, skipped: 0, blocked: 0 })
 })
 
 test('required IPA never silently skips; a failed check does not suppress later checks', async () => {
@@ -151,7 +170,7 @@ test('failed partial RAM loading still releases its namespace without filesystem
   const device = devicePeer(), reports = [], execute = device.python.execute
   let failed = false
   device.python.execute = async request => {
-    if (!failed && request.source.includes("['_source'].append")) { failed = true; throw new Error('fixture load failed') }
+    if (!failed && request.source.includes('_source.setdefault(')) { failed = true; throw new Error('fixture load failed') }
     return execute(request)
   }
   await assert.rejects(runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'memory']), { nonce: 'abc123', report: value => reports.push(value) }), { code: 'DEVICE_CHECKS_FAILED' })
@@ -168,7 +187,7 @@ test('identity and RAM checks do not require optional storage inspection support
     return info
   }
   await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', 'identity,memory']), { nonce: 'abc123', report: value => reports.push(value) })
-  assert.deepEqual(reports.at(-1), { check: 'summary', passed: 2, failed: 0, skipped: 0 })
+  assert.deepEqual(reports.at(-1), { check: 'summary', passed: 2, failed: 0, skipped: 0, blocked: 0 })
 })
 
 test('P4 issue regressions are included in the strict target-check path', async () => {
@@ -177,7 +196,7 @@ test('P4 issue regressions are included in the strict target-check path', async 
   const device = devicePeer(), reports = []
   await runDeviceChecks(device, parseArgs(['--tcp', 'test', '--checks', required.join(','), '--require-all']),
     { nonce: 'issue910', report: value => reports.push(value) })
-  assert.deepEqual(reports.at(-1), { check: 'summary', passed: required.length, failed: 0, skipped: 0 })
+  assert.deepEqual(reports.at(-1), { check: 'summary', passed: required.length, failed: 0, skipped: 0, blocked: 0 })
 })
 
 test('ESP-DL inference streams a model into RAM, respects the live REPL limit and never touches persistent storage', async () => {

@@ -147,6 +147,38 @@ class DeviceCorePipelineRulesTests(unittest.TestCase):
         self.assertTrue(actual["firmware"])
         self.assertTrue(actual["hil"])
 
+    def test_targeted_hardware_requires_opt_in_and_matching_artifacts(self):
+        variables = self.variables(CI_PIPELINE_SOURCE="api",
+                                   BOARD="ESP32_P4X_FUNCTION_EV_BOARD",
+                                   ESP_VISION_TEST_BOARD="ESP32_P4X_FUNCTION_EV_BOARD",
+                                   ESP_VISION_TEST_IDF_IMAGE="v5.5.6",
+                                   ESP_VISION_TEST_HARDWARE="1")
+        actual = self.jobs(variables, [])
+        self.assertTrue(actual["firmware"])
+        self.assertTrue(actual["hil"])
+        for mismatch in ({"BOARD": "ESP32_P4X_VISION"}, {"IDF_IMAGE": "release-v6.1"},
+                         {"ESP_VISION_TEST_IDF_IMAGE": ""}, {"ESP_VISION_DEVICE_CORE_ONLY": "1"},
+                         {"CI_COMMIT_TAG": "device-core-v0.8.0"}):
+            with self.subTest(mismatch=mismatch):
+                selected_jobs = self.jobs({**variables, **mismatch}, ["platform/main.c"])
+                self.assertFalse(selected_jobs["firmware"])
+                self.assertFalse(selected_jobs["hil"])
+
+    def test_each_hardware_job_selects_exactly_its_literal_firmware_dependency(self):
+        hil = yaml.safe_load((ROOT / ".gitlab/ci/target_test.yml").read_text())
+        rules = self.rules[".rules:test:target"]["rules"]
+        for name, job in hil.items():
+            if not name.startswith("target_test_"):
+                continue
+            variables = {**hil[job["extends"]]["variables"], **job["variables"]}
+            dependency = f"firmware: [{variables['IDF_IMAGE']}, {variables['BOARD']}]"
+            self.assertEqual(job["needs"], [{"job": dependency, "artifacts": True}])
+            target = {**variables, "ESP_VISION_TEST_BOARD": variables["BOARD"],
+                      "ESP_VISION_TEST_IDF_IMAGE": variables["IDF_IMAGE"],
+                      "ESP_VISION_TEST_HARDWARE": "1"}
+            self.assertTrue(selected(rules, target, []))
+            self.assertTrue(selected(self.rules[".rules:build:firmware"]["rules"], target, []))
+
     def test_publication_requires_protected_default_branch_push_and_sdk_changes(self):
         for overrides, paths in (
             ({"CI_COMMIT_BRANCH": "master"}, ["host/device-core/package.json"]),
