@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { EV_REPL_INPUT_MAX_BYTES, evReplExecInputBytes } from '../src/evrepl.js'
 import { validateJpegImage } from '../src/jpeg_validate.js'
+import { loadFixture } from './fixture-loader.mjs'
 
 export const DEVICE_CHECKS = Object.freeze(['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation', 'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream', 'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy', 'espdl_inference', 'isp_ccm_frames', 'isp_lsc_display'])
 // The npm package ships tests without models; repository checkouts use the bundled face detector.
@@ -89,27 +90,27 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
   const load = async () => {
     if (loaded) return
     if (loadError) throw loadError
+    let phase = 'inspect'
+    const started = Date.now()
     try {
       const info = await device.inspect({ fields: ['capabilities'], signal })
       const advertised = info.capabilities?.limits?.replInputMax
       if (Number.isSafeInteger(advertised) && advertised > 0) inputLimit = Math.min(inputLimit, advertised)
+      phase = 'read'
       const source = await readFile(new URL('./fixtures/device-checks.py', import.meta.url), 'utf8')
       namespaceStarted = true
-      await execute(`${namespace}={'_source':[],'_fixture_nonce':${JSON.stringify(nonce)}}`)
-      const append = chunk => `${namespace}['_source'].append(${JSON.stringify(chunk)})`
-      let chunk = ''
-      for (const character of source) {
-        if (evReplExecInputBytes(append(chunk + character)) > inputLimit) {
-          if (!chunk) throw failure('REPL_INPUT_LIMIT', 'Device REPL input limit cannot load hardware fixtures')
-          await execute(append(chunk))
-          chunk = ''
-        }
-        chunk += character
-      }
-      if (chunk) await execute(append(chunk))
-      await execute(`exec(''.join(${namespace}['_source']),${namespace});del ${namespace}['_source']`)
+      await loadFixture(source, { namespace, nonce, inputLimit, execute, signal, report })
       loaded = true
-    } catch (error) { loadError = error; throw error }
+    } catch (error) {
+      const diagnostics = error.bootstrap ?? { phase, elapsedMs: Date.now() - started, lastSuccessfulOperation: null }
+      if (signal?.aborted) {
+        report({ check: 'fixture-bootstrap', event: 'cancelled', diagnostics })
+        cancelled(signal)
+      }
+      loadError = Object.assign(failure('FIXTURE_UNAVAILABLE', 'Blocked by fixture-bootstrap; the device check did not run'), { diagnostics })
+      record({ name: 'fixture-bootstrap', status: 'FAIL', error: { code: error.code ?? 'FIXTURE_BOOTSTRAP_FAILED', message: 'Could not initialize the shared Python fixture' }, diagnostics, seconds: (Date.now() - started) / 1000 })
+      throw loadError
+    }
   }
   const invoke = async (name, extra = {}) => {
     await load()
@@ -170,6 +171,9 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
       const started = Date.now()
       let result
       try {
+        // All checks except identity depend on this shared prerequisite. Do not
+        // start model reads, preview listeners or captures after it has failed.
+        if (name !== 'identity' && loadError) throw loadError
         let data
         if (name === 'identity') {
           const info = await device.inspect({ fields: ['identity', 'capabilities', 'runtime'], signal })
@@ -216,7 +220,8 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
       } catch (error) {
         cancelled(signal)
         const skip = (unsupported(error) || error.code === 'MODEL_UNAVAILABLE') && !options.requireAll && !(name === 'display' && options.screenOutput)
-        result = { name, status: skip ? 'SKIP' : 'FAIL', error: { code: error.code ?? 'DEVICE_CHECK_FAILED', message: String(error.message ?? 'Device check failed').slice(0, 240) } }
+        result = { name, status: error === loadError ? 'BLOCKED' : skip ? 'SKIP' : 'FAIL', error: { code: error.code ?? 'DEVICE_CHECK_FAILED', message: String(error.message ?? 'Device check failed').slice(0, 240) } }
+        if (error === loadError) result.blockedBy = 'fixture-bootstrap'
       } finally {
         if (name === 'display' && loaded) {
           try { await execute(`${namespace}['close_display']()`, 5000, AbortSignal.timeout(6000)) }
@@ -239,8 +244,8 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
     }
     if (cleanupError) record({ name: 'fixture-cleanup', status: 'FAIL', error: { code: 'FIXTURE_CLEANUP_FAILED', message: 'Could not release the hardware fixture namespace' } })
   }
-  const summary = { passed: results.filter(result => result.status === 'PASS').length, failed: results.filter(result => result.status === 'FAIL').length, skipped: results.filter(result => result.status === 'SKIP').length }
+  const summary = { passed: results.filter(result => result.status === 'PASS').length, failed: results.filter(result => result.status === 'FAIL').length, skipped: results.filter(result => result.status === 'SKIP').length, blocked: results.filter(result => result.status === 'BLOCKED').length }
   report({ check: 'summary', ...summary })
-  if (summary.failed) throw Object.assign(failure('DEVICE_CHECKS_FAILED', 'One or more device checks failed'), { results })
+  if (summary.failed || summary.blocked) throw Object.assign(failure('DEVICE_CHECKS_FAILED', 'One or more device checks failed or were blocked'), { results })
   return results
 }
