@@ -877,6 +877,18 @@ static bool ev_mux_prepare_frame(ev_mux_frame_t *frame,
         return false;
     }
     frame->payload_crc_state = 0xffffffffu;
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    if (options->installer_record) {
+        if (options->link->transport_id != EV_TRANSPORT_USB || metadata_len != 0 ||
+                payload_len == 0 || payload_len > 1024 || encoded_len != payload_len ||
+                options->tx_class != EV_MUX_TX_SESSION) {
+            return false;
+        }
+        frame->header_len = 0;
+        frame->header_ready = true;
+        return true;
+    }
+#endif
     frame->header_ready = payload_len == 0;
     if (payload_len == 0) {
         return ev_mux_build_header(frame, 0);
@@ -945,6 +957,11 @@ static esp_err_t ev_mux_enqueue_normal(const ev_mux_submit_options_t *options,
         return ESP_ERR_INVALID_SIZE;
     }
     encoded_len = (size_t)header_len + metadata_len + payload_len + 1u;
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    if (options->installer_record) {
+        encoded_len = payload_len;
+    }
+#endif
     if (encoded_len > EV_MUX_QUEUE_BYTES) {
         return ESP_ERR_INVALID_SIZE;
     }
@@ -1088,6 +1105,11 @@ static bool ev_mux_special_prepare(ev_mux_frame_t *frame,
                                    size_t payload_len,
                                    ev_mux_ticket_t ticket)
 {
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    if (options->installer_record) {
+        return false;
+    }
+#endif
     size_t encoded_len = EV_MUX_HEADER_MAX + metadata_len + payload_len + 1u;
     char header[EV_MUX_HEADER_MAX];
     int header_len = snprintf(header,
@@ -1315,6 +1337,20 @@ esp_err_t ev_mux_submit_link(const ev_mux_submit_options_t *options,
     }
     return result;
 }
+
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+esp_err_t ev_mux_submit_installer_record(const ev_mux_submit_options_t *options,
+                                         const void *record, size_t length)
+{
+    if (options == NULL || options->link == NULL || options->link->transport_id != EV_TRANSPORT_USB ||
+            record == NULL || length == 0 || length > 1024 || options->tx_class != EV_MUX_TX_SESSION) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    ev_mux_submit_options_t bounded = *options;
+    bounded.installer_record = true;
+    return ev_mux_submit_link(&bounded, "", record, length, NULL);
+}
+#endif
 
 static bool ev_mux_link_equal(const ev_link_ref_t *left, const ev_link_ref_t *right)
 {
@@ -2256,6 +2292,11 @@ static ev_mux_frame_auth_t ev_mux_frame_authorized(const ev_mux_frame_t *frame)
     if (frame->priority == EV_MUX_TX_SESSION) {
         return EV_MUX_FRAME_ALLOWED;
     }
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    if (snapshot.installer_owner && frame->tx_offset == 0) {
+        return EV_MUX_FRAME_STALE;
+    }
+#endif
     // Once a frame has started, preserve its wire boundary for this exact
     // owner. In particular, release_prepare makes output_ready false while
     // the release ACK waits behind the partial frame. New ordinary frames
@@ -2760,6 +2801,11 @@ static bool ev_mux_stream_target(ev_stream_t stream,
 
     ev_session_snapshot_t snapshot;
     if (ev_session_snapshot(&snapshot) && snapshot.has_owner) {
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+        if (snapshot.installer_owner) {
+            return false;
+        }
+#endif
         target->link = snapshot.owner_link;
         memcpy(target->session_id, snapshot.session_id, sizeof(target->session_id));
         target->options.link = &target->link;

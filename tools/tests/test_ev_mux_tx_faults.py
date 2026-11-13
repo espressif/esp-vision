@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pathlib
+import itertools
 import re
 import shutil
 import subprocess
@@ -20,8 +21,8 @@ class EvMuxTxFaultInjectionTest(unittest.TestCase):
 
         source = ROOT / "tools/tests/test_ev_mux_tx_faults.c"
         stubs = ROOT / "tools/tests/ev_mux_tx_stubs"
-        for spiram_enabled in (False, True):
-            with self.subTest(config_spiram=spiram_enabled):
+        for spiram_enabled, iris_enabled in itertools.product((False, True), repeat=2):
+            with self.subTest(config_spiram=spiram_enabled, iris=iris_enabled):
                 with tempfile.TemporaryDirectory(prefix="ev-mux-tx-") as temp_dir:
                     binary = pathlib.Path(temp_dir) / "test_ev_mux_tx_faults"
                     subprocess.run(
@@ -33,6 +34,7 @@ class EvMuxTxFaultInjectionTest(unittest.TestCase):
                             "-Wno-unused-function",
                             "-Wno-unused-variable",
                             f"-DCONFIG_SPIRAM={int(spiram_enabled)}",
+                            f"-DESP_VISION_ENABLE_IRISFW={int(iris_enabled)}",
                             f"-I{stubs}",
                             f"-I{ROOT / 'platform'}",
                             str(source),

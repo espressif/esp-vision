@@ -32,6 +32,9 @@ typedef struct {
     uint32_t input_generation;
     uint32_t transition_id;
     bool handshake_complete;
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    bool installer_owner;
+#endif
     bool vm_ready;
     ev_transport_id_t no_owner_route;
 } ev_session_state_data_t;
@@ -144,6 +147,9 @@ static void ev_session_snapshot_locked(uint32_t now_ms, ev_session_snapshot_t *o
     out->input_generation = s_session.input_generation;
     out->transition_id = s_session.transition_id;
     out->handshake_complete = s_session.handshake_complete;
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    out->installer_owner = out->has_owner && s_session.installer_owner;
+#endif
     out->vm_ready = s_session.vm_ready;
     out->user_route = s_session.no_owner_route;
     out->debug_route = out->user_route;
@@ -263,10 +269,16 @@ ev_session_result_t ev_session_acquire(const ev_link_ref_t *link,
         ev_session_make_id(s_session.session_id);
         s_session.last_activity_ms = now_ms;
         s_session.handshake_complete = false;
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+        s_session.installer_owner = false;
+#endif
         s_session.transition_id = ev_session_next_counter(s_session.transition_id);
         ev_session_bump_input_generation_locked();
         acquired = true;
     } else if ((s_session.state == EV_SESSION_OWNED) &&
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+               !s_session.installer_owner &&
+#endif
                ev_session_link_equal(link, &s_session.owner_link) &&
                (strcmp(client_nonce, s_session.client_nonce) == 0)) {
         // A repeated hello for the same logical connection is idempotent.
@@ -328,6 +340,33 @@ ev_session_result_t ev_session_keepalive(const ev_link_ref_t *link,
     ev_session_unlock();
     return result;
 }
+
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+ev_session_result_t ev_session_pending_keepalive(const ev_link_ref_t *link,
+                                                 const char *session_id,
+                                                 uint32_t now_ms,
+                                                 ev_session_snapshot_t *out_snapshot)
+{
+    if (link == NULL || session_id == NULL || out_snapshot == NULL) {
+        return EV_SESSION_RESULT_SESSION_REQUIRED;
+    }
+    if (!ev_transport_link_is_current(link)) {
+        return EV_SESSION_RESULT_STALE_LINK;
+    }
+    ev_session_lock();
+    ev_session_result_t result = EV_SESSION_RESULT_SESSION_REQUIRED;
+    if (s_session.state == EV_SESSION_OWNED && !s_session.handshake_complete &&
+            ev_session_link_equal(link, &s_session.owner_link) &&
+            strcmp(session_id, s_session.session_id) == 0) {
+        s_session.installer_owner = true;
+        s_session.last_activity_ms = now_ms;
+        ev_session_snapshot_locked(now_ms, out_snapshot);
+        result = EV_SESSION_RESULT_OK;
+    }
+    ev_session_unlock();
+    return result;
+}
+#endif
 
 ev_session_result_t ev_session_authorize(const ev_link_ref_t *link,
                                          const char *session_id,
@@ -415,6 +454,12 @@ bool ev_session_hello_complete(const ev_link_ref_t *link,
         ev_session_unlock();
         return false;
     }
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    if (s_session.installer_owner) {
+        ev_session_unlock();
+        return false;
+    }
+#endif
     if (s_session.handshake_complete) {
         ev_session_unlock();
         return true;

@@ -256,6 +256,8 @@ if(ESP_VISION_ENABLE_IRISFW)
     target_sources(usermod_esp_vision_platform INTERFACE
         ${ESP_VISION_BOARD_DIR}/irisfw_boot.c
         ${ESP_VISION_BOARD_DIR}/irisfw_network.c
+        ${ESP_VISION_BOARD_DIR}/irisfw_status.c
+        ${ESP_VISION_BOARD_DIR}/irisfw_acceptance.c
     )
     target_compile_definitions(usermod_esp_vision_platform INTERFACE ESP_VISION_ENABLE_IRISFW=1)
     list(APPEND IDF_COMPONENTS app_update)

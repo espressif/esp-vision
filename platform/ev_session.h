@@ -58,6 +58,9 @@ typedef struct {
     uint32_t input_generation;
     uint32_t transition_id;
     bool handshake_complete;
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    bool installer_owner;
+#endif
     bool vm_ready;
     ev_transport_id_t user_route;
     ev_transport_id_t debug_route;
@@ -85,6 +88,13 @@ ev_session_result_t ev_session_keepalive(const ev_link_ref_t *link,
                                          const char *session_id,
                                          uint32_t now_ms,
                                          ev_session_snapshot_t *out_snapshot);
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+// Installer-only lease activity; never marks EV-MUX output/REPL ready.
+ev_session_result_t ev_session_pending_keepalive(const ev_link_ref_t *link,
+                                                 const char *session_id,
+                                                 uint32_t now_ms,
+                                                 ev_session_snapshot_t *out_snapshot);
+#endif
 ev_session_result_t ev_session_authorize(const ev_link_ref_t *link,
                                          const char *session_id,
                                          bool vm_related,

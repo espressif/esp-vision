@@ -392,6 +392,34 @@ static void test_repl_queue_generation_race(void)
                                      EV_SESSION_CHANGE_RELEASED));
 }
 
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+static void test_installer_lease(void)
+{
+    ev_link_ref_t usb = current_link(EV_TRANSPORT_USB, 0);
+    ev_link_ref_t tcp = current_link(EV_TRANSPORT_TCP, 0);
+    const char nonce[] = "1234567890abcdef1234567890abcdef";
+    ev_session_snapshot_t session, other;
+    assert(ev_session_acquire(&usb, nonce, 100, &session) == EV_SESSION_RESULT_OK);
+    assert(ev_session_pending_keepalive(&usb, session.session_id, 500, &session) == EV_SESSION_RESULT_OK);
+    assert(session.installer_owner && !session.handshake_complete);
+    assert(!ev_session_hello_complete(&usb, session.session_id, true));
+    assert(!ev_session_output_ready(&usb, session.session_id));
+    assert(ev_session_acquire(&usb, nonce, 600, &other) == EV_SESSION_RESULT_BUSY);
+    assert(ev_session_keepalive(&usb, session.session_id, 600, &other) != EV_SESSION_RESULT_OK);
+    assert(ev_session_authorize(&usb, session.session_id, false, 0, false, 600, &other) != EV_SESSION_RESULT_OK);
+    assert(ev_session_pending_keepalive(&tcp, session.session_id, 600, &other) != EV_SESSION_RESULT_OK);
+    assert(ev_session_pending_keepalive(&usb, nonce, 600, &other) != EV_SESSION_RESULT_OK);
+    assert(!ev_session_tick(500 + EV_SESSION_LEASE_MS - 1));
+    assert(ev_session_tick(500 + EV_SESSION_LEASE_MS));
+    assert(ev_session_acquire(&usb, nonce, 20000, &session) == EV_SESSION_RESULT_OK);
+    assert(!session.installer_owner);
+    assert(ev_session_hello_complete(&usb, session.session_id, true));
+    assert(ev_session_output_ready(&usb, session.session_id));
+    assert(ev_session_pending_keepalive(&usb, session.session_id, 21000, &other) != EV_SESSION_RESULT_OK);
+    assert(ev_session_link_lost(&usb, EV_SESSION_CHANGE_LINK_LOST));
+}
+#endif
+
 int main(void)
 {
     for (ev_transport_id_t id = EV_TRANSPORT_USJ; id < EV_TRANSPORT_MAX; ++id) {
@@ -411,6 +439,9 @@ int main(void)
     test_expiry_and_clock_wrap();
     test_route_apply_race();
     test_repl_queue_generation_race();
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    test_installer_lease();
+#endif
     puts("ev_session host tests passed");
     return 0;
 }

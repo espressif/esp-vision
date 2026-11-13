@@ -11,6 +11,7 @@ esp_err_t nvs_open_from_partition(const char *, const char *, int, nvs_handle_t 
 esp_err_t nvs_get_str(nvs_handle_t, const char *, char *, size_t *);
 esp_err_t nvs_get_u8(nvs_handle_t, const char *, uint8_t *);
 esp_err_t nvs_get_u32(nvs_handle_t, const char *, uint32_t *);
+esp_err_t nvs_get_blob(nvs_handle_t, const char *, void *, size_t *);
 esp_err_t nvs_set_str(nvs_handle_t, const char *, const char *);
 esp_err_t nvs_set_u8(nvs_handle_t, const char *, uint8_t);
 esp_err_t nvs_set_u32(nvs_handle_t, const char *, uint32_t);
