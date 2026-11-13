@@ -8,6 +8,17 @@ Three version identifiers
 
 ``firmware.version`` identifies the Git/release build; ``evMuxVersion`` defines the required session protocol; ``EVMUX/1`` identifies wire framing. Determine compatibility from evMuxVersion/capabilities, then display, record or verify firmware.version. Do not infer protocol from date strings.
 
+Read-only firmware installation evidence
+----------------------------------------
+
+``firmware.status`` is a ``user.rpc`` method advertised as ``firmware.status.v1`` only by the opt-in ``ESP32_S31_MOSAICO`` Iris-package build. Acquire an EV-MUX v4 owner session first. Send ``{"imageSize": N}``, where N is the exact application BIN length from the validated package (1–7340032 bytes). The request runs on the transport task, without REPL entry, Python execution, writes or reset. Missing/malformed sizes return ``INVALID_ARGUMENT``; incomplete VM startup returns ``NOT_READY``; unconfirmed OTA or unreadable installation evidence returns ``EVIDENCE_UNAVAILABLE``.
+
+A successful response has ``ok=true``, ``schemaVersion=1``, ``deviceId`` (factory MAC as 12 lowercase hex digits), ``board``, ``firmware.id/version``, a 32-character hexadecimal ``bootId``, ``vmReady=true``, ``bootConfirmed=true``, numeric IDF ``resetReason`` and ``crashReset``. The boot token is stable across VM soft resets and changes on hardware reboot; the installer compatibility layer uses its first eight bytes as the little-endian Iris Boot ID.
+
+``application`` contains ``address``, partition ``capacity``, requested ``imageSize``, full BIN ``sha256``, ``elfSha256`` and ``otaState="valid"``. The full BIN hash includes all requested bytes, including the appended image digest; it is not ESP-IDF's embedded image hash. ``partitionTableSha256`` covers exactly 4096 Flash bytes starting at the configured partition-table offset. ``installation.operationId`` and signed ``installation.result`` expose the retained installer's persisted commit receipt without sending or implementing its protocol. Missing or malformed receipts fail the query instead of inventing a successful receipt. A recorded nonzero result is returned unchanged and must fail host acceptance.
+
+An installation verifier must compare the live device identity, board, exact package length/hashes/layout and operation ID against its intended installation, require zero commit result and ``crashReset=false``, and observe a stable boot token across acceptance. A healthy query for another image or an earlier operation is not installation success. Startup confirmation does not validate user Python code or peripherals. This interface does not enter Vibe Mode; the operator uses AI + Reset for the next installation.
+
 Byte layout of a frame
 ----------------------
 

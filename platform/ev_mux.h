@@ -54,6 +54,10 @@ typedef struct {
     // Only the UART negotiation RPC/release response may cross a baud-switch
     // pause. All other endpoints and already-started frames are unaffected.
     bool uart_baud_control;
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    // Internal installer records share the TX worker, never a second writer.
+    bool installer_record;
+#endif
     ev_mux_completion_cb_t completion;
     const void *completion_context;
     size_t completion_context_len;
@@ -70,6 +74,12 @@ esp_err_t ev_mux_submit_link(const ev_mux_submit_options_t *options,
                              const void *payload,
                              size_t payload_len,
                              ev_mux_ticket_t *ticket_out);
+
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+// USB-only, bounded installer text, serialized between complete EV-MUX frames.
+esp_err_t ev_mux_submit_installer_record(const ev_mux_submit_options_t *options,
+                                         const void *record, size_t length);
+#endif
 
 // Dedicated bounded pools for large debug responses and latest-only preview.
 // Both functions copy payload bytes before returning. Each pool is allocated

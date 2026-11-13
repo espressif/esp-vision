@@ -127,7 +127,12 @@ ESP-VISION 配网操作写回相同的共享键，另用 ``ev_enabled``（u8）�
 
 此包要求设备已安装兼容的 Vibe Mode，版本不低于 0.2.0，通过其原生 System Update 流程安装 ``.irisfw``。这个构建的原始 IDF 烧录清单不是 Vibe Mode 初始化包，其中的 bootloader 和空白 OTA 元数据不能替换保留系统。从普通 factory 布局切换不会迁移原有文件。新的 ``ffat`` 遵循板级文件系统初始化策略，更新包不携带空白文件系统镜像。
 
-MicroPython 和 EV-MUX 就绪后，启用 Iris 宏的应用确认待验证 OTA 镜像，并在现有 ABI 2 恢复元数据中记录应用地址。这只是启动确认，外设仍须分别验收。应用不引入 Iris 运行库或 USB 传输，继续使用 EV-MUX。主机验收必须在重启后从 Vibe Mode 的 Iris 通路切换到 ESP-VISION；要求应用发送 Iris HEALTHY 事件的更新器，需要 EV-MUX 验收适配器才能确定此固件成功启动。
+MicroPython 和 EV-MUX 就绪后，启用 Iris 宏的应用确认待验证 OTA 镜像，并在现有 ABI 2 恢复元数据中记录应用地址。同一宏在现有 USB CDC 接口启用最小 Iris 0.2 安装验收子集：硬件与固件身份、认证绑定、BOOT/LINK_READY/HEALTHY 事件、状态、ping/时间及只读系统清单。原生更新器无需修改，即可核对新启动、准确 ELF 身份、分区表哈希和保留的安装操作回执。HEALTHY 要求启动已确认、VM 就绪且复位原因不是崩溃；外设仍须分别验收。
+
+兼容代码复用 EV-MUX 的先到先得会话租约和发送队列。仅在 EV-MUX 帧之外解析 Iris 记录，发送时不插入已经开始的 EV-MUX 帧。Iris owner 不会启用 EV-MUX 的 REPL、日志或预览输出；断开或租约到期后释放所有权。Iris 构建为 USB 产品字符串增加 ``ESP-Iris`` 标记以供原生发现，沿用原 CDC 接口。普通构建不编译该适配，不引入 Iris 运行库、第二套 USB、应用更新器或远程进入 Vibe Mode 的命令。
+
+后续安装新包前，请按住 AI 键并按 Reset，手动进入 Vibe Mode。应用拒绝 Iris 复位和更新写入命令。原生更新器释放设备后，ESP-VISION 客户端继续使用 EV-MUX；其 ``firmware.status.v1`` 能力提供应用 BIN 准确哈希等额外只读证据，详见 :doc:`../communication/wire-protocol`。
+
 
 容器与发布
 ~~~~~~~~~~

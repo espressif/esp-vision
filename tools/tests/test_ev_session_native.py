@@ -12,7 +12,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run_host_test() -> None:
+def run_host_test(iris_enabled=False) -> None:
     with tempfile.TemporaryDirectory(prefix="ev-session-test-") as temporary:
         executable = Path(temporary) / "ev_session_host_test"
         command = [
@@ -23,6 +23,7 @@ def run_host_test() -> None:
             "-Wextra",
             "-Werror",
             "-pthread",
+            f"-DESP_VISION_ENABLE_IRISFW={int(iris_enabled)}",
             f"-I{ROOT / 'tools/tests/ev_session_stubs'}",
             f"-I{ROOT / 'platform'}",
             str(ROOT / "platform/ev_session.c"),
@@ -37,6 +38,9 @@ def run_host_test() -> None:
 class EvSessionNativeTests(unittest.TestCase):
     def test_production_session_state_machine(self) -> None:
         run_host_test()
+
+    def test_installer_lease_isolation(self) -> None:
+        run_host_test(iris_enabled=True)
 
 
 if __name__ == "__main__":

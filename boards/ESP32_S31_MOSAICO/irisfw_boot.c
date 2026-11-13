@@ -12,13 +12,19 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+static bool s_confirmed;
+
+bool esp_vision_irisfw_boot_confirmed(void)
+{
+    return __atomic_load_n(&s_confirmed, __ATOMIC_ACQUIRE);
+}
+
 /* Mosaico Recovery ABI 2 uses this NVS record independently of Iris transport.
  * Keep the rest of sysmeta intact; initialization errors never permit erasure.
  */
 esp_err_t esp_vision_irisfw_confirm_boot(void)
 {
-    static bool confirmed;
-    if (confirmed) {
+    if (esp_vision_irisfw_boot_confirmed()) {
         return ESP_OK;
     }
     const esp_partition_t *app = esp_ota_get_running_partition();
@@ -54,6 +60,6 @@ esp_err_t esp_vision_irisfw_confirm_boot(void)
         ret = nvs_commit(metadata);
     }
     nvs_close(metadata);
-    confirmed = ret == ESP_OK;
+    __atomic_store_n(&s_confirmed, ret == ESP_OK, __ATOMIC_RELEASE);
     return ret;
 }

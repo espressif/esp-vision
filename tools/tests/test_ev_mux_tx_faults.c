@@ -318,7 +318,8 @@ static ev_link_ref_t mock_tcp_link(uint8_t slot)
 bool ev_transport_link_is_current(const ev_link_ref_t *link)
 {
     if ((link == NULL) || ((link->transport_id != EV_TRANSPORT_TCP) &&
-                           (link->transport_id != EV_TRANSPORT_UART)) ||
+                           (link->transport_id != EV_TRANSPORT_UART) &&
+                           (link->transport_id != EV_TRANSPORT_USB)) ||
             (link->slot >= EV_TRANSPORT_TCP_LINKS)) {
         return false;
     }
@@ -2378,11 +2379,66 @@ static void test_preview_and_observer_payload_bounds(void)
 
 #endif
 
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+static void test_installer_records_preserve_frame_boundaries(void)
+{
+    const char *session = "0123456789abcdef0123456789abcdef";
+    const char raw[] = "\r\n@iris/0.2 aGVsbG8=\r\n";
+    for (unsigned raw_first = 0; raw_first < 2; ++raw_first) {
+        mock_reset_mux();
+        ev_link_ref_t usb = { .transport_id = EV_TRANSPORT_USB, .slot = 0, .generation = 1 };
+        mock_set_owner(&usb, session);
+        ev_mux_submit_options_t opts = { .link = &usb, .session_id = session, .tx_class = EV_MUX_TX_SESSION };
+        uint8_t framed[256], expected[512];
+        size_t framed_len = mock_make_frame("{}", (const uint8_t *)"abcde", 5, framed, sizeof(framed));
+        if (raw_first) {
+            assert(ev_mux_submit_installer_record(&opts, raw, sizeof(raw) - 1) == ESP_OK);
+        } else {
+            assert(ev_mux_submit_link(&opts, "{}", "abcde", 5, NULL) == ESP_OK);
+        }
+        s_max_write = 3;
+        ev_mux_process_target(EV_TRANSPORT_USB);
+        assert(s_mock_links[0].output_len == 3);
+        if (raw_first) {
+            assert(ev_mux_submit_link(&opts, "{}", "abcde", 5, NULL) == ESP_OK);
+            memcpy(expected, raw, sizeof(raw) - 1);
+            memcpy(expected + sizeof(raw) - 1, framed, framed_len);
+        } else {
+            assert(ev_mux_submit_installer_record(&opts, raw, sizeof(raw) - 1) == ESP_OK);
+            memcpy(expected, framed, framed_len);
+            memcpy(expected + framed_len, raw, sizeof(raw) - 1);
+        }
+        for (unsigned i = 0; i < 200 && s_targets[EV_TRANSPORT_USB].frames_used; ++i) {
+            ev_mux_process_target(EV_TRANSPORT_USB);
+        }
+        assert(s_targets[EV_TRANSPORT_USB].frames_used == 0 && s_targets[EV_TRANSPORT_USB].bytes_used == 0);
+        assert(s_mock_links[0].output_len == framed_len + sizeof(raw) - 1);
+        assert(memcmp(s_mock_links[0].output, expected, s_mock_links[0].output_len) == 0);
+        s_mock_session.installer_owner = true;
+        s_mock_session.handshake_complete = false;
+        assert(!ev_stdio_write_repl_stdout("ignored", 7));
+        assert(ev_mux_submit_installer_record(&opts, raw, sizeof(raw) - 1) == ESP_OK);
+        // A stale queued record must never be sent to the replacement link.
+        size_t before = s_mock_links[0].output_len;
+        ++s_mock_links[0].generation;
+        ev_mux_process_target(EV_TRANSPORT_USB);
+        assert(s_mock_links[0].output_len == before);
+        assert(s_targets[EV_TRANSPORT_USB].frames_used == 0);
+        ev_link_ref_t tcp = mock_tcp_link(0);
+        opts.link = &tcp;
+        assert(ev_mux_submit_installer_record(&opts, raw, sizeof(raw) - 1) == ESP_ERR_INVALID_ARG);
+    }
+}
+#endif
+
 int main(void)
 {
     ev_mux_test_time_us = 0;
     test_arena_init_failure_retry_and_idempotence();
     test_short_writes_and_owned_payload();
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    test_installer_records_preserve_frame_boundaries();
+#endif
     test_tcp_links_share_queue_and_reservations();
     test_full_frame_deadline_and_callback_copy();
     test_partial_repl_finishes_before_release_ack();

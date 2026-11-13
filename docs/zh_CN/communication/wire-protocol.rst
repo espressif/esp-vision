@@ -8,6 +8,17 @@
 
 ``firmware.version`` 表示 Git/发布构建身份；``evMuxVersion`` 表示客户端必须遵守的会话协议；帧头 ``EVMUX/1`` 表示 wire framing。应先用 ``evMuxVersion`` 与 capabilities 判断兼容性，再以 firmware.version 展示、记录或校验指定固件，不按日期字符串猜测协议。
 
+只读固件安装证据
+----------------
+
+``firmware.status`` 是 ``user.rpc`` 方法，仅启用 Iris 打包的 ``ESP32_S31_MOSAICO`` 构建声明 ``firmware.status.v1`` 能力。调用前先获取 EV-MUX v4 owner 会话。请求为 ``{"imageSize": N}``，N 必须是已校验包中应用 BIN 的准确字节数（1–7340032）。请求在传输任务执行，不进入 REPL、不执行 Python、不写入、不复位。缺失或错误长度返回 ``INVALID_ARGUMENT``，VM 未就绪返回 ``NOT_READY``，OTA 未确认或安装证据不可读返回 ``EVIDENCE_UNAVAILABLE``。
+
+成功响应包含 ``ok=true``、``schemaVersion=1``、``deviceId``（出厂 MAC 的 12 位小写十六进制）、``board``、``firmware.id/version``、32 位十六进制 ``bootId``、``vmReady=true``、``bootConfirmed=true``、IDF 数值 ``resetReason`` 和 ``crashReset``。启动标识在 VM 软复位后保持不变，硬件重新启动后变化，安装确认适配将其前 8 字节按小端解释为 Iris Boot ID。
+
+``application`` 包含 ``address``、分区 ``capacity``、请求的 ``imageSize``、完整 BIN 的 ``sha256``、``elfSha256`` 和 ``otaState="valid"``。完整 BIN 哈希包括指定长度内的全部字节和末尾镜像摘要，不等同于 ESP-IDF 的内嵌镜像哈希。``partitionTableSha256`` 覆盖配置分区表地址起的 4096 字节。``installation.operationId`` 和有符号 ``installation.result`` 只读返回保留安装器持久化的提交回执，不发送或实现其协议。回执缺失或格式错误时查询失败，不生成成功回执；非零结果原样返回，主机必须将其判为验收失败。
+
+安装验收应对照本次目标，核对实时设备身份、板型、包内准确长度、哈希、布局和操作 ID，要求提交结果为零、``crashReset=false``，并在验收前后观察相同的启动标识。其他镜像或历史操作的健康响应不能证明本次安装成功。启动确认不验证用户 Python 代码或外设。本接口不进入 Vibe Mode，后续安装由用户通过 AI + Reset 手动进入。
+
 一帧的字节布局
 --------------
 

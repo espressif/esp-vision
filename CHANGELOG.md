@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Add owner-scoped, read-only EV-MUX `firmware.status` evidence for Mosaico Iris packages: exact BIN and ELF hashes, partition-table hash, confirmed OTA state, hardware-boot token, reset cause and retained installer receipt. Preserve manual Vibe Mode entry.
+
 - Publish deterministic `.irisfw` application packages for the opt-in `ESP32_S31_MOSAICO` build on firmware tags, with independent archive/image/layout validation, build provenance and checksums in the GitLab Generic Package Registry. Preserve standard ESP-IDF project/version descriptors in the Iris build; retain EV-MUX and existing BIN releases. Registry publication requires firmware qualification and verifies downloaded bytes before publishing the release index.
 
 - Enforce UTF-8 manifests and unambiguous ZIP member names; add Iris package boundary regressions for overlapping writes, application-partition overflow, invalid erased padding and excluded application identities, including packages with recomputed valid component hashes.
@@ -38,6 +40,10 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Speed up complete firmware installation by trusting checked, partition-bounded FFAT erase commands without erased-range reads, and reuse official esptool whole-write MD5 verification receipts in Node/browser adapters instead of transferring firmware back to the host. Keep SHA-256 qualification before writing and full readback for custom adapters without receipts.
 
 ### Fixed
+
+- Correct the installation-evidence heading underline so strict English HTML and PDF documentation builds pass.
+
+- Confirm native Iris installations with a bounded USB console acceptance subset only when `ESP_VISION_ENABLE_IRISFW` is enabled: identity, HEALTHY, status and retained installation inventory. Share EV-MUX ownership and its whole-frame TX scheduler without enabling EV-MUX REPL/preview for the installer; ordinary firmware remains unchanged.
 
 - Restore Mosaico's native RGB565 framebuffer byte order after LCD DMA completes so screen captures retain correct colors; reject captures after failed frame submissions. Cover frame validity in both board-specific and shared DMA lifetime regressions.
 

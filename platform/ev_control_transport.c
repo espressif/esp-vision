@@ -46,6 +46,10 @@
 #include "ev_stdio.h"
 #include "network_service.h"
 #include "firmware_info.h"
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+#include "firmware_status.h"
+#include "irisfw_acceptance.h"
+#endif
 #include "device_identity.h"
 #include "jpeg.h"
 #include "sdcard.h"
@@ -1507,6 +1511,9 @@ static esp_err_t ev_control_send_capabilities(uint32_t seq)
                      "\"preview.subscribe\",\"preview.unsubscribe\",\"preview.observers.v1\","
                      "\"file.write.binary\",\"script.write\",\"script.write.chunked\",\"script.run\","
                      "\"launcher.boot.status.v1\",\"launcher.trial.status.v1\",\"launcher.typed-runner.v1\","
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+                     "\"firmware.status.v1\","
+#endif
 #if MICROPY_HW_ENABLE_USBDEV && MICROPY_HW_USB_MSC
                      "\"debug.info\",\"debug.capture_frame\",\"debug.capture_frame.observed.v1\",\"debug.capture_screen\",\"device.control\",\"storage.writer.lease\"],"
 #else
@@ -2649,6 +2656,51 @@ static esp_err_t ev_control_send_uart_baud(uint32_t seq, const char *method, con
     return result;
 }
 
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+static esp_err_t ev_control_send_firmware_status(uint32_t seq, const char *payload)
+{
+    ev_control_json_field_t fields[] = {
+        ev_control_json_uint32_field("imageSize", true),
+    };
+    if (!ev_control_json_parse_object(payload, strlen(payload), fields, MP_ARRAY_SIZE(fields))) {
+        return ev_control_send_error("firmware.status", seq, "INVALID_ARGUMENT", "imageSize must be an integer");
+    }
+    if (!ev_session_vm_ready()) {
+        return ev_control_send_error("firmware.status", seq, "NOT_READY", "VM startup is incomplete");
+    }
+    uint32_t epoch = ev_session_vm_epoch();
+    esp_vision_firmware_status_t status;
+    esp_err_t ret = esp_vision_firmware_status(fields[0].value.uint32, &status);
+    if (ret != ESP_OK) {
+        const char *code = ret == ESP_ERR_INVALID_ARG ? "INVALID_ARGUMENT" : "EVIDENCE_UNAVAILABLE";
+        return ev_control_send_error("firmware.status", seq, code, esp_err_to_name(ret));
+    }
+    if (!ev_session_vm_ready() || ev_session_vm_epoch() != epoch) {
+        return ev_control_send_error("firmware.status", seq, "NOT_READY", "VM reset during inspection");
+    }
+    char response[1152];
+    int length = snprintf(response, sizeof(response),
+                          "{\"ok\":true,\"schemaVersion\":1,\"deviceId\":\"%s\",\"board\":\"%s\","
+                          "\"firmware\":{\"id\":\"%s\",\"version\":\"%s\"},"
+                          "\"bootId\":\"%s\",\"vmReady\":true,\"bootConfirmed\":true,"
+                          "\"resetReason\":%" PRIu32 ",\"crashReset\":%s,"
+                          "\"application\":{\"address\":%" PRIu32 ",\"capacity\":%" PRIu32 ","
+                          "\"imageSize\":%" PRIu32 ",\"sha256\":\"%s\",\"elfSha256\":\"%s\",\"otaState\":\"valid\"},"
+                          "\"partitionTableSha256\":\"%s\","
+                          "\"installation\":{\"operationId\":\"%s\",\"result\":%" PRId32 "}}",
+                          esp_vision_device_id(), ESP_VISION_BOARD_TYPE,
+                          ESP_VISION_FIRMWARE_ID, ESP_VISION_FIRMWARE_VERSION,
+                          status.boot_id, status.reset_reason, ev_control_bool_str(status.crash_reset),
+                          status.application_address, status.application_capacity, fields[0].value.uint32,
+                          status.application_sha256, status.elf_sha256, status.partition_table_sha256,
+                          status.operation_id, status.commit_result);
+    if (length <= 0 || (size_t)length >= sizeof(response)) {
+        return ev_control_send_error("firmware.status", seq, "INTERNAL_ERROR", "status response exceeds capacity");
+    }
+    return ev_control_send_rpc_with_seq("rsp", "firmware.status", response, seq);
+}
+#endif
+
 static void ev_control_handle_user_rpc(uint32_t seq, const char *method, const char *payload)
 {
     if (strncmp(method, "transport.uart.", 15) == 0) {
@@ -2703,7 +2755,13 @@ static void ev_control_handle_user_rpc(uint32_t seq, const char *method, const c
                                                 EV_SESSION_CHANGE_RELEASED);
             }
         }
-    } else if (strcmp(method, "script.write") == 0) {
+    }
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    else if (strcmp(method, "firmware.status") == 0) {
+        (void)ev_control_send_firmware_status(seq, payload);
+    }
+#endif
+    else if (strcmp(method, "script.write") == 0) {
         (void)ev_control_send_script_write(seq, payload);
     } else if (strcmp(method, "script.run") == 0) {
         (void)ev_control_send_script_run(seq, payload);
@@ -3151,7 +3209,16 @@ static void ev_control_parser_feed_byte(ev_control_parser_t *parser,
     switch (parser->state) {
     case EV_CONTROL_PARSE_SOF:
         if (byte == 0x1e) {
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+            if (link->transport_id == EV_TRANSPORT_USB) {
+                esp_vision_irisfw_acceptance_frame_start();
+            }
+#endif
             ev_control_parser_begin(parser, link, now_ms);
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+        } else {
+            esp_vision_irisfw_acceptance_byte(link, byte, now_ms);
+#endif
         }
         return;
     case EV_CONTROL_PARSE_HEADER:
@@ -3694,6 +3761,9 @@ static void ev_control_transport_task(void *arg)
 #endif
         }
         (void)ev_session_tick(ev_control_now_ms());
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+        esp_vision_irisfw_acceptance_poll(ev_control_now_ms());
+#endif
         ev_file_transfer_poll();
         vTaskDelay(pump_delay_ticks);
     }

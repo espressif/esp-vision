@@ -9,3 +9,4 @@ typedef int esp_err_t;
 #define ESP_ERR_NVS_NOT_FOUND 3
 #define ESP_ERR_NVS_INVALID_LENGTH 4
 #define ESP_ERR_NVS_TYPE_MISMATCH 5
+#define ESP_ERR_NOT_SUPPORTED 0x106
