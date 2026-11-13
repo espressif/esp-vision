@@ -5,10 +5,11 @@ import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { EV_REPL_INPUT_MAX_BYTES, evReplExecInputBytes } from '../src/evrepl.js'
+import { RELEASE_CHECKS, runReleaseCheck } from './release-checks.mjs'
 import { validateJpegImage } from '../src/jpeg_validate.js'
 import { loadFixture } from './fixture-loader.mjs'
 
-export const DEVICE_CHECKS = Object.freeze(['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation', 'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream', 'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy', 'espdl_inference', 'isp_ccm_frames', 'isp_lsc_display'])
+export const DEVICE_CHECKS = Object.freeze([...RELEASE_CHECKS, 'modules', 'ulab', 'identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation', 'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream', 'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument', 'sensor_snapshot_buffer', 'memory_policy', 'espdl_inference', 'isp_ccm_frames', 'isp_lsc_display'])
 // The npm package ships tests without models; repository checkouts use the bundled face detector.
 export const DEFAULT_ESPDL_SHA256 = '04eec2220adbf642a843c953817fb219a06c094aedb76c181ba2a958c65201dc'
 export const DEFAULT_ESPDL_MODEL = fileURLToPath(new URL('../../../models/espdet/pico/face/espdet_pico_224_224_face.espdl', import.meta.url))
@@ -175,7 +176,9 @@ export async function runDeviceChecks(device, options, { signal, nonce, report =
         // start model reads, preview listeners or captures after it has failed.
         if (name !== 'identity' && loadError) throw loadError
         let data
-        if (name === 'identity') {
+        if (RELEASE_CHECKS.includes(name)) {
+          data = await runReleaseCheck(name, device, options, { signal, nonce })
+        } else if (name === 'identity') {
           const info = await device.inspect({ fields: ['identity', 'capabilities', 'runtime'], signal })
           if (info.capabilities?.features?.includes('storage.writer.lease')) {
             info.storage = (await device.inspect({ fields: ['storage'], signal })).storage

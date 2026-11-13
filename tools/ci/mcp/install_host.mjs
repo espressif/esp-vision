@@ -92,7 +92,7 @@ try {
       const coreLock = lock.packages['node_modules/@esp-vision/device-core']
       assert.equal(coreLock?.version, packed.version, 'Core lock version must match the staged SDK')
       if (coreLock.resolved === undefined && coreLock.integrity === undefined) {
-        // A coordinated new minor can be tested before its Core is published.
+        // A coordinated Core release can be tested before it is published.
         // No registry URL/hash is invented: only this exact source tarball is
         // allowed here. Publication still requires a registry integrity lock.
         assert.equal(manifest.espVision.resolved.deviceCore, packed.version)

@@ -296,10 +296,14 @@ class FirmwarePublicationGateTests(unittest.TestCase):
         function_args = arguments_for("target_test_p4x_function_ev_board_idf5.5.6")
         function_checks = function_args[function_args.index("--checks") + 1].split(",")
         self.assertIn("--screen-output", function_args)
+        self.assertTrue({"discovery", "communication", "reconnect", "modules", "ulab"} <= set(function_checks))
+        self.assertIn("--verify-flash", function_args)
+        self.assertIn("--junit", function_args)
+        self.assertEqual(hil[".target_test_base"]["artifacts"]["reports"]["junit"], "logs/*-target-test.xml")
         profiles = (
             ("target_test_p4x_vision_idf5.5.6",
-             {"ipa_stats", "display", "display_stream", "camera_display_lifecycle"}, 14, False),
-            ("target_test_s31_korvo_idf6.1", {"ipa_stats", "espdl_inference"}, 16, True),
+             {"ipa_stats", "display", "display_stream", "camera_display_lifecycle"}, 19, False),
+            ("target_test_s31_korvo_idf6.1", {"ipa_stats", "espdl_inference"}, 21, True),
         )
         for name, omitted, count, screen in profiles:
             with self.subTest(job=name):

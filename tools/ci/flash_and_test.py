@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,10 +61,21 @@ class Tee:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.file = path.open("w", encoding="utf-8")
         self.console = sys.stdout
+        self.checks = []
+        self.pending = ""
 
     def write(self, text: str) -> int:
         self.console.write(text)
         self.file.write(text)
+        self.pending += text
+        while "\n" in self.pending:
+            line, self.pending = self.pending.split("\n", 1)
+            try:
+                result = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(result, dict) and result.get("check") and result["check"] != "summary":
+                self.checks.append(result)
         return len(text)
 
     def flush(self) -> None:
@@ -130,12 +142,53 @@ def flash_command(args: argparse.Namespace, build_dir: Path, flasher: dict) -> l
         value = settings.get(key)
         if value:
             command += [f"--{spell(key)}", value]
-    for offset, relative in sorted(flasher.get("flash_files", {}).items(), key=lambda item: int(item[0], 16)):
+    if not flasher.get("flash_files"):
+        raise SystemExit("flasher_args.json contains no flash images")
+    for offset, relative in sorted(flasher["flash_files"].items(), key=lambda item: int(item[0], 16)):
         image = build_dir / relative
         if not image.is_file():
             raise SystemExit(f"missing flash image {image} referenced by flasher_args.json")
         command += [offset, str(image)]
     return command
+
+
+def verify_command(args: argparse.Namespace, build_dir: Path, flasher: dict) -> list[str]:
+    # Apply the same image-header settings as write-flash before comparison.
+    command = flash_command(args, build_dir, flasher)
+    names = esptool_names()
+    command[command.index(names["write"])] = "verify" + names["separator"] + "flash"
+    return command
+
+
+def write_junit(path: Path, board: str, stages: list[Stage], checks: list[dict],
+                failed: bool, seconds: float, reason: str = "") -> None:
+    """Keep stage failures and individual target measurements visible in GitLab."""
+    suite = ET.Element("testsuite", name=f"target.{board}", time=f"{seconds:.3f}")
+    # Bootstrap progress is diagnostic output, not a completed acceptance case.
+    completed = [result for result in checks if not (
+        result.get("event") and "status" not in result and "ok" not in result)]
+    for index, result in enumerate(completed):
+        case = ET.SubElement(suite, "testcase", classname=board,
+                             name=f"{index + 1:02d}.{result['check']}",
+                             time=str(result.get("seconds", 0)))
+        status = result.get("status", "PASS" if result.get("ok") is True else "FAIL")
+        if status != "PASS":
+            ET.SubElement(case, "skipped" if status == "SKIP" else "failure",
+                          message=str(result.get("error", status)))
+        ET.SubElement(case, "system-out").text = json.dumps(result, ensure_ascii=False)
+    for stage in stages:
+        case = ET.SubElement(suite, "testcase", classname=f"{board}.driver", name=stage.name,
+                             time=f"{stage.seconds:.3f}")
+        if stage.status != "PASS":
+            ET.SubElement(case, "failure", message=stage.status)
+    if failed:
+        case = ET.SubElement(suite, "testcase", classname=f"{board}.driver", name="acceptance")
+        ET.SubElement(case, "failure", message=reason or "Target acceptance did not complete")
+    suite.set("tests", str(len(suite)))
+    suite.set("failures", str(len(suite.findall("./testcase/failure"))))
+    suite.set("skipped", str(len(suite.findall("./testcase/skipped"))))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(suite).write(path, encoding="utf-8", xml_declaration=True)
 
 
 def erase_command(args: argparse.Namespace, flasher: dict) -> list[str]:
@@ -309,6 +362,8 @@ def main() -> int:
                         help="SDK serial role; inferred from USB descriptors when omitted")
     parser.add_argument("--node", default=os.environ.get("NODE", "node"), help="Node.js 22+ executable")
     parser.add_argument("--erase", action="store_true", help="erase the whole flash before writing")
+    parser.add_argument("--verify-flash", action="store_true", help="independently compare flashed bytes with every build image")
+    parser.add_argument("--junit", help="JUnit report including flash stages and individual SDK checks")
     parser.add_argument("--output", help="path for the JPEG captured by the checks")
     parser.add_argument("--screen-output", help="path for the LCD test-pattern JPEG captured through Core")
     parser.add_argument("--log", help="path for the full text log; defaults to logs/<BOARD>-target-test.log")
@@ -349,6 +404,7 @@ def main() -> int:
         return code == 0
 
     failed = True
+    reason = ""
     try:
         build_dir = resolve_build_dir(args.board, args.build_dir)
         flasher = json.loads((build_dir / "flasher_args.json").read_text())
@@ -364,26 +420,40 @@ def main() -> int:
         # here, instead of letting esptool report a port it never had.
         if args.port and not Path(args.port).exists():
             raise SystemExit(f"{args.port} does not exist; is the board passed into this job?")
-        if not candidate_ports(args.port):
+        ports = candidate_ports(args.port)
+        if not ports:
             raise SystemExit(
                 "no Espressif serial port found; set ESPPORT, or make sure the runner passes the "
                 "board's device node into the job"
             )
+        if not args.port:
+            if len(ports) != 1:
+                raise SystemExit("multiple serial candidates; set ESPPORT or --port before flashing")
+            args.port = ports[0]
 
         if args.erase and not stage("erase flash", erase_command(args, flasher)):
             raise SystemExit("erase failed; skipping the tests")
         if not stage("flash firmware", flash_command(args, build_dir, flasher)):
             raise SystemExit("flashing failed; skipping the tests")
+        if args.verify_flash and not stage("verify flash", verify_command(args, build_dir, flasher)):
+            raise SystemExit("flash readback failed; skipping runtime checks")
 
         print(f"\nwaiting {args.settle:.0f}s for USB re-enumeration")
         time.sleep(args.settle)
-        port = wait_for_device(args)
+        ready_started = time.monotonic()
+        try:
+            port = wait_for_device(args)
+        except BaseException:
+            stages.append(Stage("runtime identity and Python", "FAIL", time.monotonic() - ready_started))
+            raise
+        stages.append(Stage("runtime identity and Python", "PASS", time.monotonic() - ready_started))
 
         checks_ok = stage("Device Core hardware checks", hardware_check_command(args, port))
         failed = not checks_ok
-    except SystemExit as exc:
+    except (SystemExit, Exception) as exc:
         # Keep the abort reason inside the artifact log, not only on stderr.
         print(f"\nABORTED: {exc}")
+        reason = str(exc)
     finally:
         print("\nstage summary")
         for item in stages:
@@ -391,6 +461,9 @@ def main() -> int:
         print(f"  total {time.monotonic() - started:.1f}s, log written to {log_path}")
         sys.stdout = tee.console
         tee.close()
+        if args.junit:
+            write_junit(Path(args.junit), args.board, stages, tee.checks, failed,
+                        time.monotonic() - started, reason)
 
     return 1 if failed else 0
 

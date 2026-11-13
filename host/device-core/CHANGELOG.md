@@ -1,6 +1,14 @@
 # Changelog
 
+Device Core uses independent npm versions. Unreleased entries describe the next package candidate; firmware release dates do not determine SDK versions.
+
 ## [Unreleased]
+
+## 0.8.1
+
+### Added
+
+- Extend hardware acceptance with passive endpoint discovery that preserves VM state, Unicode communication roundtrips, three disconnect/reconnect cycles, standard Python module known-answer tests and ulab calculations. All device operations use the public SDK.
 
 ### Fixed
 
@@ -12,19 +20,24 @@
 
 ### Changed
 
-- Replace host Python serial/enumeration and esptool subprocesses with npm native serial bindings and the shared esptool-js ROM engine used by the browser. Preserve identity, security, partition, verification and reset checks; remove defaultPython, nodeAdapterAssets and Python helper assets.
-- Package serial prebuilds in CLI and plugin artifacts, with a Linux USJ modem-control fallback that does not issue unsupported BREAK commands.
-
-- Speed up complete firmware installation by trusting checked, partition-bounded FFAT erase commands without erased-range reads, and reuse official esptool whole-write MD5 verification receipts in Node/browser adapters instead of transferring firmware back to the host. Keep SHA-256 qualification before writing and full readback for custom adapters without receipts.
+- Replace Python serial/enumeration and esptool subprocesses with npm native serial bindings and the shared Node/browser esptool-js ROM backend. Preserve device identity, security, partition, verification and reset checks; remove `defaultPython`, `nodeAdapterAssets` and Python helper assets.
+- Include native serial prebuilds in CLI/plugin bundles and support Linux USB-Serial-JTAG modem control without unsupported BREAK commands.
 
 ### Fixed
 
-- Preserve the original LAN discovery error message so dependency-loading failures can be distinguished from socket and network failures.
+- Preserve the original LAN discovery error message to distinguish dependency-loading failures from socket and network failures.
 
-- Drive the partial ROM-packet deadline regression with a controlled clock so CI scheduling delays cannot consume its successful receive budget.
+## 0.7.1
 
-- Classify an occupied EV-MUX session as busy during firmware identification; USB descriptors, ROM responses and timeouts do not establish the presence or absence of ESP-VISION firmware.
-- Keep passive ROM enumeration non-opening; active firmware detection verifies the selected ROM MAC/security, attempts normal SPI boot once, then rebinds only its matching physical USB endpoint before the ESP-VISION handshake. Preserve unknown startup outcomes and require download re-entry when no runtime returns.
+### Changed
+
+- Accelerate complete firmware installation using checked, partition-bounded FFAT erase commands without erased-range reads, and official esptool whole-write MD5 receipts instead of transferring firmware back to the host. Retain SHA-256 qualification and full readback for custom adapters without receipts.
+
+### Fixed
+
+- Keep passive ROM enumeration non-opening. Active firmware detection verifies the selected ROM MAC/security, attempts normal boot once and reconnects only to its matching physical USB endpoint. Preserve unknown outcomes and require download re-entry when no runtime returns.
+- Report occupied EV-MUX sessions as busy during firmware identification; USB descriptors, ROM responses and timeouts alone do not establish whether ESP-VISION firmware is installed.
+- Use a controlled clock for the partial ROM-packet deadline regression so CI scheduling delays cannot consume its successful receive budget.
 
 ## 0.7.0
 

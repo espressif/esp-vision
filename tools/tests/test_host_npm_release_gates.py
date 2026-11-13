@@ -37,7 +37,7 @@ class HostNpmReleaseGateTests(unittest.TestCase):
         package = cli['package_device_cli_npm']
         self.assertTrue(any('host/device-cli ci ' in line for line in package['script']))
         core_need = next(x for x in package['needs'] if x['job'] == 'publish_device_core_npm')
-        self.assertTrue(core_need['optional'])
+        self.assertFalse(core_need.get('optional', False))
         plugin = yaml.safe_load((ROOT / '.gitlab/ci/plugin.yml').read_text())
         self.assertIn('package_plugin_npm', {x['job'] for x in plugin['publish_plugin_npm']['needs']})
         self.assertTrue(any('package_plugin_release.mjs' in line for line in plugin['package_plugin_npm']['script']))
@@ -54,6 +54,18 @@ class HostNpmReleaseGateTests(unittest.TestCase):
         self.assertIn('host/device-cli/package-lock.json', package['artifacts']['paths'])
         need = next(x for x in cli['publish_device_cli_npm']['needs'] if x['job'] == 'package_device_cli_npm')
         self.assertTrue(need['artifacts'])
+
+    def test_every_cli_release_trigger_includes_required_core_publication_and_checks(self):
+        import yaml
+        core = yaml.safe_load((ROOT / '.gitlab/ci/device-core.yml').read_text())
+        cli = yaml.safe_load((ROOT / '.gitlab/ci/host-tools.yml').read_text())
+        publish_rule = core['publish_device_core_npm']['rules'][0]
+        core_paths = set(publish_rule['changes'])
+        for job in ('package_device_cli_npm', 'publish_device_cli_npm'):
+            rule = cli[job]['rules'][0]
+            self.assertEqual(rule['if'], publish_rule['if'])
+            self.assertLessEqual(set(rule['changes']), core_paths)
+        self.assertLessEqual(core_paths, set(core['.device_core_changes']))
 
     def test_candidate_plugin_checks_do_not_require_unpublished_registry_versions(self):
         import yaml

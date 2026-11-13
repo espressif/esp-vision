@@ -49,14 +49,17 @@
     - mkdir -p logs
     - |
       python3 tools/ci/flash_and_test.py --board "$BOARD" \
-        --checks identity,memory,camera,framesizes,pixformats,orientation,ipa_stats,snapshot_rate,preview,image_ops,display,display_stream,camera_display_lifecycle,image_copy_to_fb,image_transform_argument,sensor_snapshot_buffer,memory_policy,espdl_inference \
-        --require-all \
+        --checks identity,discovery,communication,reconnect,modules,ulab,memory,camera,framesizes,pixformats,orientation,ipa_stats,snapshot_rate,preview,image_ops,display,display_stream,camera_display_lifecycle,image_copy_to_fb,image_transform_argument,sensor_snapshot_buffer,memory_policy,espdl_inference \
+        --require-all --verify-flash \
+        --junit "logs/$BOARD-$IDF_LABEL-target-test.xml" \
         --log "logs/$BOARD-$IDF_LABEL-target-test.log" \
         --output "logs/$BOARD-$IDF_LABEL-frame.jpg" \
         --screen-output "logs/$BOARD-$IDF_LABEL-screen.jpg"
   artifacts:
     when: always
     expire_in: 1 week
+    reports:
+      junit: logs/*-target-test.xml
     paths:
       - logs/
 
@@ -92,8 +95,9 @@ target_test_p4x_function_ev_board_idf5.5.6:
     - mkdir -p logs
     - |
       python3 tools/ci/flash_and_test.py --board "$BOARD" \
-        --checks identity,memory,camera,framesizes,pixformats,orientation,snapshot_rate,preview,image_ops,image_copy_to_fb,image_transform_argument,sensor_snapshot_buffer,memory_policy,espdl_inference \
-        --require-all \
+        --checks identity,discovery,communication,reconnect,modules,ulab,memory,camera,framesizes,pixformats,orientation,snapshot_rate,preview,image_ops,image_copy_to_fb,image_transform_argument,sensor_snapshot_buffer,memory_policy,espdl_inference \
+        --require-all --verify-flash \
+        --junit "logs/$BOARD-$IDF_LABEL-target-test.xml" \
         --log "logs/$BOARD-$IDF_LABEL-target-test.log" \
         --output "logs/$BOARD-$IDF_LABEL-frame.jpg"
 
@@ -119,8 +123,9 @@ target_test_p4x_vision_idf5.5.6:
     - mkdir -p logs
     - |
       python3 tools/ci/flash_and_test.py --board "$BOARD" --port "$ESPPORT" --role uart \
-        --checks identity,memory,camera,framesizes,pixformats,orientation,snapshot_rate,preview,image_ops,display,display_stream,camera_display_lifecycle,image_copy_to_fb,image_transform_argument,sensor_snapshot_buffer,memory_policy \
-        --require-all \
+        --checks identity,discovery,communication,reconnect,modules,ulab,memory,camera,framesizes,pixformats,orientation,snapshot_rate,preview,image_ops,display,display_stream,camera_display_lifecycle,image_copy_to_fb,image_transform_argument,sensor_snapshot_buffer,memory_policy \
+        --require-all --verify-flash \
+        --junit "logs/$BOARD-$IDF_LABEL-target-test.xml" \
         --log "logs/$BOARD-$IDF_LABEL-target-test.log" \
         --output "logs/$BOARD-$IDF_LABEL-frame.jpg" \
         --screen-output "logs/$BOARD-$IDF_LABEL-screen.jpg"
