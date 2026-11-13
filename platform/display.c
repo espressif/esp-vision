@@ -201,6 +201,7 @@ void esp_vision_board_display_set_backlight(uint32_t backlight);
 
 typedef struct {
     bool ready;
+    bool frame_valid;
     uint32_t width;
     uint32_t height;
     uint32_t backlight;
@@ -256,6 +257,7 @@ static esp_err_t esp_vision_display_panel_disp_on_off(bool on)
 
 static esp_err_t esp_vision_display_submit_frame(void)
 {
+    s_display.frame_valid = false;
     esp_err_t ret = esp_lcd_panel_draw_bitmap(s_display.panel_handle,
                                               0, 0, s_display.width, s_display.height,
                                               s_display.framebuffer);
@@ -272,6 +274,7 @@ static esp_err_t esp_vision_display_submit_frame(void)
             ret = drain_ret;
         }
     }
+    s_display.frame_valid = (ret == ESP_OK);
     return ret;
 }
 
@@ -366,7 +369,7 @@ esp_err_t esp_vision_display_get_frame(image_t *frame)
     if ((ESP_VISION_LCD_WIDTH == 0) || (ESP_VISION_LCD_HEIGHT == 0)) {
         return ESP_ERR_NOT_SUPPORTED;
     }
-    if (!s_display.ready || (s_display.framebuffer == NULL)) {
+    if (!s_display.ready || !s_display.frame_valid || (s_display.framebuffer == NULL)) {
         return ESP_ERR_INVALID_STATE;
     }
     *frame = (image_t) {

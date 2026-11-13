@@ -38,7 +38,7 @@ typedef int esp_err_t;
 #define ESP_VISION_LCD_WIDTH PANEL_WIDTH
 #define ESP_VISION_LCD_HEIGHT 240
 typedef struct { int w, h, pixfmt; size_t size; uint8_t *data; } image_t;
-static struct { bool ready; uint16_t *framebuffer; int width, height; size_t framebuffer_size; } s_display;
+static struct { bool ready, frame_valid; uint16_t *framebuffer; int width, height; size_t framebuffer_size; } s_display;
 static uint16_t pixels[6] = {0xf800,0x07e0,0x001f,0xffff,0,0x1234};
 static uint8_t jpeg[] = {0xff,0xd8,0xff,0xd9};
 static const char *error_code;
@@ -79,6 +79,8 @@ int main(void) {
     assert(strcmp(error_code,"DISPLAY_NOT_READY")==0 && sends==0);
     s_display.ready=true; s_display.width=3; s_display.height=2;
     s_display.framebuffer=pixels; s_display.framebuffer_size=sizeof(pixels);
+    assert(esp_vision_display_get_frame(&frame)==ESP_ERR_INVALID_STATE);
+    s_display.frame_valid=true;
     assert(ev_control_send_debug_capture_screen(7,"{}")==ESP_OK);
     assert(sends==1 && quality==60);
     ev_control_send_debug_capture_screen(7,"invalid");
