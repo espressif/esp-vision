@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Preserve `SERIAL_STARTUP_INCOMPLETE_FRAME` when transport cleanup emits a close event during connection setup, instead of replacing it with `CONNECTION_CLOSED`.
+
 - Make hardware-check fixture uploads idempotent and acknowledged, verify source integrity and installation, and bound timeout recovery. Report bootstrap diagnostics and blocked dependent checks separately without allowing a failed prerequisite or cleanup to pass hardware acceptance.
 
 ## 0.8.0
