@@ -249,3 +249,40 @@ upload-dl-trigger:
     # pack_launchpad artifacts from this pipeline. Define UPLOAD_ACCESS_TOKEN as
     # a masked/protected CI/CD variable in the esp-vision project settings.
     SOURCE_PROJECT_TOKEN: ${UPLOAD_ACCESS_TOKEN}
+
+# Iris delivery is restricted to the retained-layout S31 Mosaico build.
+# Launchpad continues to consume the ordinary factory-layout BIN build.
+pack_irisfw:
+  stage: deploy
+  extends: .rules:release
+  image: $CI_PYTHON_IMAGE
+  tags: [build]
+  needs:
+    - job: firmware_irisfw_mosaico
+      artifacts: true
+  before_script:
+    - python -m pip install --require-hashes -r tools/ci/irisfw/requirements.lock
+  script:
+    - python tools/ci/irisfw/package_release.py --tag "$CI_COMMIT_TAG" --source-sha "$CI_COMMIT_SHA" --pipeline-id "$CI_PIPELINE_ID" --output dist/irisfw
+    - python tools/ci/irisfw/validate_release.py --tag "$CI_COMMIT_TAG" --source-sha "$CI_COMMIT_SHA" --pipeline-id "$CI_PIPELINE_ID" --root dist/irisfw
+  artifacts:
+    when: on_success
+    expire_in: 1 month
+    paths:
+      - dist/irisfw/
+
+publish_irisfw:
+  stage: post_deploy
+  extends: .rules:release
+  image: $CI_PYTHON_IMAGE
+  tags: [build]
+  resource_group: irisfw-publication
+  needs:
+    - job: pack_irisfw
+      artifacts: true
+    - job: qualify_firmware_release
+      artifacts: false
+  before_script:
+    - python -m pip install --require-hashes -r tools/ci/irisfw/requirements.lock
+  script:
+    - python tools/ci/irisfw/publish_release.py --root dist/irisfw

@@ -34,6 +34,10 @@
 #include "nvs.h"
 #include "py/mpconfig.h"
 
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+#include "irisfw_network.h"
+#endif
+
 // Board defaults seed an absent NVS record only; saved user intent wins.
 
 #define NETWORK_NVS_NAMESPACE "ev_network"
@@ -547,6 +551,18 @@ static esp_err_t persist_record(const network_record_t *source)
 {
     network_record_t record = *source;
     record_prepare(&record);
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    esp_vision_irisfw_network_config_t shared = {
+        .enabled = record.enabled,
+        .revision = record.revision,
+    };
+    if (record.configured) {
+        memcpy(shared.ssid, record.ssid, record.ssid_length);
+        memcpy(shared.password, record.password, record.password_length);
+    }
+    esp_err_t err = esp_vision_irisfw_network_save(&shared);
+    memset(&shared, 0, sizeof(shared));
+#else
     nvs_handle_t handle;
     esp_err_t err = nvs_open(NETWORK_NVS_NAMESPACE, NVS_READWRITE, &handle);
     if (err != ESP_OK) {
@@ -558,10 +574,12 @@ static esp_err_t persist_record(const network_record_t *source)
         err = nvs_commit(handle);
     }
     nvs_close(handle);
+#endif
     memset(&record, 0, sizeof(record));
     return err;
 }
 
+#if !defined(ESP_VISION_ENABLE_IRISFW) || !ESP_VISION_ENABLE_IRISFW
 static void restore_factory_defaults(void)
 {
     const char *ssid = ESP_VISION_WIFI_DEFAULT_SSID;
@@ -595,10 +613,27 @@ static void restore_factory_defaults(void)
     }
     memset(&record, 0, sizeof(record));
 }
+#endif
 
 static void restore_record_from_nvs(void)
 {
     network_record_t record = {0};
+    size_t length = sizeof(record);
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+    esp_vision_irisfw_network_config_t shared;
+    esp_err_t err = esp_vision_irisfw_network_load(&shared);
+    if (err == ESP_OK) {
+        record.ssid_length = strlen(shared.ssid);
+        record.password_length = strlen(shared.password);
+        record.configured = record.ssid_length != 0;
+        record.enabled = shared.enabled;
+        record.revision = shared.revision;
+        memcpy(record.ssid, shared.ssid, record.ssid_length);
+        memcpy(record.password, shared.password, record.password_length);
+        record_prepare(&record);
+    }
+    memset(&shared, 0, sizeof(shared));
+#else
     nvs_handle_t handle;
     esp_err_t err = nvs_open(NETWORK_NVS_NAMESPACE, NVS_READONLY, &handle);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
@@ -612,13 +647,13 @@ static void restore_record_from_nvs(void)
         ESP_LOGW(TAG, "Unable to open stored network configuration (0x%x)", err);
         return;
     }
-    size_t length = sizeof(record);
     err = nvs_get_blob(handle, NETWORK_NVS_KEY, &record, &length);
     nvs_close(handle);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
         restore_factory_defaults();
         return;
     }
+#endif
     if (err != ESP_OK || length != sizeof(record) || !record_valid(&record)) {
         portENTER_CRITICAL(&s_lock);
         memset(&s_persisted, 0, sizeof(s_persisted));

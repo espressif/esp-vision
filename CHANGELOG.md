@@ -6,6 +6,12 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Publish deterministic `.irisfw` application packages for the opt-in `ESP32_S31_MOSAICO` build on firmware tags, with independent archive/image/layout validation, build provenance and checksums in the GitLab Generic Package Registry. Preserve standard ESP-IDF project/version descriptors in the Iris build; retain EV-MUX and existing BIN releases. Registry publication requires firmware qualification and verifies downloaded bytes before publishing the release index.
+
+- Enforce UTF-8 manifests and unambiguous ZIP member names; add Iris package boundary regressions for overlapping writes, application-partition overflow, invalid erased padding and excluded application identities, including packages with recomputed valid component hashes.
+
+- Use Vibe Mode's `sysmeta/shared` Wi-Fi credentials directly in Iris builds, with read-only loading of the former `sysmeta/wifi` keys when no shared pair exists. Persist ESP-VISION configuration changes to the shared keys, retain enable/revision intent, and reject incomplete or invalid records without erasing system metadata or falling back to ESP-VISION factory credentials.
+
 - Add a bilingual AI development guide at `how-to/esp-vision-plugin` with goal-focused prompts, assistant setup and marketplace installation, first-use firmware download and flashing, Python vision applications, Wi-Fi development, USB camera output and conversational iteration. Include a bilingual first-time Wi-Fi setup walkthrough covering website, AI-assisted and CLI provisioning over USB, connection verification, LAN access and troubleshooting.
 
 - Add SC101IOT DVP camera support on ESP32_S31_MOSAICO alongside OV3640.
@@ -15,6 +21,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Add ESP32_S31_KORVO camera and display hardware CI.
 
 ### Changed
+
+- Restrict Iris firmware to the `ESP_VISION_ENABLE_IRISFW` compile option on ESP32_S31_MOSAICO. Keep its Vibe Mode ABI 2 system prefix and application NVS, place the 7 MiB application at `0x210000`, and assign the entire remaining 6.9375 MiB to FAT at `0x910000`, without a separate `ui_apps` partition. Confirm pending boot after MicroPython/EV-MUX readiness. Use a separate CI artifact directory so ordinary factory-layout BIN releases are unchanged; provision CMake in host CI to exercise the unsupported-board rejection.
 
 - Unify Device Core 0.8, CLI 0.2 and plugin 0.2 on npm serial bindings and the shared browser/Node esptool-js backend. Remove user-side Python/pyserial/esptool requirements; include native prebuilds and Linux USJ control-line compatibility in portable bundles. Replace the removed Python adapter tests with the shared Node/browser ROM coverage. Qualify unpublished source candidates in MR checks, then resolve the published Core archive integrity and carry the verified CLI lock through release jobs. Install and preflight the native serial backend in hardware CI before flashing.
 
@@ -30,6 +38,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 - Speed up complete firmware installation by trusting checked, partition-bounded FFAT erase commands without erased-range reads, and reuse official esptool whole-write MD5 verification receipts in Node/browser adapters instead of transferring firmware back to the host. Keep SHA-256 qualification before writing and full readback for custom adapters without receipts.
 
 ### Fixed
+
+- Match Vibe Mode's password byte rules when loading shared Wi-Fi settings, including existing non-ASCII passphrases and 64-digit hexadecimal PSKs, without changing the EV-MUX provisioning API's validation.
 
 - Allow explicitly opted-in hardware CI for a single matching board/IDF build with `ESP_VISION_TEST_HARDWARE=1`; keep ordinary targeted builds and SDK-only runs from flashing devices, and install Python for executable fixture fault injection in Device Core CI.
 

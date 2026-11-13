@@ -1,0 +1,4 @@
+# ESP application descriptors must identify the actual project and version.
+# Override upstream MicroPython's footprint-oriented exclusion defaults.
+CONFIG_APP_EXCLUDE_PROJECT_VER_VAR=n
+CONFIG_APP_EXCLUDE_PROJECT_NAME_VAR=n

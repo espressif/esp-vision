@@ -1,0 +1,3 @@
+# Application-only delivery through an already installed Vibe Mode ABI 2.
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="boards/ESP32_S31_MOSAICO/partitions-16MiB-irisfw.csv"
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y

@@ -59,3 +59,98 @@ MCP 与发布资格
 #. 用根 config 的 publication 哈希验证版本清单、精确板型集合、website/MCP 快照和镜像哈希。配置 dry-run 或分支 CI 成功不代表生产上传成功。
 
 历史 BIN 和不可变清单继续保留。不要为旧镜像编造元数据、覆盖同名版本或从 git 标签猜兼容性。离线验证和合入这些修改不会发布标签、npm 包或 CDN 数据。
+
+Iris 固件文件
+-------------
+
+``ESP_VISION_ENABLE_IRISFW`` 是默认关闭的 CMake 选项和 C 编译宏，仅支持 ``ESP32_S31_MOSAICO``；其他板型开启时配置失败。普通 Launchpad BIN 构建继续采用原 factory 布局。独立的 ``firmware_irisfw_mosaico`` 作业使用 IDF ``release-v6.1`` 开启该宏，产物存放在 ``build/ESP32_S31_MOSAICO/idf6.1-irisfw``。固件标签的 ``pack_irisfw`` 只消费这一作业，其他板型不生成 Iris 包。
+
+切换选项时使用新的构建目录。构建会核对实际分区选择、QIO Flash 模式和回滚配置，复用旧配置也不能跳过检查：
+
+.. code-block:: sh
+
+   idf.py --board ESP32_S31_MOSAICO -B "$ESP_VISION_WORK_DIR/build/irisfw" \
+     -D ESP_VISION_ENABLE_IRISFW=ON build
+
+保留区布局
+~~~~~~~~~~
+
+16 MiB 布局遵循 Mosaico Recovery ABI 2 的固定系统前缀，产品契约为 ``esp-mosaico/v2``，布局 ID 为 ``mosaico-retained-test-2m-v2``，分区表仍位于 ``0x8000``。应用 NVS 地址保持不变；7 MiB 应用分区之后的全部剩余空间划给 FAT，直至 16 MiB Flash 末尾，不再单独预留 ``ui_apps``：
+
+.. list-table:: Iris 构建分区
+   :header-rows: 1
+
+   * - 分区
+     - 类型/子类型
+     - 起始地址
+     - 大小
+   * - otadata
+     - data/ota
+     - 0x9000
+     - 0x2000 (8 KiB)
+   * - phy_init
+     - data/phy
+     - 0xB000
+     - 0x1000 (4 KiB)
+   * - sysmeta
+     - data/nvs
+     - 0xC000
+     - 0x14000 (80 KiB)
+   * - vibe_mode
+     - app/test
+     - 0x20000
+     - 0x1C0000 (1.75 MiB)
+   * - coredump
+     - data/coredump
+     - 0x1E0000
+     - 0x20000 (128 KiB)
+   * - nvs
+     - data/nvs
+     - 0x200000
+     - 0x10000 (64 KiB)
+   * - main_app
+     - app/ota_0
+     - 0x210000
+     - 0x700000 (7 MiB)
+   * - ffat
+     - data/fat
+     - 0x910000
+     - 0x6F0000 (6.9375 MiB)
+
+固定的 ``0x210000`` 应用起点使应用与 FAT 合计只有 13.9375 MiB；两者各占 7 MiB 会超出 16 MiB Flash 末尾 64 KiB，因此默认分配应用 7 MiB、FAT 6.9375 MiB。
+
+打包器拒绝超过 7 MiB 应用分区的镜像。此布局将原 UI 资源区并入 FAT；修改已有 FAT 分区的起始地址或容量不会自动迁移或扩展文件系统，切换布局前应保存需要保留的文件。
+
+Iris 构建直接从 NVS 分区 ``sysmeta``、命名空间 ``shared`` 的字符串键 ``wifi_ssid`` 和 ``wifi_password`` 读取配网信息，有效配置默认启用。只有两个共享键都不存在时才只读回退到旧版 ``sysmeta/wifi`` 的 ``ssid``/``password``；启动时不复制配网信息、不写 NVS。此构建不使用普通 ESP-VISION 的 ``nvs/ev_network`` 记录或出厂配网信息。没有配网记录时保持未配置；记录不完整、超长或读取失败时报告配置错误，保留原数据。
+
+ESP-VISION 配网操作写回相同的共享键，另用 ``ev_enabled``（u8）和 ``ev_revision``（u32）保存服务的启用状态及修订号；Vibe Mode 继续使用共享 SSID/密码。忘记网络写入一对空字符串，避免任一固件重新启用旧版凭据。操作不擦除 ``sysmeta``，也不改动其他共享设置。
+
+此包要求设备已安装兼容的 Vibe Mode，版本不低于 0.2.0，通过其原生 System Update 流程安装 ``.irisfw``。这个构建的原始 IDF 烧录清单不是 Vibe Mode 初始化包，其中的 bootloader 和空白 OTA 元数据不能替换保留系统。从普通 factory 布局切换不会迁移原有文件。新的 ``ffat`` 遵循板级文件系统初始化策略，更新包不携带空白文件系统镜像。
+
+MicroPython 和 EV-MUX 就绪后，启用 Iris 宏的应用确认待验证 OTA 镜像，并在现有 ABI 2 恢复元数据中记录应用地址。这只是启动确认，外设仍须分别验收。应用不引入 Iris 运行库或 USB 传输，继续使用 EV-MUX。主机验收必须在重启后从 Vibe Mode 的 Iris 通路切换到 ESP-VISION；要求应用发送 Iris HEALTHY 事件的更新器，需要 EV-MUX 验收适配器才能确定此固件成功启动。
+
+容器与发布
+~~~~~~~~~~
+
+无签名 ZIP 使用 ``esp-iris-system-update/0.2``，恰好包含 ``manifest.json``、补齐擦除字节至 4096 字节的 ``partition-table.bin`` 和 ``app.bin``，清单声明 ``minimum_recovery_version=0.2.0``。包不包含 bootloader、OTA 元数据、Vibe Mode、NVS、coredump、FFAT 或 UI 资源镜像。打包器核对保留分区策略；除 IDF 生成的标准空白 OTA 元数据外，额外烧录输入均被拒绝。Secure Boot 签名和加密镜像需要独立策略，目前拒绝。
+
+Iris 构建保留标准 ESP-IDF 应用描述符的工程名和版本。标签必须适配 31 字节版本字段，并与实际镜像完全一致。构建来源记录绑定编译配置类型、板型、源提交、流水线/任务 ID、实际 IDF 提交、配置/布局哈希和所有输入哈希，不包含个人路径或配置内容。打包仅消费当前流水线的准确产物，不重新编译或选择其他 IDF 目录。
+
+格式基线为 `esp-mosaico-utils 的 be151ae047014e79a9c7ae0092dd203844499003 提交 <https://github.com/esp-mosaico/esp-mosaico-utils/blob/be151ae047014e79a9c7ae0092dd203844499003/ESP-Iris/components/esp_iris/protocol/system_update_manifest.schema.json>`_。打包器和独立校验器使用标准库及哈希锁定的 YAML 解析依赖。``dist/irisfw/`` 包含此板型的固件包、``.provenance.json`` 和 ``.validation.json`` 伴随文件，以及 ``SHA256SUMS`` 和 ``release.json``。
+
+``publish_irisfw`` 等待 ``qualify_firmware_release`` 成功，通过 ``CI_JOB_TOKEN`` 将冻结产物发布到本项目 Generic Package Registry，包名 ``esp-vision-irisfw``、版本 ``<tag>``。下载端点为 ``${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/esp-vision-irisfw/<tag>/<filename>``，沿用 registry 现有访问权限。原 Launchpad BIN 地址及外部 DL 上传器不变。
+
+发布前检查全部远端文件，相同字节复用，不同字节拒绝覆盖。逐文件下载比对成功后，最后写入 ``release.json``。重试使用相同冻结产物，换流水线或重新生成来源记录须使用新版本；CI resource group 将发布串行化。校验和证明完整性，不代表安装授权。平台上传、审批及公开上架与 registry 发布和实机测试分别验收。
+
+从同一流水线下载产物后打包：
+
+.. code-block:: sh
+
+   python -m pip install --require-hashes -r tools/ci/irisfw/requirements.lock
+   python tools/ci/irisfw/package_release.py --tag "$CI_COMMIT_TAG" \
+     --source-sha "$CI_COMMIT_SHA" --pipeline-id "$CI_PIPELINE_ID" \
+     --build-root build --output dist/irisfw
+   python tools/ci/irisfw/validate_release.py --tag "$CI_COMMIT_TAG" \
+     --source-sha "$CI_COMMIT_SHA" --pipeline-id "$CI_PIPELINE_ID" --root dist/irisfw
+
+每个候选使用新的输出目录。API/web CI 同时设置 ``ESP_VISION_IRISFW_ONLY=1``、``ESP_VISION_TEST_BOARD=ESP32_S31_MOSAICO`` 和 ``ESP_VISION_TEST_IDF_IMAGE=release-v6.1`` 时，仅编译 Iris 固件，不操作硬件。离线回归命令为 ``python -m unittest tools.tests.test_irisfw_release``。分支和 MR 不发布 registry 文件。

@@ -249,6 +249,18 @@ target_compile_definitions(usermod_esp_vision_platform INTERFACE
     OMV_NO_GPL=1
 )
 
+if(ESP_VISION_ENABLE_IRISFW)
+    if(NOT ESP_VISION_BOARD STREQUAL "ESP32_S31_MOSAICO")
+        message(FATAL_ERROR "ESP_VISION_ENABLE_IRISFW requires ESP32_S31_MOSAICO")
+    endif()
+    target_sources(usermod_esp_vision_platform INTERFACE
+        ${ESP_VISION_BOARD_DIR}/irisfw_boot.c
+        ${ESP_VISION_BOARD_DIR}/irisfw_network.c
+    )
+    target_compile_definitions(usermod_esp_vision_platform INTERFACE ESP_VISION_ENABLE_IRISFW=1)
+    list(APPEND IDF_COMPONENTS app_update)
+endif()
+
 if(ESP_VISION_USE_BOARD_MANAGER)
     target_compile_definitions(usermod_esp_vision_platform INTERFACE
         ESP_VISION_USE_BOARD_MANAGER=1

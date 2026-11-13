@@ -87,6 +87,10 @@
 #include "storage.h"
 #include "usb_auto_download.h"
 
+#if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+#include "irisfw_boot.h"
+#endif
+
 #if MICROPY_BLUETOOTH_NIMBLE
 #include "extmod/modbluetooth.h"
 #endif
@@ -245,6 +249,12 @@ soft_reset:
 
     if (ev_mux_init_err == ESP_OK) {
         ev_control_transport_vm_ready();
+        #if defined(ESP_VISION_ENABLE_IRISFW) && ESP_VISION_ENABLE_IRISFW
+        err = esp_vision_irisfw_confirm_boot();
+        if (err != ESP_OK) {
+            ESP_LOGE("esp_init", "retained application boot confirmation failed: %s", esp_err_to_name(err));
+        }
+        #endif
     }
 
     pyexec_frozen_module("_boot.py", false);

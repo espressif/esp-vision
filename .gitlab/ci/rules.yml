@@ -93,6 +93,8 @@
 # otherwise considers every path changed when there is no previous push.
 .rules:build:firmware:
   rules:
+    - if: '$ESP_VISION_IRISFW_ONLY == "1" && $ESP_VISION_ENABLE_IRISFW != "1"'
+      when: never
     - if: '$ESP_VISION_DEVICE_CORE_ONLY == "1" || $CI_COMMIT_TAG =~ /^device-core-v/'
       when: never
     - if: '$ESP_VISION_TEST_BOARD && ($BOARD != $ESP_VISION_TEST_BOARD || $IDF_IMAGE != $ESP_VISION_TEST_IDF_IMAGE)'
@@ -112,6 +114,8 @@
 # and select the same board/IDF pair, keeping literal artifact dependencies valid.
 .rules:test:target:
   rules:
+    - if: '$ESP_VISION_IRISFW_ONLY == "1"'
+      when: never
     - if: '$ESP_VISION_DEVICE_CORE_ONLY == "1" || $CI_COMMIT_TAG =~ /^device-core-v/'
       when: never
     - if: '$ESP_VISION_TEST_BOARD && ($ESP_VISION_TEST_HARDWARE != "1" || $BOARD != $ESP_VISION_TEST_BOARD || $IDF_IMAGE != $ESP_VISION_TEST_IDF_IMAGE)'
