@@ -250,6 +250,10 @@ test('WorkBuddy installation prepares a local ZIP and MCP file, then reports man
   const files = new Map(entries.map(entry => [entry.name, entry.contents]))
   const prefix = 'esp-vision-development/'
   const skill = files.get(`${prefix}SKILL.md`).toString('utf8')
+  assert.match(skill, /Never silently fall back to latest/)
+  assert.match(skill, /Only after the user explicitly declines the firmware update/)
+  assert.match(skill, /--declined-firmware-update/)
+  assert.match(files.get(`${prefix}scripts/knowledge-version.mjs`).toString('utf8'), /FIRMWARE_VERSION_REQUIRED/)
   const portableCliPath = `${first.installDirectory.replaceAll('\\', '/')}/cli/device-cli.mjs`
   assert.ok(skill.includes(portableCliPath))
   assert.ok(skill.includes(`Use \`node "${portableCliPath}" --help\` for command syntax.`))

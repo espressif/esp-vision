@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict'
+import { verifyPluginKnowledge } from './check_plugin_knowledge.mjs'
 import { createHash } from 'node:crypto'
 import { access, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -33,6 +34,7 @@ try {
   const env = { ...process.env, NODE_NO_WARNINGS: '1', MCP_STATS_DB_PATH: noStdioDb, MCP_STATS_RETENTION_DAYS: 'invalid' }
   delete env.NODE_PATH
   delete env.NODE_OPTIONS
+  delete env.MCP_CATALOG_PATH
   delete env.MCP_PACK_PATH
   const transport = new StdioClientTransport({ command: process.execPath,
     args: [join(packed, 'dist/cli.js')], cwd: packed, env, stderr: 'pipe' })
@@ -44,9 +46,9 @@ try {
     assert.ok(!reply.isError)
     const info = JSON.parse(reply.content.find(item => item.type === 'text').text)
     assert.equal(info.sourceCommit, provenance.sourceCommit)
-    assert.equal(info.packSha256, provenance.packSha256)
+    assert.equal(info.catalogSha256, provenance.catalogSha256)
     assert.equal(info.packageVersion, provenance.packageVersion)
-    const api = await client.callTool({ name: 'get_api', arguments: { query: 'sensor.snapshot' } })
+    const api = await client.callTool({ name: 'get_api', arguments: { query: 'sensor.snapshot', firmwareVersion: info.snapshots[0].firmwareVersion } })
     assert.ok(!api.isError)
   } finally { await client.close() }
   await assert.rejects(access(noStdioDb), { code: 'ENOENT' })
@@ -75,24 +77,25 @@ try {
   }
   assert.ok(health, `Packed HTTP server did not become healthy: ${diagnostic}`)
   assert.equal(health.npmArtifactSha256, archiveSha)
-  for (const key of ['packageVersion', 'sourceCommit', 'packSha256']) assert.equal(health[key], provenance[key])
+  for (const key of ['packageVersion', 'sourceCommit', 'catalogSha256']) assert.equal(health[key], provenance[key])
   const remote = new Client({ name: 'knowledge-npm-http-acceptance', version: '1.0.0' })
   try {
     await remote.connect(new StreamableHTTPClientTransport(url))
-    for (const [name, args] of [['server_info', {}], ['get_api', { query: 'sensor.snapshot' }]]) {
+    for (const [name, args] of [['server_info', {}], ['get_api', { query: 'sensor.snapshot', firmwareVersion: health.snapshots[0].firmwareVersion }]]) {
       const result = await remote.callTool({ name, arguments: args })
       assert.ok(!result.isError)
     }
   } finally { await remote.close() }
+  await verifyPluginKnowledge(url.href)
   const report = spawnSync(process.execPath, [join(packed, 'dist/stats-cli.js'), '--days', '1', '--format', 'json'], {
     cwd: packed, env: { ...env, MCP_STATS_DB_PATH: db }, encoding: 'utf8',
   })
   assert.equal(report.status, 0, report.stderr)
   const aggregate = JSON.parse(report.stdout)
-  assert.equal(aggregate.totals.count, 2)
+  assert.equal(aggregate.totals.count, 4)
   assert.equal(aggregate.totals.error, 0)
   assert.doesNotMatch(JSON.stringify(aggregate), /requestId|sessionId|query|userId|clientId/)
-  console.log(JSON.stringify({ npm: archiveSha, stdio: 'passed; no statistics database', http: 'passed', anonymousToolCalls: 2 }))
+  console.log(JSON.stringify({ pluginOnlineContract: 'passed', npm: archiveSha, stdio: 'passed; no statistics database', http: 'passed', anonymousToolCalls: 4 }))
 } finally {
   if (http && http.exitCode === null) {
     const exited = once(http, 'exit')

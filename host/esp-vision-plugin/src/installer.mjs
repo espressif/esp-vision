@@ -364,6 +364,10 @@ async function makeWorkbuddyArtifacts(packageInfo, installDirectory) {
     contents: await readFile(referencePath),
     mode: 0o644,
   })
+  for (const file of packageInfo.files.filter(item => item.path.startsWith('skills/esp-vision-development/scripts/'))) {
+    zipEntries.push({ name: `${WORKBUDDY_SKILL_NAME}/${file.path.slice('skills/esp-vision-development/'.length)}`,
+      contents: await readFile(resolve(packageInfo.packageRoot, file.path)), mode: file.mode })
+  }
   for (const file of packageInfo.files.filter(item => item.path.startsWith('cli/'))) {
     zipEntries.push({
       name: `${WORKBUDDY_SKILL_NAME}/scripts/${file.path}`,

@@ -14,6 +14,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Use Vibe Mode's `sysmeta/shared` Wi-Fi credentials directly in Iris builds, with read-only loading of the former `sysmeta/wifi` keys when no shared pair exists. Persist ESP-VISION configuration changes to the shared keys, retain enable/revision intent, and reject incomplete or invalid records without erasing system metadata or falling back to ESP-VISION factory credentials.
 
+- Retain integrity-pinned Knowledge snapshots for firmware 2026.10.21, 2026.10.23 and 2026.11.06; serve exact firmware/revision queries over HTTP and stdio with concurrent request isolation and no automatic version substitution. Archive new firmware knowledge after firmware qualification and publication.
 - Add SC101IOT DVP camera support on ESP32_S31_MOSAICO alongside OV3640.
 - Add hardware CI for ESP32_P4X_VISION and ESP32_S31_KORVO, with camera checks on both boards and display checks on Korvo.
 - Extend Function EV, P4 Vision and S31 Korvo target acceptance with passive discovery, Unicode communication, repeated reconnect, standard Python module known-answer tests and ulab calculations. Independently verify flashed images and publish per-check JUnit reports.
@@ -23,6 +24,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Restrict Iris firmware to the `ESP_VISION_ENABLE_IRISFW` compile option on ESP32_S31_MOSAICO. Keep its Vibe Mode ABI 2 system prefix and application NVS, place the 7 MiB application at `0x210000`, and assign the entire remaining 6.9375 MiB to FAT at `0x910000`, without a separate `ui_apps` partition. Confirm pending boot after MicroPython/EV-MUX readiness. Use a separate CI artifact directory so ordinary factory-layout BIN releases are unchanged; provision CMake in host CI to exercise the unsupported-board rejection.
 
+- Prepare Knowledge MCP 0.2.0 independently of Core/CLI and Plugin 0.2.0 with bundled CLI 0.2.1/Core 0.8.1. Provide required firmware-version arguments, versioned resources and independent runtime/catalog provenance. Decouple Knowledge and Plugin npm publication from firmware tags, preserve Core → CLI → Plugin publication ordering and reject removal or rewriting of historical snapshots.
+- Match Plugin knowledge queries to the inspected device firmware, refreshing after device changes and retaining the exact-version helper in every export. Ask for a firmware target for offline questions. When the target is missing or unavailable, offer an official firmware update; only after the user explicitly declines, use the latest available official Knowledge snapshot with pinned versions and a compatibility notice.
 - Clarify independent host-package release preparation: CLI 0.2.1 and Plugin 0.2.0 select Core 0.8.1; firmware qualification does not establish npm publication or online Knowledge availability.
 - Bundle Core 0.8.1 in CLI 0.2.1 and select CLI 0.2.1/Core 0.8.1 in Plugin 0.2.0. Require Core publication before resolving its npm integrity, building the CLI and publishing the verified CLI archive.
 - Move Device Core 0.8, CLI 0.2 and Plugin 0.2 to npm serial bindings and the shared Node/browser esptool-js backend. Remove end-user Python, pyserial and esptool requirements; include native prebuilds and Linux USB-Serial-JTAG control-line support in portable bundles. Hardware CI still uses esptool for flashing and preflights the SDK serial backend before device checks.
@@ -43,6 +46,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Match Vibe Mode's password byte rules when loading shared Wi-Fi settings, including existing non-ASCII passphrases and 64-digit hexadecimal PSKs, without changing the EV-MUX provisioning API's validation.
 
+- Gate Plugin npm publication on successful concurrent Knowledge deployment and a live exact-version API contract check. Select user-approved alternate Knowledge through the catalog's explicit latest official firmware, preserving date, non-zero-padded and semantic TAG identities instead of sorting their strings; reject the literal `latest` alias consistently in the producer, runtime and Plugin.
 - Keep fixture bootstrap progress separate from completed JUnit cases, and report blocked or unknown target-check outcomes as failures.
 - Allow explicitly opted-in hardware CI for a single matching board/IDF build with `ESP_VISION_TEST_HARDWARE=1`; keep ordinary targeted builds and SDK-only runs from flashing devices, and install Python for executable fixture fault injection in Device Core CI.
 - Diagnose shared hardware-check fixture bootstrap failures by phase, chunk offset, duration and last acknowledged operation; report dependent checks as blocked while failing the job. Transfer Python source idempotently with session/content acknowledgements, verify its SHA-256 and installation, and bound timeout recovery without replaying a partially installed fixture.

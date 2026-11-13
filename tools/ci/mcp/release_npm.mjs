@@ -63,13 +63,11 @@ for (const dependencyGroup of ['dependencies', 'devDependencies', 'optionalDepen
 
 if (!dryRun) {
   assert.equal(process.env.CI_PIPELINE_SOURCE, 'push', 'Publish only from the merged default-branch pipeline')
+  assert.ok(!process.env.CI_COMMIT_TAG, 'Firmware tags must not publish npm packages')
+  assert.ok(process.env.CI_DEFAULT_BRANCH && process.env.CI_COMMIT_BRANCH === process.env.CI_DEFAULT_BRANCH,
+    'Publish only from the default branch')
   if (packagePath === 'host/knowledge-mcp' || packagePath === 'host/esp-vision-plugin') {
-    assert.match(process.env.CI_COMMIT_TAG ?? '', /^(?:v\d+\.\d+(?:\.\d+)?|\d{4}\.\d{1,2}\.\d{1,2})(?:$|[-.])/,
-      'Plugin and Knowledge npm publication require a protected firmware release tag')
     assert.ok(suppliedTarball, 'Publish the exact checked release tarball')
-  } else {
-    assert.ok(process.env.CI_DEFAULT_BRANCH && process.env.CI_COMMIT_BRANCH === process.env.CI_DEFAULT_BRANCH,
-      'Publish only from the default branch')
   }
   assert.equal(process.env.CI_COMMIT_REF_PROTECTED, 'true', 'Publishing requires a protected branch')
   assert.ok(process.env.NPM_PUBLISH_TOKEN, 'Protected NPM_PUBLISH_TOKEN is missing')
@@ -92,11 +90,8 @@ if (packagePath === 'host/device-cli' && sourceManifest.devDependencies?.['@esp-
   assert.equal(sourceManifest.espVision?.deviceCore, range, 'CLI Core metadata must match its dependency range')
   assert.equal(sourceManifest.espVision?.resolved?.deviceCore, resolved, 'CLI metadata must identify its bundled Core version')
 }
-if (packagePath === 'host/knowledge-mcp' || packagePath === 'host/esp-vision-plugin') {
-  const peerPath = packagePath === 'host/knowledge-mcp' ? 'host/esp-vision-plugin' : 'host/knowledge-mcp'
-  const peer = JSON.parse(await readFile(join(repoRoot, peerPath, 'package.json'), 'utf8'))
+if (packagePath === 'host/esp-vision-plugin') {
   const pins = sourceManifest.espVision
-  assert.deepEqual(pins, peer.espVision, 'Plugin and Knowledge must declare the same Core and CLI versions')
   for (const range of [pins?.deviceCore, pins?.deviceCli]) minorRange(range)
   assert.ok(inMinorRange(pins.deviceCore, pins.resolved?.deviceCore), 'Resolved Core is outside the declared minor range')
   assert.ok(inMinorRange(pins.deviceCli, pins.resolved?.deviceCli), 'Resolved CLI is outside the declared minor range')
@@ -151,6 +146,12 @@ try {
     assert.equal(checked.integrity, metadata.integrity, 'npm interpreted a different tarball')
     console.log(`Archive validation verified ${metadata.name}@${metadata.version}; integrity ${metadata.integrity}; tarball ${tarball}; no registry write`)
   } else {
+    if (packagePath === 'host/esp-vision-plugin') {
+      const { verifyPluginKnowledge } = await import('./check_plugin_knowledge.mjs')
+      const config = JSON.parse(await readFile(join(packedRoot, 'mcp.json'), 'utf8'))
+      await verifyPluginKnowledge(config.mcpServers['esp-vision-knowledge'].url)
+      console.log('Online Knowledge contract verified before Plugin publication.')
+    }
     await writeFile(authConfig, `registry=${registry}\n//registry.npmjs.org/:_authToken=\${NPM_PUBLISH_TOKEN}\n`, { mode: 0o600 })
     const publisher = runNpm(['whoami', '--registry', registry], packageRoot, { authConfig }).stdout.trim()
     if (publisher !== 'esp-vision') throw new Error('Npm publisher account must be esp-vision; no package was published.')
@@ -170,11 +171,8 @@ try {
       assert.equal(publishedCore.dist?.integrity, expected.integrity, 'Published Core differs from the tested build artifact')
     }
 
-    if (packagePath === 'host/knowledge-mcp' || packagePath === 'host/esp-vision-plugin') {
-      const peerPath = packagePath === 'host/knowledge-mcp' ? 'host/esp-vision-plugin' : 'host/knowledge-mcp'
-      const peer = JSON.parse(await readFile(join(repoRoot, peerPath, 'package.json'), 'utf8'))
+    if (packagePath === 'host/esp-vision-plugin') {
       const pins = sourceManifest.espVision
-      assert.deepEqual(pins, peer.espVision, 'Plugin and Knowledge must declare the same Core and CLI versions')
       for (const range of [pins?.deviceCore, pins?.deviceCli]) minorRange(range)
       assert.ok(inMinorRange(pins.deviceCore, pins.resolved?.deviceCore), 'Resolved Core is outside the declared minor range')
       assert.ok(inMinorRange(pins.deviceCli, pins.resolved?.deviceCli), 'Resolved CLI is outside the declared minor range')
@@ -194,7 +192,19 @@ try {
       const registryPackage = await readRegistryMetadata(new URL(encodeURIComponent(sourceManifest.name), registry))
       const previous = highestStableVersion(Object.keys(registryPackage?.versions ?? {}))
       if (previous) validateVersionStep(previous, sourceManifest.version, sourceManifest.espVisionReleaseType)
-      else throw new Error('A prior stable release is required to validate version progression')
+      if (previous && packagePath === 'host/knowledge-mcp') {
+        const dist = registryPackage.versions[previous].dist
+        const response = await fetch(dist.tarball, { signal: AbortSignal.timeout(60000) })
+        assert.ok(response.ok, 'Previous Knowledge archive is required for history retention validation')
+        const archive = Buffer.from(await response.arrayBuffer())
+        assert.equal('sha512-' + createHash('sha512').update(archive).digest('base64'), dist.integrity)
+        const previousPath = join(temporary, 'previous-knowledge.tgz')
+        await writeFile(previousPath, archive)
+        const check = spawnSync('python3', [join(repoRoot, 'tools/ci/mcp/catalog.py'), 'check',
+          '--catalog', join(packedRoot, 'data/mcp-catalog.json'), '--previous-npm', previousPath], { encoding: 'utf8' })
+        assert.equal(check.status, 0, 'Knowledge history retention failed: ' + safeText(check.stderr))
+      }
+      if (!previous) throw new Error('A prior stable release is required to validate version progression')
       const published = runNpmResult(
         ['publish', tarball, '--ignore-scripts', '--access', 'public', '--registry', registry],
         packageRoot,

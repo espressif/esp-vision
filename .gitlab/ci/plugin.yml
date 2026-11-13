@@ -17,6 +17,7 @@ plugin_checks:
     - node tools/ci/mcp/install_host.mjs --output .cache/plugin-core-artifacts
     - npm --prefix host/esp-vision-plugin run build
     - npm --prefix host/esp-vision-plugin test
+    - node --test tools/ci/mcp/test_plugin_knowledge.mjs
     - npm --prefix host/esp-vision-plugin run build:workbuddy-expert -- --ci --output-dir "$CI_PROJECT_DIR/.cache/workbuddy-expert"
     - npm --prefix host/esp-vision-plugin run build:qoderwork -- --output-dir "$CI_PROJECT_DIR/.cache/qoderwork-plugin"
     - npm --prefix host/esp-vision-plugin run build:cursor -- --output-dir "$CI_PROJECT_DIR/.cache/cursor-plugin"
@@ -29,13 +30,16 @@ plugin_checks:
     expire_in: 1 month
 
 package_plugin_npm:
-  stage: build_docs
-  extends: .rules:release
+  stage: post_deploy
+  extends: .rules:plugin:publish
   image: node:24-bookworm-slim
   tags: [build, internet, amd64]
   needs:
     - job: plugin_checks
       artifacts: false
+    - job: publish_device_cli_npm
+      artifacts: false
+      optional: true
   variables:
     GIT_SUBMODULE_STRATEGY: none
     npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
@@ -52,9 +56,11 @@ package_plugin_npm:
     expire_in: 1 month
 
 # Validate the source candidate before its new Core/CLI versions exist on npm.
-# Tag releases above still require published archives and registry integrity.
+# Master releases above still require published archives and registry integrity.
 plugin_release_checks:
   extends: package_plugin_npm
+  stage: build_docs
+  needs: [plugin_checks]
   script:
     - export TMPDIR="$CI_PROJECT_DIR/.cache/plugin-release-tmp" TMP="$CI_PROJECT_DIR/.cache/plugin-release-tmp" TEMP="$CI_PROJECT_DIR/.cache/plugin-release-tmp"
     - mkdir -p "$TMPDIR" .cache/plugin-release-tarballs
@@ -74,14 +80,15 @@ plugin_release_checks:
 
 publish_plugin_npm:
   stage: post_deploy
-  extends: .rules:release
+  extends: .rules:plugin:publish
   image: node:24-bookworm-slim
   tags: [build, internet, amd64]
   needs:
+    - job: trigger_website_mcp_release
+      artifacts: false
+      optional: true
     - job: package_plugin_npm
       artifacts: true
-    - job: qualify_firmware_release
-      artifacts: false
     - job: device_cli_checks
       artifacts: false
     - job: evmux_host_checks

@@ -5,6 +5,13 @@ Build vision applications with AI
 
 Describe an idea to your AI assistant and develop it into a Python script running on an ESP-VISION board. The assistant can find examples, prepare firmware and models, deploy the application, inspect camera images and logs, and improve the result with you.
 
+Firmware-matched knowledge
+--------------------------------------------------------------------------------
+
+The plugin reads the selected board's actual firmware version before querying APIs, capabilities or examples. The online Knowledge service retains historical snapshots and requires an exact firmware version for every content query. Updating the plugin does not require updating the firmware; an older board can continue using its matching snapshot.
+
+After flashing or switching boards, the assistant inspects the device again. If the firmware version is missing or no matching snapshot exists, it explains the limitation and offers an official firmware update. If you explicitly choose not to update, it uses the latest available official firmware Knowledge snapshot, tells you the selected version and warns that its APIs may differ from your device. The official catalog designates the latest firmware; the assistant preserves its exact TAG instead of guessing order from its spelling. It waits for your choice and never silently switches versions. A failed update or unavailable catalog does not trigger fallback. This choice is reset after switching devices, reconnecting or flashing. Development-version suffixes are preserved. For offline questions, state the target firmware version explicitly, for example: "Explain camera capture for firmware 2026.10.21." The assistant can list supported versions before proceeding.
+
 Connect your AI assistant
 --------------------------------------------------------------------------------
 

@@ -35,14 +35,16 @@ test("packed npm artifact has no node_modules and serves stdio from its shipped 
   const packSha256 = createHash("sha256").update(packBytes).digest("hex");
   await mkdir(join(stagedPackage, "data"), { recursive: true });
   await writeFile(join(stagedPackage, "data/mcp-pack.json"), packBytes);
-  await writeFile(join(stagedPackage, "data/provenance.json"), JSON.stringify({
-    schemaVersion: 1,
-    packageName: "@esp-vision/knowledge-mcp",
-    packageVersion: "0.1.0",
-    packVersion: pack.meta.version,
-    sourceCommit: pack.meta.sourceCommit,
-    packSha256,
-  }, null, 2) + "\n");
+  const catalogBytes = JSON.stringify({ schemaVersion: 1,
+    latestFirmwareVersion: pack.meta.version, activeSnapshots: { [pack.meta.version]: pack.meta.version }, snapshots: [{
+      firmwareVersion: pack.meta.version, snapshotVersion: pack.meta.version,
+      firmwareSourceCommit: pack.meta.sourceCommit, contentSourceCommit: pack.meta.sourceCommit,
+      packSha256, packJson: packBytes.toString("utf8") }] });
+  const catalogSha256 = createHash("sha256").update(catalogBytes).digest("hex");
+  await writeFile(join(stagedPackage, "data/mcp-catalog.json"), catalogBytes);
+  await writeFile(join(stagedPackage, "data/provenance.json"), JSON.stringify({ schemaVersion: 2,
+    packageName: "@esp-vision/knowledge-mcp", packageVersion: "1.0.0",
+    sourceCommit: pack.meta.sourceCommit, catalogSha256 }));
 
   const env = {
     ...process.env,
@@ -91,13 +93,13 @@ test("packed npm artifact has no node_modules and serves stdio from its shipped 
   try {
     await client.connect(transport);
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 9);
+    assert.equal(tools.tools.length, 10);
     const reply = await client.callTool({ name: "server_info", arguments: {} });
     const info = JSON.parse(reply.content[0].text);
-    assert.equal(info.packageVersion, "0.1.0");
-    assert.equal(info.packSha256, packSha256);
+    assert.equal(info.packageVersion, "1.0.0");
+    assert.equal(info.catalogSha256, catalogSha256);
     assert.equal(info.sourceCommit, pack.meta.sourceCommit);
-    assert.equal(info.version, pack.meta.version);
+    assert.equal(info.snapshots[0].firmwareVersion, pack.meta.version);
   } finally {
     await client.close().catch(() => {});
   }

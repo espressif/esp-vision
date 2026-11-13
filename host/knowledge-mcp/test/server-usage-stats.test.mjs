@@ -58,7 +58,7 @@ test("real Streamable HTTP execution records nine tools, aliases and restart per
   const discovery = await rpc(server, "tools/list", {}, { headerCanary });
   assert.equal(discovery.response.ok, true, discovery.text);
   const names = discovery.payload.result.tools.map(({ name }) => name).sort();
-  assert.deepEqual(names, [...TOOL_NAMES].sort());
+  assert.deepEqual(names, [...TOOL_NAMES, "list_firmware_versions"].sort());
 
   const invocations = [
     ["get_api", { query: queryCanary }],
@@ -89,7 +89,7 @@ test("real Streamable HTTP execution records nine tools, aliases and restart per
   const rejectedArgs = await callTool(server, "get_api", { query: 7 }, { headerCanary });
   assert.equal(rejectedArgs.response.ok, true);
   const resource = await rpc(server, "resources/read", {
-    uri: "esp-vision://module/sensor",
+    uri: "esp-vision://firmware/fixture-2026.10.21/module/sensor",
   }, { headerCanary });
   assert.equal(resource.response.ok, true, resource.text);
   const secondHealth = await fetch(`${server.baseUrl}/mcp/health`, {
@@ -113,7 +113,7 @@ test("real Streamable HTTP execution records nine tools, aliases and restart per
   assert.equal(totals.totals.error, 0);
   assert.equal(totals.tools.length, TOOL_NAMES.length);
   assert.equal(totals.tools.find(({ tool }) => tool === "server_info")?.count, 2);
-  assert.ok(totals.tools.every(({ version }) => version === healthInfo.version));
+  assert.ok(totals.tools.every(({ version }) => (version === healthInfo.snapshots[0].firmwareVersion || version === "catalog")));
   assert.doesNotMatch(JSON.stringify(totals), /query|client|session|ip|request|argument|result|exception/i);
 
   const publicPaths = ["/usage", "/stats", "/metrics", "/admin/usage"];
@@ -207,30 +207,33 @@ test("verified npm provenance and the optional artifact hash appear in HTTP heal
   const packSha256 = createHash("sha256").update(packBytes).digest("hex");
   const artifactSha256 = "c".repeat(64);
   await writeFile(testPackPath, packBytes);
-  await writeFile(join(dir, "provenance.json"), JSON.stringify({
-    schemaVersion: 1,
-    packageName: "@esp-vision/knowledge-mcp",
-    packageVersion: "0.1.0",
-    packVersion: pack.meta.version,
-    sourceCommit: pack.meta.sourceCommit,
-    packSha256,
-  }));
+  const catalogBytes = JSON.stringify({ schemaVersion: 1,
+    latestFirmwareVersion: pack.meta.version, activeSnapshots: { [pack.meta.version]: pack.meta.version }, snapshots: [{
+      firmwareVersion: pack.meta.version, snapshotVersion: pack.meta.version,
+      firmwareSourceCommit: pack.meta.sourceCommit, contentSourceCommit: pack.meta.sourceCommit,
+      packSha256, packJson: packBytes.toString("utf8") }] });
+  const catalogPath = join(dir, "mcp-catalog.json");
+  await writeFile(catalogPath, catalogBytes);
+  const catalogSha256 = createHash("sha256").update(catalogBytes).digest("hex");
+  await writeFile(join(dir, "provenance.json"), JSON.stringify({ schemaVersion: 2,
+    packageName: "@esp-vision/knowledge-mcp", packageVersion: "1.0.0",
+    sourceCommit: pack.meta.sourceCommit, catalogSha256 }));
 
   const server = await startServer(t, {
     pack: testPackPath,
-    extraEnv: { MCP_NPM_ARTIFACT_SHA256: artifactSha256 },
+    extraEnv: { MCP_PACK_PATH: "", MCP_CATALOG_PATH: catalogPath, MCP_NPM_ARTIFACT_SHA256: artifactSha256 },
   });
   const health = await fetch(`${server.baseUrl}/health`).then((response) => response.json());
-  assert.equal(health.packageVersion, "0.1.0");
-  assert.equal(health.packSha256, packSha256);
+  assert.equal(health.packageVersion, "1.0.0");
+  assert.equal(health.catalogSha256, catalogSha256);
   assert.equal(health.sourceCommit, pack.meta.sourceCommit);
   assert.equal(health.npmArtifactSha256, artifactSha256);
 
   await initialize(server);
   const response = assertSuccessfulTool(await callTool(server, "server_info", {}));
   const info = JSON.parse(response.content[0].text);
-  assert.equal(info.packageVersion, "0.1.0");
-  assert.equal(info.packSha256, packSha256);
+  assert.equal(info.packageVersion, "1.0.0");
+  assert.equal(info.catalogSha256, catalogSha256);
   assert.equal(info.sourceCommit, pack.meta.sourceCommit);
   assert.equal(info.npmArtifactSha256, artifactSha256);
 });

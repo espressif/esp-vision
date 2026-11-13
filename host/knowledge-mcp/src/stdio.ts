@@ -3,16 +3,18 @@
 
 import process from "node:process";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { KnowledgeCatalog } from "./catalog.js";
 import type { Pack } from "./pack.js";
 import { createKnowledgeServer } from "./service.js";
 
 export interface StartStdioServerOptions {
-  pack: Pack;
+  pack?: Pack;
+  catalog?: KnowledgeCatalog;
 }
 
 /** Run a protocol-only stdio session with no statistics store or env lookup. */
-export async function startStdioServer({ pack }: StartStdioServerOptions): Promise<void> {
-  const server = createKnowledgeServer({ pack });
+export async function startStdioServer({ pack, catalog }: StartStdioServerOptions): Promise<void> {
+  const server = createKnowledgeServer({ pack, catalog });
   const transport = new StdioServerTransport();
   server.server.onerror = () => {
     process.stderr.write("Knowledge MCP stdio protocol error.\n");

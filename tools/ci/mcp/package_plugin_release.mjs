@@ -19,8 +19,6 @@ await mkdir(output, { recursive: true })
 const temp = await mkdtemp(join(process.env.TMPDIR ?? output, 'plugin-cli-release-'))
 const manifest = JSON.parse(await readFile(join(plugin, 'package.json'), 'utf8'))
 const { deviceCore, deviceCli } = manifest.espVision ?? {}
-const knowledge = JSON.parse(await readFile(join(root, 'host/knowledge-mcp/package.json'), 'utf8'))
-assert.deepEqual(manifest.espVision, knowledge.espVision, 'Plugin and Knowledge must declare matching release pins')
 for (const range of [deviceCore, deviceCli]) minorRange(range)
 const resolved = manifest.espVision?.resolved
 assert.ok(inMinorRange(deviceCore, resolved?.deviceCore), 'Resolved Core must satisfy its minor range')

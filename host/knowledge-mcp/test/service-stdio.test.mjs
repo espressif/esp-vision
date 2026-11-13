@@ -52,15 +52,15 @@ test("public factory serves the existing tools through an in-memory MCP client",
     await server.connect(serverTransport);
     await client.connect(clientTransport);
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 9);
+    assert.equal(tools.tools.length, 10);
     assert.deepEqual(tools.tools.map(({ name }) => name).sort(), [
       "get_api", "get_capabilities", "get_concept", "get_example", "list_examples",
-      "list_modules", "list_symbols", "search_docs", "server_info",
+      "list_firmware_versions", "list_modules", "list_symbols", "search_docs", "server_info",
     ]);
     const reply = await client.callTool({ name: "server_info", arguments: {} });
     const info = JSON.parse(reply.content[0].text);
     assert.equal(info.name, "esp-vision-mcp");
-    assert.equal(info.version, packVersion);
+    assert.equal(info.snapshots[0].firmwareVersion, packVersion);
     assert.equal(info.packageVersion, undefined);
   } finally {
     await client.close().catch(() => {});
@@ -90,9 +90,9 @@ test("stdio is the default, emits MCP only to stdout, and ignores statistics set
   try {
     await client.connect(transport);
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 9);
+    assert.equal(tools.tools.length, 10);
     const reply = await client.callTool({ name: "server_info", arguments: {} });
-    assert.equal(JSON.parse(reply.content[0].text).version, packVersion);
+    assert.equal(JSON.parse(reply.content[0].text).snapshots[0].firmwareVersion, packVersion);
   } finally {
     await client.close().catch(() => {});
   }
@@ -196,7 +196,7 @@ test("CLI HTTP mode accepts port and statistics config and serves the existing h
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 30));
   }
   assert.ok(response?.ok, `health route did not start: ${Buffer.concat(stderr).toString("utf8")}`);
-  assert.equal((await response.json()).version, packVersion);
+  assert.equal((await response.json()).snapshots[0].firmwareVersion, packVersion);
   assert.equal((await fetch(`${baseUrl}/mcp/health`)).status, 200);
   assert.equal(existsSync(databasePath), true);
 

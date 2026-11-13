@@ -46,6 +46,7 @@ async function createReleaseFixture(prefix = 'release-policy-') {
     helper: fixtureHelper,
     env: {
       ...process.env,
+      CI_COMMIT_TAG: "",
       TMPDIR: temporary,
       TMP: temporary,
       TEMP: temporary,
@@ -150,21 +151,21 @@ test('helper redacts token-like text from npm diagnostics', () => {
 })
 
 
-test('Knowledge publication rejects a default-branch push without a release tag', () => {
+test('Knowledge publication accepts master but requires a checked archive', () => {
   return withReleaseFixture(async (fixture) => {
     const result = runHelper(fixture, ['--package', 'host/knowledge-mcp'], withoutTokenEnv(fixture.env, {
       CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '', CI_DEFAULT_BRANCH: 'master',
       CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true',
     }))
     assert.notEqual(result.status, 0)
-    assert.match(result.output, /require a protected firmware release tag/)
+    assert.match(result.output, /exact checked release tarball/)
   })
 })
 
 test('Knowledge publication requires the exact checked tarball before token use', () => {
   return withReleaseFixture(async (fixture) => {
     const result = runHelper(fixture, ['--package', 'host/knowledge-mcp'], withoutTokenEnv(fixture.env, {
-      CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '2026.10.22',
+      CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '', CI_COMMIT_BRANCH: 'master', CI_DEFAULT_BRANCH: 'master',
       CI_COMMIT_REF_PROTECTED: 'true',
     }))
     assert.notEqual(result.status, 0)
@@ -172,10 +173,10 @@ test('Knowledge publication requires the exact checked tarball before token use'
   })
 })
 
-test('Knowledge release tags still require protected credentials', () => {
+test('Knowledge master releases still require protected credentials', () => {
   return withReleaseFixture(async (fixture) => {
     const result = runHelper(fixture, ['--package', 'host/knowledge-mcp', '--tarball', 'not-read.tgz'], withoutTokenEnv(fixture.env, {
-      CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '2026.10.22',
+      CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '', CI_COMMIT_BRANCH: 'master', CI_DEFAULT_BRANCH: 'master',
       CI_COMMIT_REF_PROTECTED: 'false',
     }))
     assert.notEqual(result.status, 0)
@@ -264,11 +265,11 @@ test('plugin publication rejects a default-branch push without a firmware tag', 
     CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true',
   }))
   assert.notEqual(result.status, 0)
-  assert.match(result.output, /require a protected firmware release tag/)
+  assert.match(result.output, /exact checked release tarball/)
 }))
 
 test('plugin tag publication requires the exact checked tarball and protected tag', () => withReleaseFixture(async fixture => {
-  const env = withoutTokenEnv(fixture.env, { CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '2026.10.22', CI_COMMIT_REF_PROTECTED: 'true' })
+  const env = withoutTokenEnv(fixture.env, { CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '', CI_COMMIT_BRANCH: 'master', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true' })
   const missing = runHelper(fixture, ['--package', 'host/esp-vision-plugin'], env)
   assert.notEqual(missing.status, 0)
   assert.match(missing.output, /exact checked release tarball/)
@@ -313,3 +314,13 @@ test('incorrect CLI version step is rejected before any npm publication', () => 
   const calls = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
   assert.deepEqual(calls.map(call => call[0]), ['whoami'])
 }))
+
+for (const packagePath of ['host/device-cli', 'host/knowledge-mcp', 'host/esp-vision-plugin']) {
+  test(`${packagePath} rejects firmware tag publication before registry access`, () => withReleaseFixture(async fixture => {
+    const result = runHelper(fixture, ['--package', packagePath, '--tarball', 'not-read.tgz'], withoutTokenEnv(fixture.env, {
+      CI_PIPELINE_SOURCE: 'push', CI_COMMIT_TAG: '2026.11.12', CI_COMMIT_BRANCH: '', CI_DEFAULT_BRANCH: 'master', CI_COMMIT_REF_PROTECTED: 'true',
+    }))
+    assert.notEqual(result.status, 0)
+    assert.match(result.output, /Firmware tags must not publish npm packages/)
+  }))
+}

@@ -1,6 +1,6 @@
 {
   "name": "@esp-vision/knowledge-mcp",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Public stdio and Streamable HTTP Knowledge MCP runtime for ESP-VISION.",
   "license": "Apache-2.0",
   "type": "module",
@@ -14,6 +14,7 @@
   "files": [
     "dist/",
     "data/mcp-pack.json",
+    "data/mcp-catalog.json",
     "data/provenance.json",
     "LICENSE",
     "NOTICE",
@@ -53,13 +54,5 @@
     "url": "git+https://github.com/espressif/esp-vision.git",
     "directory": "host/knowledge-mcp"
   },
-  "espVision": {
-    "deviceCore": "~0.8.0",
-    "deviceCli": "~0.2.0",
-    "resolved": {
-      "deviceCore": "0.8.1",
-      "deviceCli": "0.2.1"
-    }
-  },
-  "espVisionReleaseType": "patch"
+  "espVisionReleaseType": "minor"
 }

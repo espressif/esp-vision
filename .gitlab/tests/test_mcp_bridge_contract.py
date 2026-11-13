@@ -13,7 +13,7 @@ class McpBridgeContractTests(unittest.TestCase):
     def test_bridge_passes_exact_release_identity(self):
         bridge = yaml.safe_load((ROOT / '.gitlab/ci/mcp.yml').read_text())['trigger_website_mcp_release']
         values = bridge['variables']
-        self.assertEqual(values['ESP_VISION_MCP_PACKAGE_VERSION'], '$CI_COMMIT_TAG')
+        self.assertEqual(values['ESP_VISION_MCP_PACKAGE_VERSION'], '$KNOWLEDGE_MCP_VERSION')
         self.assertEqual(values['ESP_VISION_MCP_PROJECT_ID'], '$CI_PROJECT_ID')
         self.assertEqual(values['RELEASE_EXPECTED_SOURCE_COMMIT'], '$CI_COMMIT_SHA')
         self.assertEqual(bridge['trigger']['strategy'], 'depend')

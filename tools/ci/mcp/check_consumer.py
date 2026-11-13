@@ -22,9 +22,9 @@ def main():
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     artifacts = args.artifacts.resolve()
-    pack = (artifacts / 'mcp-pack.json').read_bytes()
+    pack = (artifacts / 'mcp-catalog.json').read_bytes()
     archive = (artifacts / 'knowledge-mcp.tgz').read_bytes()
-    identity = json.loads(pack)['meta']
+    identity = json.loads((artifacts / 'knowledge-npm.json').read_bytes())
     version, commit = identity['version'], identity['sourceCommit']
     repository = 'registry.example/main/knowledge-mcp'
     manifest = descriptor(pack, version, commit, repository, 'sha256:' + 'b' * 64, archive)
@@ -34,7 +34,7 @@ def main():
         (package / name).write_bytes(data)
     source = (ROOT / '.gitlab/ci/mcp.yml').read_text().split('trigger_website_mcp_release:', 1)[1]
     variables = source.split('  variables:', 1)[1].split('  trigger:', 1)[0]
-    upstream = dict(CI_COMMIT_TAG=version, CI_PROJECT_ID='123', CI_COMMIT_SHA=commit,
+    upstream = dict(KNOWLEDGE_MCP_VERSION=version, CI_PROJECT_ID='123', CI_COMMIT_SHA=commit,
                     CI_REGISTRY_IMAGE='registry.example/main')
     forwarded = {}
     for key, value in re.findall(r'^    ([A-Z_]+): "([^"]*)"$', variables, re.M):
@@ -53,11 +53,12 @@ import {pathToFileURL} from 'node:url';
 const {releaseRequestFromEnv,validateRelease}=await import(pathToFileURL(process.argv[2]));
 const p=process.argv[3], read=n=>readFileSync(p+'/'+n);
 const options=releaseRequestFromEnv(JSON.parse(readFileSync(process.argv[4])));
-const input={...options,descriptorBytes:read('mcp-release.json'),descriptorChecksumBytes:read('mcp-release.sha256'),packBytes:read('mcp-pack.json'),packChecksumBytes:read('mcp-pack.sha256'),tarballBytes:read('knowledge-mcp.tgz')};
+const input={...options,descriptorBytes:read('mcp-release.json'),descriptorChecksumBytes:read('mcp-release.sha256'),packBytes:read('mcp-catalog.json'),packChecksumBytes:read('mcp-catalog.sha256'),tarballBytes:read('knowledge-mcp.tgz')};
 const accepted=validateRelease(input);
-assert.equal(accepted.schemaVersion,2);
+assert.equal(accepted.schemaVersion,3);
 assert.equal(accepted.sourceCommit,options.expectedSourceCommit);
 assert.equal(accepted.version,options.version);
+assert.equal(accepted.latestFirmwareVersion,JSON.parse(read('mcp-catalog.json')).latestFirmwareVersion);
 assert.equal(accepted.imageReference,options.imageRepository+'@sha256:'+ 'b'.repeat(64));
 assert.equal(accepted.npm.name,'@esp-vision/knowledge-mcp');
 assert.throws(()=>validateRelease({...input,packBytes:Buffer.from('changed')}));

@@ -20,7 +20,7 @@ start() {
         "$MCP_ACCEPTANCE_IMAGE" >/dev/null
 }
 check() {
-    docker exec -i -e MCP_EXPECTED_NPM_SHA256 -e MCP_EXPECTED_PACK_SHA256 -e MCP_EXPECTED_SOURCE_COMMIT "$task_name" node --input-type=module - "$1" <<'JS'
+    docker exec -i -e MCP_EXPECTED_NPM_SHA256 -e MCP_EXPECTED_CATALOG_SHA256 -e MCP_EXPECTED_SOURCE_COMMIT "$task_name" node --input-type=module - "$1" <<'JS'
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 let healthy = false;
@@ -31,7 +31,7 @@ for (let i = 0; i < 40; i++) {
 }
 assert.ok(healthy, 'Container did not become healthy');
 const identity = await (await fetch('http://127.0.0.1:8080/health')).json();
-for (const [field, variable] of [['npmArtifactSha256','MCP_EXPECTED_NPM_SHA256'], ['packSha256','MCP_EXPECTED_PACK_SHA256'], ['sourceCommit','MCP_EXPECTED_SOURCE_COMMIT']]) {
+for (const [field, variable] of [['npmArtifactSha256','MCP_EXPECTED_NPM_SHA256'], ['catalogSha256','MCP_EXPECTED_CATALOG_SHA256'], ['sourceCommit','MCP_EXPECTED_SOURCE_COMMIT']]) {
   assert.ok(process.env[variable], 'Expected artifact identity must be configured');
   assert.equal(identity[field], process.env[variable], 'Container artifact identity mismatch: ' + field);
 }
