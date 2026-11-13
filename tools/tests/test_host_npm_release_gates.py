@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
-"""Check the independent SDK and firmware-tag npm release gates."""
+"""Check independent protected-master npm release gates."""
 from pathlib import Path
 import re
 import unittest
@@ -22,17 +22,17 @@ class HostNpmReleaseGateTests(unittest.TestCase):
                 self.assertIn('$CI_COMMIT_REF_PROTECTED == "true"', block)
                 self.assertIn('- when: never', block)
 
-    def test_plugin_and_knowledge_are_release_tag_jobs(self):
+    def test_plugin_and_knowledge_are_independent_master_jobs(self):
         import yaml
         for filename, job in [('plugin.yml', 'publish_plugin_npm'),
                               ('mcp-runtime.yml', 'publish_knowledge_mcp_npm')]:
             with self.subTest(job=job):
                 config = yaml.safe_load((ROOT / '.gitlab/ci' / filename).read_text())
                 block = config[job]
-                self.assertEqual(block['extends'], '.rules:release')
+                self.assertEqual(block['extends'], '.rules:plugin:publish' if filename == 'plugin.yml' else '.rules:knowledge:publish')
                 self.assertEqual(block['stage'], 'post_deploy')
                 self.assertNotEqual(block.get('when'), 'manual')
-                self.assertIn('qualify_firmware_release', {x['job'] for x in block['needs']})
+                self.assertNotIn('qualify_firmware_release', {x['job'] for x in block['needs']})
         cli = yaml.safe_load((ROOT / '.gitlab/ci/host-tools.yml').read_text())
         package = cli['package_device_cli_npm']
         self.assertTrue(any('host/device-cli ci ' in line for line in package['script']))

@@ -5,7 +5,7 @@ FROM node:24-bookworm-slim
 WORKDIR /srv
 ARG MCP_NPM_SHA256
 ENV MCP_NPM_ARTIFACT_SHA256=${MCP_NPM_SHA256}
-ENV MCP_PACK_PATH=/srv/data/mcp-pack.json
+ENV MCP_CATALOG_PATH=/srv/data/mcp-catalog.json
 ENV MCP_STATS_DB_PATH=/srv/stats/usage.sqlite
 ENV MCP_STATS_RETENTION_DAYS=90
 ENV PORT=8080

@@ -65,6 +65,7 @@ export class Pack {
 
   constructor(data: any) {
     this.data = data;
+    this.packSha256 = createHash("sha256").update(JSON.stringify(data)).digest("hex");
     this.meta = data.meta ?? {};
     for (const m of data.modules ?? []) this.modules[m.name] = m;
     for (const c of data.capabilities ?? []) this.capabilities[c.target] = c;

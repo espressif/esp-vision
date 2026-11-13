@@ -140,3 +140,34 @@
 .rules:release:
   rules:
     - if: '$CI_COMMIT_TAG =~ /^(v\d+\.\d+(\.\d+)?|\d{4}\.\d{1,2}\.\d{1,2})($|[-.])/'
+
+# Independent npm release intent is recorded in the package manifest.
+.rules:knowledge:build:
+  variables:
+    KNOWLEDGE_MCP_VERSION: "0.2.0"
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - if: '$ESP_VISION_BUILD_KNOWLEDGE == "1"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      changes: ["host/knowledge-mcp/**/*", "tools/ci/mcp/**/*", ".gitlab/ci/mcp*.yml", ".gitlab/ci/rules.yml"]
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes: ["host/knowledge-mcp/**/*", "tools/ci/mcp/**/*", ".gitlab/ci/mcp*.yml", ".gitlab/ci/rules.yml"]
+
+.rules:knowledge:publish:
+  variables:
+    KNOWLEDGE_MCP_VERSION: "0.2.0"
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes: ["host/knowledge-mcp/package.json", "host/knowledge-mcp/snapshots.json"]
+    - when: never
+
+.rules:plugin:publish:
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      changes: ["host/esp-vision-plugin/package.json"]
+    - when: never

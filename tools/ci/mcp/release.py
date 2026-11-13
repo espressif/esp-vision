@@ -46,7 +46,8 @@ def npm_identity(npm_bytes, pack_bytes, version, source_commit):
                 raise ValueError('Invalid npm archive metadata')
             return archive.extractfile(member).read(limit + 1)
         package = json.loads(read('package.json', 64 * 1024))
-        embedded = read('data/mcp-pack.json', 32 * 1024 * 1024)
+        is_catalog = json.loads(pack_bytes).get('schemaVersion') == 1 and 'snapshots' in json.loads(pack_bytes)
+        embedded = read('data/mcp-catalog.json' if is_catalog else 'data/mcp-pack.json', 64 * 1024 * 1024)
         provenance = json.loads(read('data/provenance.json', 64 * 1024))
     if package.get('name') != '@esp-vision/knowledge-mcp' or package.get('private'):
         raise ValueError('Unexpected Knowledge npm package')
@@ -56,6 +57,11 @@ def npm_identity(npm_bytes, pack_bytes, version, source_commit):
     expected = {'schemaVersion': 1, 'packageName': package['name'],
                 'packageVersion': package_version, 'packVersion': version,
                 'sourceCommit': source_commit, 'packSha256': sha256(pack_bytes)}
+    if is_catalog:
+        expected = {'schemaVersion': 2, 'packageName': package['name'], 'packageVersion': version,
+                    'sourceCommit': source_commit, 'catalogSha256': sha256(pack_bytes)}
+        if package_version != version:
+            raise ValueError('Knowledge npm version differs from runtime release version')
     if embedded != pack_bytes or any(provenance.get(key) != value for key, value in expected.items()):
         raise ValueError('Knowledge npm provenance does not match the release')
     return {'name': package['name'], 'version': package_version,
@@ -66,17 +72,27 @@ def descriptor(pack_bytes, version, source_commit, image_repository, image_diges
     if not VERSION.fullmatch(version) or not re.fullmatch(r'[a-f0-9]{40}', source_commit):
         raise ValueError('Invalid release identity')
     pack = json.loads(pack_bytes)
-    if pack.get('meta', {}).get('version') != version or pack['meta'].get('sourceCommit') != source_commit:
+    is_catalog = pack.get('schemaVersion') == 1 and 'snapshots' in pack
+    if is_catalog:
+        from catalog import validate_catalog
+        validate_catalog(pack_bytes)
+        if npm_bytes is None:
+            raise ValueError('Catalog release requires exact npm archive')
+    elif pack.get('meta', {}).get('version') != version or pack['meta'].get('sourceCommit') != source_commit:
         raise ValueError('Knowledge version/source does not match the release')
     if not DIGEST.fullmatch(image_digest):
         raise ValueError('An immutable SHA-256 image digest is required')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.:/_-]*', image_repository) or '@' in image_repository or ':' in image_repository.rsplit('/', 1)[-1]:
         raise ValueError('Invalid image repository')
     manifest = {
-        'schemaVersion': 2 if npm_bytes is not None else 1, 'version': version, 'sourceCommit': source_commit,
-        'knowledge': {'file': 'mcp-pack.json', 'sha256': sha256(pack_bytes), 'bytes': len(pack_bytes)},
+        'schemaVersion': 3 if is_catalog else (2 if npm_bytes is not None else 1), 'version': version, 'sourceCommit': source_commit,
+        'knowledge': {'file': 'mcp-catalog.json' if is_catalog else 'mcp-pack.json', 'sha256': sha256(pack_bytes), 'bytes': len(pack_bytes)},
         'image': {'reference': image_repository + '@' + image_digest, 'digest': image_digest},
     }
+    if is_catalog:
+        from catalog import identity
+        manifest['latestFirmwareVersion'] = pack['latestFirmwareVersion']
+        manifest['snapshots'] = [{**identity(s), 'active': pack['activeSnapshots'][s['firmwareVersion']] == s['snapshotVersion']} for s in pack['snapshots']]
     if npm_bytes is not None:
         manifest['npm'] = npm_identity(npm_bytes, pack_bytes, version, source_commit)
     return manifest
@@ -123,13 +139,14 @@ def release_files(pack_bytes, manifest, npm_bytes=None):
     encoded = (json.dumps(manifest, indent=2, sort_keys=True) + '\n').encode()
     # The descriptor checksum is the last publication marker. Consumers never
     # select an incomplete package by listing or a mutable latest pointer.
+    data_name = manifest['knowledge']['file']
     files = {
-        'mcp-pack.json': pack_bytes,
-        'mcp-pack.sha256': (sha256(pack_bytes) + '\n').encode(),
+        data_name: pack_bytes,
+        data_name.replace('.json', '.sha256'): (sha256(pack_bytes) + '\n').encode(),
         'mcp-release.json': encoded,
         'mcp-release.sha256': (sha256(encoded) + '\n').encode(),
     }
-    if manifest.get('schemaVersion') == 2:
+    if manifest.get('schemaVersion') in (2, 3):
         identity = npm_identity(npm_bytes, pack_bytes, manifest['version'], manifest['sourceCommit'])
         if identity != manifest.get('npm'):
             raise ValueError('Knowledge npm identity differs from descriptor')
@@ -156,7 +173,9 @@ def publish(registry, version, files):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--pack', type=Path, required=True)
+    data_source = parser.add_mutually_exclusive_group(required=True)
+    data_source.add_argument('--pack', type=Path)
+    data_source.add_argument('--catalog', type=Path)
     parser.add_argument('--npm-tarball', type=Path, required=True)
     parser.add_argument('--version', required=True)
     parser.add_argument('--source-commit', required=True)
@@ -165,7 +184,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--publish', action='store_true')
     args = parser.parse_args()
-    data = args.pack.read_bytes()
+    data = (args.catalog or args.pack).read_bytes()
     manifest = descriptor(data, args.version, args.source_commit, args.image_repository,
                           args.image_digest_file.read_text().strip(), args.npm_tarball.read_bytes())
     files = release_files(data, manifest, args.npm_tarball.read_bytes())

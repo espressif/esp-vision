@@ -5,15 +5,17 @@
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
+import { KnowledgeCatalog } from "./catalog.js";
 import { Pack } from "./pack.js";
 import { attachHttpShutdown, startHttpServer } from "./server.js";
 import { startStdioServer } from "./stdio.js";
 
-const packagePackPath = resolve(dirname(fileURLToPath(import.meta.url)), "../data/mcp-pack.json");
+const packageCatalogPath = resolve(dirname(fileURLToPath(import.meta.url)), "../data/mcp-catalog.json");
 
 export interface CliOptions {
   transport: "stdio" | "http";
   packPath?: string;
+  catalogPath?: string;
   port?: number;
   statsDbPath?: string;
   retentionDays?: number;
@@ -45,6 +47,7 @@ function parseInteger(value: string, name: string, min: number, max: number): nu
 export function parseCliArgs(args: string[]): CliOptions {
   let transport: "stdio" | "http" = "stdio";
   let packPath: string | undefined;
+  let catalogPath: string | undefined;
   let port: number | undefined;
   let statsDbPath: string | undefined;
   let retentionDays: number | undefined;
@@ -64,6 +67,12 @@ export function parseCliArgs(args: string[]): CliOptions {
       if (value !== "stdio" && value !== "http") throw new Error("--transport must be stdio or http.");
       transport = value;
       index = next;
+      continue;
+    }
+    if (argument === "--catalog" || argument.startsWith("--catalog=")) {
+      if (seen.has("--catalog")) throw new Error("Specify --catalog only once.");
+      seen.add("--catalog");
+      [catalogPath, index] = optionValue(args, index, "--catalog");
       continue;
     }
     if (argument === "--pack" || argument.startsWith("--pack=")) {
@@ -100,7 +109,8 @@ export function parseCliArgs(args: string[]): CliOptions {
   if (transport === "stdio" && (port !== undefined || statsDbPath !== undefined || retentionDays !== undefined)) {
     throw new Error("--port and statistics options require --transport http.");
   }
-  return { transport, packPath, port, statsDbPath, retentionDays, help };
+  if (packPath && catalogPath) throw new Error("Choose --pack or --catalog.");
+  return { transport, catalogPath, packPath, port, statsDbPath, retentionDays, help };
 }
 
 function helpText(): string {
@@ -108,7 +118,8 @@ function helpText(): string {
     "Usage: esp-vision-knowledge-mcp [--transport stdio|http] [options]",
     "",
     "Transport defaults to stdio. Options:",
-    "  --pack PATH                  Knowledge pack (default: MCP_PACK_PATH or packaged data)",
+    "  --catalog PATH               Catalog (default: MCP_CATALOG_PATH or packaged data)",
+    "  --pack PATH                  Explicit single firmware pack for development",
     "  --transport stdio|http       stdio by default; HTTP keeps / and /mcp endpoints",
     "  --port PORT                  HTTP port (default: PORT or 8080)",
     "  --stats-db PATH              HTTP aggregate statistics database",
@@ -137,10 +148,11 @@ export async function main(args = process.argv.slice(2), env: NodeJS.ProcessEnv 
 
   // Stdio defaults to the immutable pack shipped in the npm archive. There is
   // no fixture fallback, and explicit paths remain useful for local testing.
-  const packPath = options.packPath ?? env.MCP_PACK_PATH ?? packagePackPath;
-  let pack: Pack;
+  const packPath = options.packPath ?? (options.catalogPath ? undefined : env.MCP_PACK_PATH);
+  let catalog: KnowledgeCatalog;
   try {
-    pack = Pack.load(packPath);
+    catalog = packPath ? KnowledgeCatalog.fromPack(Pack.load(packPath))
+      : KnowledgeCatalog.load(options.catalogPath ?? env.MCP_CATALOG_PATH ?? packageCatalogPath);
   } catch {
     process.stderr.write("Knowledge pack could not be loaded from the configured path.\n");
     return 1;
@@ -148,7 +160,7 @@ export async function main(args = process.argv.slice(2), env: NodeJS.ProcessEnv 
 
   if (options.transport === "stdio") {
     try {
-      await startStdioServer({ pack });
+      await startStdioServer({ catalog });
       return 0;
     } catch {
       process.stderr.write("Knowledge MCP stdio server failed.\n");
@@ -158,7 +170,7 @@ export async function main(args = process.argv.slice(2), env: NodeJS.ProcessEnv 
 
   try {
     const running = await startHttpServer({
-      pack,
+      catalog,
       ...(options.port === undefined ? {} : { port: options.port }),
       ...(options.statsDbPath === undefined ? {} : { statsDbPath: options.statsDbPath }),
       ...(options.retentionDays === undefined ? {} : { retentionDays: options.retentionDays }),

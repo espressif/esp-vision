@@ -41,7 +41,6 @@ def main():
     if major != '24':
         parser.error('Select Node 24 on PATH to match the Knowledge MCP container')
     env['ESP_VISION_NPM_TARBALL_DIR'] = str(output / 'artifacts')
-    pack = args.pack.resolve() if args.pack else output / 'knowledge-pack.json'
     commands = []
     if args.install:
         commands.extend([
@@ -49,9 +48,10 @@ def main():
             ('knowledge-install', ROOT, ['npm', '--prefix', 'host/knowledge-mcp', 'ci', '--ignore-scripts', '--no-audit', '--no-fund']),
             ('website-install', website, ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts']),
         ])
-    if not args.pack:
-        commit = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT, text=True).strip()
-        commands.append(('generate-knowledge', ROOT, [sys.executable, 'docs/gen_mcp.py', 'acceptance-' + commit, '--out', str(pack)]))
+    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    catalog = output / 'mcp-catalog.json'
+    commands.append(('assemble-knowledge-catalog', ROOT, [sys.executable, 'tools/ci/mcp/catalog.py', 'assemble',
+                     '--lock', 'host/knowledge-mcp/snapshots.json', '--output', str(catalog)]))
     commands.extend([
         ('device-core-tests', ROOT, ['npm', '--prefix', 'host/device-core', 'test']),
         ('device-core-schema', ROOT, ['npm', '--prefix', 'host/device-core', 'run', 'check:schema']),
@@ -66,7 +66,7 @@ def main():
         ('plugin-archive', ROOT, ['node', 'host/esp-vision-plugin/scripts/archive.mjs', '--output-dir', str(output / 'artifacts')]),
         ('knowledge-build', ROOT, ['npm', '--prefix', 'host/knowledge-mcp', 'run', 'build']),
         ('knowledge-tests', ROOT, ['npm', '--prefix', 'host/knowledge-mcp', 'test']),
-        ('knowledge-npm-artifact', ROOT, [sys.executable, 'tools/ci/mcp/prepare_knowledge.py', '--pack', str(pack), '--output', str(output / 'knowledge-artifact')]),
+        ('knowledge-npm-artifact', ROOT, [sys.executable, 'tools/ci/mcp/prepare_knowledge.py', '--catalog', str(catalog), '--expected-source-commit', commit, '--output', str(output / 'knowledge-artifact')]),
         ('knowledge-npm-dry-run', ROOT, ['node', 'tools/ci/mcp/release_npm.mjs', '--dry-run', '--package', 'host/knowledge-mcp', '--tarball', str(output / 'knowledge-artifact/knowledge-mcp.tgz')]),
         ('knowledge-npm-transports-statistics', ROOT, ['node', 'tools/ci/mcp/smoke_knowledge.mjs', '--tarball', str(output / 'knowledge-artifact/knowledge-mcp.tgz')]),
         ('producer-contract', ROOT, [sys.executable, '-m', 'unittest', 'discover', '-s', 'tools/ci/mcp', '-p', 'test_*.py']),

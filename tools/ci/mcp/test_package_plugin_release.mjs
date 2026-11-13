@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -21,10 +21,14 @@ async function check(t, pins, registryCliCore, knowledgePins = pins) {
   await copyFile(fileURLToPath(new URL('../../../host/device-core/scripts/version-policy.mjs', import.meta.url)), join(root, 'host/device-core/scripts/version-policy.mjs'))
   await writeFile(join(root, 'host/esp-vision-plugin/package.json'), JSON.stringify({ espVision: pins }))
   await writeFile(join(root, 'host/knowledge-mcp/package.json'), JSON.stringify({ espVision: knowledgePins }))
+  const fakeBin = join(root, 'bin')
+  await mkdir(fakeBin)
+  await writeFile(join(fakeBin, 'npm'), '#!/bin/sh\necho FIXTURE_NPM_REACHED >&2\nexit 42\n')
+  await chmod(join(fakeBin, 'npm'), 0o755)
   const loader = join(root, 'registry.mjs')
   await writeFile(loader, `globalThis.fetch=async url=>{const part=decodeURIComponent(url.pathname).split('/');const cli=part[2]==='device-cli';return {status:200,json:async()=>({name:'@esp-vision/'+part[2],version:part[3],dist:{integrity:'sha512-test'},devDependencies:cli?{'@esp-vision/device-core':${JSON.stringify(registryCliCore)}}:{}})}}`)
   return spawnSync(process.execPath, [helper, '--output', join(root, 'out')], {
-    env: { ...process.env, TMPDIR: root, TMP: root, TEMP: root, NODE_OPTIONS: `--import ${pathToFileURL(loader).href}` }, encoding: 'utf8',
+    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, TMPDIR: root, TMP: root, TEMP: root, NODE_OPTIONS: `--import ${pathToFileURL(loader).href}` }, encoding: 'utf8',
   })
 }
 
@@ -40,8 +44,8 @@ test('release rejects a published CLI declaring a different Core', async t => {
   assert.match(result.stderr, /Published CLI must bundle the resolved Core version/)
 })
 
-test('release rejects different Plugin and Knowledge compatibility pins', async t => {
+test('Plugin packaging does not couple independent Knowledge metadata', async t => {
   const result = await check(t, { deviceCore: '~0.5.0', deviceCli: '~0.1.0', resolved: { deviceCore: '0.5.1', deviceCli: '0.1.0' } }, '0.5.1', { deviceCore: '~0.4.0', deviceCli: '~0.1.0', resolved: { deviceCore: '0.4.2', deviceCli: '0.1.0' } })
   assert.notEqual(result.status, 0)
-  assert.match(result.stderr, /matching release pins/)
+  assert.match(result.stderr, /FIXTURE_NPM_REACHED/)
 })

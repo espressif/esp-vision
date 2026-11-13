@@ -1,7 +1,7 @@
 {
   "meta": {
     "version": "fixture-2026.10.21",
-    "sourceCommit": "test-fixture",
+    "sourceCommit": "ffffffffffffffffffffffffffffffffffffffff",
     "micropythonVersion": "v1.28.0",
     "canonicalUrlTemplate": "https://docs.example.invalid/{lang}/{version}/{target}/{path}#{anchor}",
     "counts": { "modules": 1, "symbols": 1, "docs": 1, "examples": 1 }

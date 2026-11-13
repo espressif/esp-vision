@@ -339,5 +339,74 @@ class FirmwarePublicationGateTests(unittest.TestCase):
         self.assertTrue({"pack_launchpad", "qualify_firmware_release"} <= upload_needs)
 
 
+@unittest.skipIf(yaml is None, "PyYAML required")
+class IndependentKnowledgeReleaseRulesTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import json
+        cls.rules = yaml.safe_load((ROOT / '.gitlab/ci/rules.yml').read_text())
+        cls.mcp = yaml.safe_load((ROOT / '.gitlab/ci/mcp.yml').read_text())
+        cls.runtime = yaml.safe_load((ROOT / '.gitlab/ci/mcp-runtime.yml').read_text())
+        cls.plugin = yaml.safe_load((ROOT / '.gitlab/ci/plugin.yml').read_text())
+        cls.version = json.loads((ROOT / 'host/knowledge-mcp/package.json').read_text())['version']
+
+    def test_tags_never_select_npm_or_runtime_publication(self):
+        variables = dict(CI_COMMIT_TAG='2026.11.12', CI_PIPELINE_SOURCE='push', CI_COMMIT_BRANCH='',
+                         CI_DEFAULT_BRANCH='master', CI_COMMIT_REF_PROTECTED='true')
+        for name in ('.rules:knowledge:build', '.rules:knowledge:publish', '.rules:plugin:publish'):
+            self.assertFalse(selected(self.rules[name]['rules'], variables,
+                             ['host/knowledge-mcp/package.json', 'host/esp-vision-plugin/package.json']))
+
+    def test_explicit_knowledge_validation_can_skip_firmware_without_publishing(self):
+        variables = dict(CI_PIPELINE_SOURCE='api', CI_COMMIT_BRANCH='feat/knowledge', CI_DEFAULT_BRANCH='master',
+                         ESP_VISION_DEVICE_CORE_ONLY='1', ESP_VISION_BUILD_KNOWLEDGE='1')
+        self.assertTrue(selected(self.rules['.rules:knowledge:build']['rules'], variables, []))
+        for rule in ('.rules:knowledge:publish', '.rules:plugin:publish', '.rules:build:firmware', '.rules:test:target'):
+            self.assertFalse(selected(self.rules[rule]['rules'], variables, []))
+
+    def test_protected_master_release_metadata_selects_independent_publication(self):
+        variables = dict(CI_COMMIT_TAG='', CI_PIPELINE_SOURCE='push', CI_COMMIT_BRANCH='master',
+                         CI_DEFAULT_BRANCH='master', CI_COMMIT_REF_PROTECTED='true')
+        for name, path in (('.rules:knowledge:publish', 'host/knowledge-mcp/package.json'),
+                           ('.rules:plugin:publish', 'host/esp-vision-plugin/package.json')):
+            self.assertTrue(selected(self.rules[name]['rules'], variables, [path]))
+            self.assertFalse(selected(self.rules[name]['rules'], variables, ['platform/main.c']))
+            self.assertFalse(selected(self.rules[name]['rules'], {**variables, 'CI_COMMIT_REF_PROTECTED': 'false'}, [path]))
+
+    def test_publication_has_no_firmware_dependencies_but_snapshot_does(self):
+        for job in [self.runtime['publish_knowledge_mcp_npm'], self.mcp['publish_mcp_release'], self.plugin['publish_plugin_npm']]:
+            needs = {need['job'] for need in job['needs']}
+            self.assertFalse(needs & {'qualify_firmware_release', 'upload-dl-trigger', 'build_mcp_pack'})
+        needs = {need['job'] for need in self.mcp['publish_firmware_knowledge_snapshot']['needs']}
+        self.assertEqual(needs, {'build_mcp_pack', 'qualify_firmware_release', 'upload-dl-trigger'})
+        plugin_needs = {need['job'] for need in self.plugin['package_plugin_npm']['needs']}
+        self.assertIn('publish_device_cli_npm', plugin_needs)
+
+    def test_plugin_waits_for_deployment_when_both_packages_publish(self):
+        publish = self.plugin['publish_plugin_npm']
+        dependency = next(item for item in publish['needs'] if item['job'] == 'trigger_website_mcp_release')
+        self.assertTrue(dependency['optional'])  # Omitted only for Plugin-only releases.
+        self.assertFalse(publish.get('allow_failure', False))
+        bridge = self.mcp['trigger_website_mcp_release']
+        self.assertEqual(bridge['trigger']['strategy'], 'depend')
+        self.assertFalse(bridge.get('allow_failure', False))
+        variables = dict(CI_COMMIT_TAG='', CI_PIPELINE_SOURCE='push', CI_COMMIT_BRANCH='master',
+                         CI_DEFAULT_BRANCH='master', CI_COMMIT_REF_PROTECTED='true')
+        for paths, expected in [(['host/esp-vision-plugin/package.json'], False),
+                                (['host/esp-vision-plugin/package.json', 'host/knowledge-mcp/package.json'], True)]:
+            self.assertTrue(selected(self.rules['.rules:plugin:publish']['rules'], variables, paths))
+            self.assertEqual(selected(self.rules['.rules:knowledge:publish']['rules'], variables, paths), expected)
+        source = (ROOT / 'tools/ci/mcp/release_npm.mjs').read_text()
+        self.assertLess(source.index('await verifyPluginKnowledge('), source.index("['publish', tarball"))
+        self.assertIn('node --test tools/ci/mcp/test_plugin_knowledge.mjs', self.plugin['plugin_checks']['script'])
+
+    def test_bridge_and_build_use_npm_version_instead_of_firmware_tag(self):
+        for name in ('.rules:knowledge:build', '.rules:knowledge:publish'):
+            self.assertEqual(self.rules[name]['variables']['KNOWLEDGE_MCP_VERSION'], self.version)
+        bridge = self.mcp['trigger_website_mcp_release']
+        self.assertEqual(bridge['variables']['ESP_VISION_MCP_PACKAGE_VERSION'], '$KNOWLEDGE_MCP_VERSION')
+        self.assertEqual(bridge['extends'], '.rules:knowledge:publish')
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -92,6 +92,11 @@ test('Expert archive roundtrips deterministically with portable Agent/Skill/MCP 
   assert.match(text('agents/esp-vision-development.md'), /skills:\n- esp-vision-development/)
   assert.doesNotMatch(text('agents/esp-vision-development.md'), /^tools:/m)
   const skill = text('skills/esp-vision-development/SKILL.md')
+  assert.match(skill, /Never silently fall back to latest/)
+  assert.match(skill, /Only after the user explicitly declines the firmware update/)
+  assert.match(skill, /--declined-firmware-update/)
+  assert.match(skill, /result\.identity\.firmwareVersion/)
+  assert.match(text('skills/esp-vision-development/scripts/knowledge-version.mjs'), /FIRMWARE_VERSION_REQUIRED/)
   assert.ok(skill.includes(`display_name: ${JSON.stringify(manifest.displayName.zh)}`))
   assert.ok(skill.includes(`display_name_en: ${JSON.stringify(manifest.displayName.en)}`))
   for (const [locale, name] of Object.entries(manifest.displayName)) {

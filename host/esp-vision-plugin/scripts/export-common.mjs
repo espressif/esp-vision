@@ -79,7 +79,7 @@ export async function createExport({ sourceRoot, packageRoot, outputDirectory, r
     assert.ok(!files.has(path), `Duplicate plugin path: ${path}`)
     files.set(path, { name: `${rootName}/${path}`, contents: Buffer.from(contents), mode })
   }
-  for (const file of info.files.filter(file => /^(cli|assets)\//.test(file.path))) {
+  for (const file of info.files.filter(file => /^(cli|assets)\//.test(file.path) || file.path.startsWith(`skills/${skillName}/scripts/`))) {
     add(file.path, await readFile(resolve(source, file.path)), file.mode & 0o111 ? 0o755 : 0o644)
   }
   for (const path of ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'DEVICE_CORE_NOTICE.md']) add(path, await readFile(resolve(source, path)))

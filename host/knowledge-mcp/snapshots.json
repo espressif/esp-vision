@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "activeSnapshots": {
+    "2026.10.21": "2026.10.21",
+    "2026.10.23": "2026.10.23",
+    "2026.11.06": "2026.11.06"
+  },
+  "snapshots": [
+    {
+      "firmwareVersion": "2026.10.21",
+      "snapshotVersion": "2026.10.21",
+      "firmwareSourceCommit": "5f8f4d5be6a55cec090ad8d7425ef4f6e0667790",
+      "contentSourceCommit": "5f8f4d5be6a55cec090ad8d7425ef4f6e0667790",
+      "packSha256": "d3d93bcebbc3f4c1be5002cfd85f25bb6c1fa12a29d47d3e8ee655ecce96f410",
+      "source": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@esp-vision/knowledge-mcp/-/knowledge-mcp-0.1.0.tgz",
+        "integrity": "sha512-RPfYiHkwTS7kA6xsR8Cv9Cc1vfDr2lqiuBD1q9Kyag2WfAXIM5+5j3h7jcWXI6Nz4Z92oDZFiS2l8bbP8RU1/w=="
+      }
+    },
+    {
+      "firmwareVersion": "2026.10.23",
+      "snapshotVersion": "2026.10.23",
+      "firmwareSourceCommit": "057c7224277876f14b45441d891ffd103a78db1e",
+      "contentSourceCommit": "057c7224277876f14b45441d891ffd103a78db1e",
+      "packSha256": "6a3701aef89b3dbcbf858f405addb6a0931d5567bcc9b55524fc6caa1e3779ce",
+      "source": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@esp-vision/knowledge-mcp/-/knowledge-mcp-0.1.1.tgz",
+        "integrity": "sha512-1uDO3HGiWogoHzUJgs96k8DTd3fVlwWJnsFyaHa0tFkKSW2z9RAwLpFOXa+6P9qh17me2Bzm/2ySa6KoRMaktA=="
+      }
+    },
+    {
+      "firmwareVersion": "2026.11.06",
+      "snapshotVersion": "2026.11.06",
+      "firmwareSourceCommit": "d3dd282c5907d47fea8a251bf4f230efa0139db3",
+      "contentSourceCommit": "d3dd282c5907d47fea8a251bf4f230efa0139db3",
+      "packSha256": "e5e11102575ab57ec1d72deffb85d428a682c92b08bc6a6445147702a3e74c1a",
+      "source": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@esp-vision/knowledge-mcp/-/knowledge-mcp-0.1.2.tgz",
+        "integrity": "sha512-3uLugSbhIU7RoHP7NqM8rmlPTdcq7GS3GqptgKtOpl2ubJST3VijRI8/cButyXxlMkgho4jAOjmL3W9cFXr3pg=="
+      }
+    }
+  ],
+  "latestFirmwareVersion": "2026.11.06"
+}

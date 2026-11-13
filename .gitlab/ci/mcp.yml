@@ -11,7 +11,7 @@ mcp_release_contract_checks:
 # Main owns the server image. Website only receives the immutable digest.
 build_knowledge_mcp_image:
   stage: deploy
-  extends: .rules:mcp:build
+  extends: .rules:knowledge:build
   tags: [build, internet, amd64]
   image:
     name: gcr.io/kaniko-project/executor:v1.23.2-debug
@@ -38,7 +38,7 @@ build_knowledge_mcp_image:
 
 verify_knowledge_mcp_container:
   stage: deploy
-  extends: .rules:mcp:build
+  extends: .rules:knowledge:build
   image: docker:latest
   tags: [appserver]
   needs:
@@ -50,37 +50,31 @@ verify_knowledge_mcp_container:
     - unset DOCKER_AUTH_CONFIG
     - echo "$CI_JOB_TOKEN" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
     - export MCP_EXPECTED_NPM_SHA256="$(sha256sum .cache/knowledge-npm/knowledge-mcp.tgz | cut -d ' ' -f1)"
-    - export MCP_EXPECTED_PACK_SHA256="$(sha256sum .cache/knowledge-npm/mcp-pack.json | cut -d ' ' -f1)"
+    - export MCP_EXPECTED_CATALOG_SHA256="$(sha256sum .cache/knowledge-npm/mcp-catalog.json | cut -d ' ' -f1)"
     - export MCP_EXPECTED_SOURCE_COMMIT="$CI_COMMIT_SHA"
     - export MCP_ACCEPTANCE_IMAGE="$CI_REGISTRY_IMAGE/knowledge-mcp@$(cat mcp-image.digest)"
     - sh tools/ci/mcp/container_acceptance.sh
 
 publish_mcp_release:
   stage: post_deploy
-  extends: .rules:release
+  extends: .rules:knowledge:publish
   image: python:3.12-alpine
   tags: [build]
   resource_group: mcp-release-publication
   needs:
-    - job: build_mcp_pack
-      artifacts: true
     - job: build_knowledge_mcp_image
       artifacts: true
     - job: package_knowledge_mcp
       artifacts: true
     - job: publish_knowledge_mcp_npm
       artifacts: false
-    - job: qualify_firmware_release
-      artifacts: false
-    - job: upload-dl-trigger
-      artifacts: false
     - job: verify_knowledge_mcp_container
       artifacts: false
   script:
     - >-
-      python tools/ci/mcp/release.py --pack mcp-pack.json
+      python tools/ci/mcp/release.py --catalog .cache/knowledge-npm/mcp-catalog.json
       --npm-tarball .cache/knowledge-npm/knowledge-mcp.tgz
-      --version "$CI_COMMIT_TAG" --source-commit "$CI_COMMIT_SHA"
+      --version "$KNOWLEDGE_MCP_VERSION" --source-commit "$CI_COMMIT_SHA"
       --image-repository "$CI_REGISTRY_IMAGE/knowledge-mcp"
       --image-digest-file mcp-image.digest --output mcp-release --publish
   artifacts:
@@ -89,14 +83,14 @@ publish_mcp_release:
 
 trigger_website_mcp_release:
   stage: post_deploy
-  extends: .rules:release
+  extends: .rules:knowledge:publish
   needs:
     - job: publish_mcp_release
       artifacts: false
   variables:
     RELEASE_BUILD_SITE: "0"
     RELEASE_BUILD_MCP: "1"
-    ESP_VISION_MCP_PACKAGE_VERSION: "$CI_COMMIT_TAG"
+    ESP_VISION_MCP_PACKAGE_VERSION: "$KNOWLEDGE_MCP_VERSION"
     ESP_VISION_MCP_PROJECT_ID: "$CI_PROJECT_ID"
     # The deployment project owns its permitted registry repository.
     RELEASE_EXPECTED_SOURCE_COMMIT: "$CI_COMMIT_SHA"
@@ -104,3 +98,27 @@ trigger_website_mcp_release:
     project: services/esp-vision-website
     branch: master
     strategy: depend
+
+# Archive only data after the corresponding firmware has qualified and shipped.
+# A later independent Knowledge release imports this immutable snapshot.
+publish_firmware_knowledge_snapshot:
+  stage: post_deploy
+  extends: .rules:release
+  image: python:3.12-alpine
+  tags: [build]
+  resource_group: firmware-knowledge-snapshots
+  needs:
+    - job: build_mcp_pack
+      artifacts: true
+    - job: qualify_firmware_release
+      artifacts: false
+    - job: upload-dl-trigger
+      artifacts: false
+  script:
+    - >-
+      python tools/ci/mcp/catalog.py snapshot --pack mcp-pack.json
+      --version "$CI_COMMIT_TAG" --source-commit "$CI_COMMIT_SHA"
+      --output .cache/firmware-knowledge --publish
+  artifacts:
+    paths: [.cache/firmware-knowledge/]
+    expire_in: 1 month

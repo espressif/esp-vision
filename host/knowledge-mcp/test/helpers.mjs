@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -150,5 +151,5 @@ export async function rpc(server, method, params = {}, { endpoint = "/mcp", noti
 }
 
 export async function callTool(server, name, args, options = {}) {
-  return rpc(server, "tools/call", { name, arguments: args }, options);
+  return rpc(server, "tools/call", { name, arguments: ["server_info", "list_firmware_versions"].includes(name) ? args : { firmwareVersion: JSON.parse(readFileSync(packPath)).meta.version, ...args } }, options);
 }

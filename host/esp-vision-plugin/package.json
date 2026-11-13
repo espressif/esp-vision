@@ -1,7 +1,7 @@
 {
   "name": "@esp-vision/plugin",
   "version": "0.2.0",
-  "description": "ESP-VISION plugin with a bundled local device CLI and official online firmware knowledge.",
+  "description": "ESP-VISION plugin with a bundled local device CLI and exact-version online firmware knowledge with retained historical snapshots.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

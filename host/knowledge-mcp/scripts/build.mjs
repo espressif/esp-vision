@@ -7,6 +7,7 @@ import { builtinModules } from "node:module";
 import { spawnSync } from "node:child_process";
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { generateNotices } from "./generate-notices.mjs";
 
@@ -17,9 +18,16 @@ const packageJson = JSON.parse(await readFile(resolve(packageRoot, "package.json
 function parseArgs(args) {
   let release = false;
   let packPath;
+  let catalogPath;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--release") {
+      release = true;
+      continue;
+    }
+    if (argument === "--catalog") {
+      if (catalogPath || !args[index + 1] || args[index + 1].startsWith("--")) throw new Error("Expected one --catalog PATH");
+      catalogPath = args[++index];
       release = true;
       continue;
     }
@@ -33,9 +41,10 @@ function parseArgs(args) {
     }
     throw new Error("Unknown build option.");
   }
-  if (release && !packPath) packPath = process.env.MCP_PACK_PATH;
-  if (release && !packPath) throw new Error("A production pack is required; set MCP_PACK_PATH or pass --pack.");
-  return { release, packPath: packPath ? resolve(process.cwd(), packPath) : undefined };
+  if (release && !packPath && !catalogPath) { catalogPath = process.env.MCP_CATALOG_PATH; packPath = catalogPath ? undefined : process.env.MCP_PACK_PATH; }
+  if (packPath && catalogPath) throw new Error("Choose --pack or --catalog");
+  if (release && !packPath && !catalogPath) throw new Error("A production pack is required; set MCP_PACK_PATH or pass --pack.");
+  return { release, catalogPath: catalogPath ? resolve(process.cwd(), catalogPath) : undefined, packPath: packPath ? resolve(process.cwd(), packPath) : undefined };
 }
 
 function runChecked(command, args, options = {}) {
@@ -43,9 +52,9 @@ function runChecked(command, args, options = {}) {
     cwd: options.cwd ?? packageRoot,
     env: {
       ...process.env,
-      TMPDIR: process.env.TMPDIR ?? resolve(repositoryRoot, ".esp-vision/tmp"),
-      TMP: process.env.TMP ?? resolve(repositoryRoot, ".esp-vision/tmp"),
-      TEMP: process.env.TEMP ?? resolve(repositoryRoot, ".esp-vision/tmp"),
+      TMPDIR: process.env.TMPDIR ?? tmpdir(),
+      TMP: process.env.TMP ?? tmpdir(),
+      TEMP: process.env.TEMP ?? tmpdir(),
     },
     encoding: "utf-8",
     stdio: "inherit",
@@ -73,13 +82,14 @@ function validatePack(packBytes, packPath) {
 }
 
 async function main() {
-  const { release, packPath } = parseArgs(process.argv.slice(2));
+  const { release, packPath, catalogPath } = parseArgs(process.argv.slice(2));
   const distPath = resolve(packageRoot, "dist");
   const dataPath = resolve(packageRoot, "data");
-  await mkdir(resolve(repositoryRoot, ".esp-vision/tmp"), { recursive: true });
+  await mkdir(tmpdir(), { recursive: true });
   await rm(distPath, { recursive: true, force: true });
   await rm(resolve(dataPath, "mcp-pack.json"), { force: true });
   await rm(resolve(dataPath, "provenance.json"), { force: true });
+  await rm(resolve(dataPath, "mcp-catalog.json"), { force: true });
 
   runChecked(process.execPath, [resolve(packageRoot, "node_modules/typescript/bin/tsc"), "--noEmit", "-p", "tsconfig.json"]);
   await generateNotices();
@@ -135,18 +145,28 @@ async function main() {
   await chmod(resolve(distPath, "cli.js"), 0o755);
 
   if (!release) return;
-  const bytes = await readFile(packPath);
-  const { pack, version, sourceCommit } = validatePack(bytes, packPath);
+  let catalogBytes;
+  let primaryBytes;
+  if (catalogPath) {
+    runChecked("python3", [resolve(repositoryRoot, "tools/ci/mcp/catalog.py"), "check", "--catalog", catalogPath]);
+    catalogBytes = await readFile(catalogPath);
+    // A compatibility export only; queries always require an explicit version.
+    primaryBytes = Buffer.from(JSON.parse(catalogBytes).snapshots[0].packJson);
+  } else {
+    primaryBytes = await readFile(packPath);
+    const { version, sourceCommit } = validatePack(primaryBytes, packPath);
+    const snapshot = { firmwareVersion: version, snapshotVersion: version,
+      firmwareSourceCommit: sourceCommit, contentSourceCommit: sourceCommit,
+      packSha256: createHash("sha256").update(primaryBytes).digest("hex"), packJson: primaryBytes.toString("utf8") };
+    catalogBytes = Buffer.from(JSON.stringify({ schemaVersion: 1, latestFirmwareVersion: version, activeSnapshots: { [version]: version }, snapshots: [snapshot] }) + "\n");
+  }
+  const sourceCommit = process.env.MCP_RUNTIME_SOURCE_COMMIT ?? (catalogPath ? undefined : JSON.parse(primaryBytes).meta.sourceCommit);
+  if (!/^[a-f0-9]{40}$/.test(sourceCommit ?? "")) throw new Error("MCP_RUNTIME_SOURCE_COMMIT must identify the runtime source commit");
   await mkdir(dataPath, { recursive: true });
-  await writeFile(resolve(dataPath, "mcp-pack.json"), bytes);
-  const provenance = {
-    schemaVersion: 1,
-    packageName: packageJson.name,
-    packageVersion: packageJson.version,
-    packVersion: version,
-    sourceCommit,
-    packSha256: createHash("sha256").update(bytes).digest("hex"),
-  };
+  await writeFile(resolve(dataPath, "mcp-pack.json"), primaryBytes);
+  await writeFile(resolve(dataPath, "mcp-catalog.json"), catalogBytes);
+  const provenance = { schemaVersion: 2, packageName: packageJson.name, packageVersion: packageJson.version,
+    sourceCommit, catalogSha256: createHash("sha256").update(catalogBytes).digest("hex") };
   await writeFile(resolve(dataPath, "provenance.json"), JSON.stringify(provenance, null, 2) + "\n");
   runChecked(process.execPath, [resolve(packageRoot, "scripts/check-package.mjs")]);
 }

@@ -8,15 +8,17 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import express, { type ErrorRequestHandler, type Request, type Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { KnowledgeCatalog } from "./catalog.js";
 import { Pack } from "./pack.js";
 import { createKnowledgeServer } from "./service.js";
 import { UsageStats } from "./usage-stats.js";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
-const defaultPackPath = resolve(moduleDirectory, "../data/mcp-pack.json");
+const defaultCatalogPath = resolve(moduleDirectory, "../data/mcp-catalog.json");
 
 export interface HttpKnowledgeOptions {
-  pack: Pack;
+  pack?: Pack;
+  catalog?: KnowledgeCatalog;
   usageStats?: UsageStats;
   npmArtifactSha256?: string;
 }
@@ -24,13 +26,17 @@ export interface HttpKnowledgeOptions {
 export interface StartHttpServerOptions {
   pack?: Pack;
   packPath?: string;
+  catalog?: KnowledgeCatalog;
+  catalogPath?: string;
   port?: number;
   statsDbPath?: string;
   retentionDays?: number;
   npmArtifactSha256?: string;
 }
 
-export function createHttpApplication({ pack, usageStats, npmArtifactSha256 }: HttpKnowledgeOptions) {
+export function createHttpApplication({ pack, catalog: inputCatalog, usageStats, npmArtifactSha256 }: HttpKnowledgeOptions) {
+  const catalog = inputCatalog ?? (pack ? KnowledgeCatalog.fromPack(pack) : undefined);
+  if (!catalog) throw new Error("A knowledge catalog is required");
   const app = express();
   app.use(express.json({ limit: "4mb" }));
   const mcpEndpoints = ["/", "/mcp"] as const;
@@ -47,13 +53,13 @@ export function createHttpApplication({ pack, usageStats, npmArtifactSha256 }: H
   });
 
   for (const healthPath of healthEndpoints) {
-    app.get(healthPath, (_req, res) => res.json(pack.serverInfo({ npmArtifactSha256 })));
+    app.get(healthPath, (_req, res) => res.json(catalog.serverInfo(npmArtifactSha256)));
   }
 
   for (const endpoint of mcpEndpoints) {
     // Stateless Streamable HTTP: a fresh server + transport per request.
     app.all(endpoint, async (req: Request, res: Response) => {
-      const server = createKnowledgeServer({ pack, usageStats, npmArtifactSha256 });
+      const server = createKnowledgeServer({ catalog, usageStats, npmArtifactSha256 });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       let closed = false;
       const closeRequest = () => {
@@ -128,15 +134,10 @@ function readPort(raw: string | undefined): number {
 }
 
 export async function startHttpServer(options: StartHttpServerOptions = {}) {
-  const packPath = options.packPath ?? process.env.MCP_PACK_PATH ?? defaultPackPath;
-  let pack = options.pack;
-  if (!pack) {
-    try {
-      pack = Pack.load(packPath);
-    } catch {
-      throw new Error("Knowledge pack could not be loaded from the configured path.");
-    }
-  }
+  const packPath = options.packPath ?? process.env.MCP_PACK_PATH;
+  const catalog = options.catalog ?? (options.pack ? KnowledgeCatalog.fromPack(options.pack)
+    : packPath ? KnowledgeCatalog.fromPack(Pack.load(packPath))
+    : KnowledgeCatalog.load(options.catalogPath ?? process.env.MCP_CATALOG_PATH ?? defaultCatalogPath));
 
   const port = options.port ?? readPort(process.env.PORT);
   const dbPath = options.statsDbPath ?? process.env.MCP_STATS_DB_PATH;
@@ -152,11 +153,9 @@ export async function startHttpServer(options: StartHttpServerOptions = {}) {
   }
 
   const npmArtifactSha256 = options.npmArtifactSha256 ?? process.env.MCP_NPM_ARTIFACT_SHA256;
-  const app = createHttpApplication({ pack, usageStats, npmArtifactSha256 });
+  const app = createHttpApplication({ catalog, usageStats, npmArtifactSha256 });
   const httpServer = app.listen(port, () => {
-    const info = pack!.serverInfo() as { version?: string; counts?: unknown };
-    console.log(`esp-vision MCP server on :${port} (pack ${info.version}, ` +
-      `${JSON.stringify(info.counts ?? {})})`);
+    console.log(`esp-vision MCP server on :${port} (${catalog.versions().length} firmware versions)`);
   });
 
   let closing: Promise<void> | undefined;

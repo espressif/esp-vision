@@ -98,4 +98,11 @@ assert.doesNotMatch(bundle, /^\s*(?:import|export)\s+(?:[^'";]+\s+from\s+)?['"](
 await assert.rejects(access(resolve(pluginRoot, 'server/device-mcp.mjs')))
 await assert.rejects(access(resolve(cli, 'core-cli.mjs')))
 
+
+assert.match(skill, /result\.identity\.firmwareVersion/)
+assert.match(skill, /Never silently fall back to latest/)
+assert.match(skill, /Only after the user explicitly declines the firmware update/)
+assert.match(skill, /--declined-firmware-update/)
+await access(resolve(pluginRoot, 'skills/esp-vision-development/scripts/knowledge-version.mjs'))
+
 console.log('ESP-VISION plugin manifests, capability Skill and bundled standalone CLI are valid.')
