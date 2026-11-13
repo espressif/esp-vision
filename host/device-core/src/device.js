@@ -182,7 +182,7 @@ class Device {
     }
     this.#emit('state', { state: 'connecting' })
     try {
-      this.#unsubscribe = transport.subscribe({ data: bytes => { if (this.#session === session) session.feedBytes(bytes) }, error: lost, close: () => lost() })
+      this.#unsubscribe = transport.subscribe({ data: bytes => { if (this.#session === session) session.feedBytes(bytes) }, error: lost, close: () => lost(session.closeReason) })
       if (typeof this.#unsubscribe !== 'function') throw new TypeError('Transport subscribe must synchronously return an unsubscribe function')
       if (transport.connect) await abortable(transport.connect({ signal: lifecycle.signal }), lifecycle.signal)
       await abortable(session.negotiate({ role, expectedDevice, probeRepl, autoBaud, signal: lifecycle.signal }), lifecycle.signal)

@@ -148,6 +148,8 @@ The backend registry is compile-time defined, with no runtime plugin-registratio
 
 ``console`` / ``null`` (alias ``none``) are local output options in ``ev_channel.c``, not public registered sinks in ``capabilities.sinks``. Do not use them in v4 acquisition requests.
 
+When no session owns USB CDC, default/fallback output may fill its FIFO while the host reader is closed even though USB remains mounted. A frame already partly transmitted is retained in the bounded TX queue until the host drains it or the physical link generation changes. Later frames cannot overtake it. Unstarted frames still expire, other endpoints keep running, and session-owned frames retain their transmission deadlines. This keeps a camera startup log from leaving an incomplete frame for the next connection.
+
 Why UART cannot assume USB preview sizes
 ----------------------------------------
 

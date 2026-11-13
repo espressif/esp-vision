@@ -177,6 +177,33 @@ test('transport loss clears the connection and permits reconnection',async()=>{
   await d.connect({role:'tcp'});await d.disconnect();assert.equal(p.disconnects,2)
 })
 
+test('startup framing failure survives the transport close event during cleanup', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+  let handlers, opened = false, writes = 0, closes = 0, subscriptions = 0
+  const transport = {
+    subscribe(value) { handlers = value; subscriptions++; return () => { handlers = null; subscriptions-- } },
+    async connect() {
+      opened = true
+      const frame = makeEvMuxFrame({ channel: 'log.idf', type: 'data', payload: 'camera started' })
+      handlers.data(frame.slice(0, -5))
+    },
+    async disconnect() { if (opened) { opened = false; closes++; handlers?.close() } },
+    async writeBytes() { writes++ },
+  }
+  const device = api.createDevice({ transport })
+  const failure = assert.rejects(device.connect({ role: 'usb', probeRepl: false }),
+    { code: 'SERIAL_STARTUP_INCOMPLETE_FRAME' })
+  for (let i = 0; i < 20; i++) await Promise.resolve()
+  t.mock.timers.tick(300)
+  for (let i = 0; i < 20; i++) await Promise.resolve()
+  t.mock.timers.tick(12000)
+  await failure
+  assert.equal(writes, 0, 'never acquire across an incomplete frame')
+  assert.equal(closes, 1)
+  assert.equal(subscriptions, 0)
+  await device.disconnect()
+})
+
 test('disconnect releases the session without interrupting a publicly started run', async () => {
   const p = peer({ interactiveScripts: true }), d = api.createDevice({ transport: p.transport })
   try {

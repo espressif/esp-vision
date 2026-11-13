@@ -43,6 +43,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Correct the installation-evidence heading underline so strict English HTML and PDF documentation builds pass.
 
+- Preserve a partially transmitted, unowned USB fallback frame across host-reader pauses so restarting camera preview cannot strand a truncated startup log and fail the next EV-MUX connection. Keep queue bounds, link-generation cleanup and owned-frame deadlines; retain the original startup-framing error through Device Core transport cleanup.
+
 - Confirm native Iris installations with a bounded USB console acceptance subset only when `ESP_VISION_ENABLE_IRISFW` is enabled: identity, HEALTHY, status and retained installation inventory. Share EV-MUX ownership and its whole-frame TX scheduler without enabling EV-MUX REPL/preview for the installer; ordinary firmware remains unchanged.
 
 - Restore Mosaico's native RGB565 framebuffer byte order after LCD DMA completes so screen captures retain correct colors; reject captures after failed frame submissions. Cover frame validity in both board-specific and shared DMA lifetime regressions.

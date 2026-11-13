@@ -2643,6 +2643,15 @@ static void ev_mux_process_target(size_t target_index)
             ev_mux_drop_frame_locked(queue, frame, special, slot, ESP_ERR_INVALID_SIZE, &completion);
             did_finish = true;
         } else if (frame->attempted &&
+                   // CDC remains mounted when its host reader closes. Once
+                   // unbound fallback output enters the USB FIFO, dropping
+                   // its tail would strand a partial frame at the next open.
+                   // Retain this one bounded frame until drained or the link
+                   // generation changes; other targets and admission limits
+                   // remain independent. Owned frames keep their deadlines.
+                   !((frame->link.transport_id == EV_TRANSPORT_USB) &&
+                     (frame->session_id[0] == '\0') && (frame->vm_epoch == 0) &&
+                     (frame->tx_offset != 0)) &&
                    (((uint32_t)(now_ms - frame->start_ms) >= frame->frame_timeout_ms) ||
                     (frame->preview_observer &&
                      ((uint32_t)(now_ms - frame->last_progress_ms) >= EV_MUX_OBSERVER_IDLE_TIMEOUT_MS)))) {

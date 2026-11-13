@@ -1090,6 +1090,7 @@ export class DeviceSession {
   }
 
   async _negotiate({ role = 'unknown', drainMs = 300, signal = null, acquire = true, probeRepl = true, expectedDevice = null, autoBaud = true } = {}) {
+    this.closeReason = null
     this.role = role
     this.state = 'negotiating'
     this._diagnostic('negotiate.begin', { role })
@@ -1917,6 +1918,9 @@ export class DeviceSession {
   }
 
   close(error = new Error('connection closed')) {
+    // Transport cleanup can emit close before the failing operation rejects.
+    // Keep its original cause available to the application lifecycle handler.
+    this.closeReason ??= error
     this.negotiateController?.abort(error)
     this.startupDrainWait?.fail(error)
     this.draining = false

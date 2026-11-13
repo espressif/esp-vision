@@ -1860,6 +1860,89 @@ static void test_unowned_repl_metadata_stays_unbound(void)
                               2) == ESP_ERR_INVALID_STATE);
 }
 
+static void test_unowned_usb_partial_survives_closed_reader(void)
+{
+    mock_reset_mux();
+    ev_mux_test_time_us = INT64_C(1000000);
+    ev_link_ref_t usb = { .transport_id = EV_TRANSPORT_USB, .slot = 0, .generation = 1 };
+    ev_mux_submit_options_t options = { .link = &usb, .tx_class = EV_MUX_TX_LOG };
+    const char metadata[] = "{\"channel\":\"log.idf\",\"type\":\"data\",\"seq\":1}";
+    uint8_t payload[1024];
+    memset(payload, 'c', sizeof(payload));
+    assert(ev_mux_submit_link(&options, metadata, payload, sizeof(payload), NULL) == ESP_OK);
+    s_max_write = 32;
+    for (size_t i = 0; (i < 20) && (s_mock_links[0].output_len == 0); ++i) {
+        ev_mux_process_target(EV_TRANSPORT_USB);
+    }
+    assert(s_mock_links[0].output_len > 0);
+    s_block_slot[0] = true;
+    unsigned int allocations = s_heap_alloc_calls;
+    // Closing a reader does not unmount CDC. A long idle interval must not
+    // leave only a prefix in its FIFO or let a later frame interleave with it.
+    for (size_t i = 0; i < 20; ++i) {
+        ev_mux_test_time_us += INT64_C(1000000);
+        ev_mux_process_target(EV_TRANSPORT_USB);
+        (void)ev_mux_submit_link(&options, metadata, "queued", 6, NULL);
+        assert(s_targets[EV_TRANSPORT_USB].frames_used <= EV_MUX_QUEUE_FRAMES);
+    }
+    assert(ev_mux_tx_timeout_count() == 0);
+    assert(s_heap_alloc_calls == allocations);
+    ev_link_ref_t tcp = mock_tcp_link(1);
+    options.link = &tcp;
+    assert(ev_mux_submit_link(&options, metadata, "other", 5, NULL) == ESP_OK);
+    for (size_t i = 0; i < 50; ++i) {
+        ev_mux_tx_worker_step();
+    }
+    mock_parsed_frame_t other;
+    assert(mock_parse_frame(s_mock_links[1].output, s_mock_links[1].output_len, 0, &other));
+    assert(other.payload_len == 5);
+    // The first reconnect drains the original frame, with its original CRC
+    // and EOF, before any later queued output.
+    s_block_slot[0] = false;
+    mock_drain_worker();
+    mock_parsed_frame_t first;
+    assert(mock_parse_frame(s_mock_links[0].output, s_mock_links[0].output_len, 0, &first));
+    assert(first.payload_len == sizeof(payload));
+    assert(memcmp(first.payload, payload, sizeof(payload)) == 0);
+    uint8_t expected[2048];
+    size_t expected_len = mock_make_frame(metadata, payload, sizeof(payload), expected, sizeof(expected));
+    assert(first.total_len == expected_len);
+    assert(memcmp(s_mock_links[0].output, expected, expected_len) == 0);
+    assert(!first.metadata.has_session_id);
+    assert(s_targets[EV_TRANSPORT_USB].frames_used == 0);
+    assert(s_lost_calls == 0);
+    assert(s_close_calls == 0);
+}
+
+static void test_usb_retention_requires_unbound_partial_current_link(void)
+{
+    for (int scenario = 0; scenario < 3; ++scenario) {
+        mock_reset_mux();
+        ev_mux_test_time_us = INT64_C(1000000);
+        ev_link_ref_t usb = { .transport_id = EV_TRANSPORT_USB, .slot = 0, .generation = 1 };
+        const char session[] = "0123456789abcdef0123456789abcdef";
+        ev_mux_submit_options_t options = { .link = &usb, .tx_class = EV_MUX_TX_CONTROL };
+        if (scenario == 1) {
+            mock_set_owner(&usb, session);
+            options.session_id = session;
+            options.vm_epoch = 23;
+        }
+        assert(ev_mux_submit_link(&options, "{}", "pending", 7, NULL) == ESP_OK);
+        s_max_write = 1;
+        s_block_slot[0] = scenario == 0;
+        ev_mux_process_target(EV_TRANSPORT_USB);
+        ev_mux_test_time_us += INT64_C(3000000);
+        if (scenario == 2) {
+            ++s_mock_links[0].generation;
+        }
+        ev_mux_process_target(EV_TRANSPORT_USB);
+        assert(s_targets[EV_TRANSPORT_USB].frames_used == 0);
+        assert(s_mock_links[0].output_len == (scenario == 0 ? 0 : 1));
+        assert(ev_mux_tx_stale_count() == (scenario == 2 ? 1 : 0));
+        assert(s_lost_calls == (scenario == 1 ? 1 : 0));
+    }
+}
+
 static const char observer_metadata[] =
     "{\"channel\":\"preview.frame\",\"type\":\"data\",\"seq\":1}";
 
@@ -2464,6 +2547,8 @@ int main(void)
     test_vm_output_origin_rejects_generation_and_transition_changes();
     test_queued_vm_output_origin_is_rechecked_by_worker();
     test_unowned_repl_metadata_stays_unbound();
+    test_unowned_usb_partial_survives_closed_reader();
+    test_usb_retention_requires_unbound_partial_current_link();
     test_tcp_vectors_coalesce_complete_frame_and_preserve_short_cursor();
     test_observer_progress_budget_and_absolute_deadline();
     test_observers_share_payload_and_reserve_control_slot();
