@@ -57,8 +57,8 @@
     "deviceCore": "~0.8.0",
     "deviceCli": "~0.2.0",
     "resolved": {
-      "deviceCore": "0.8.0",
-      "deviceCli": "0.2.0"
+      "deviceCore": "0.8.1",
+      "deviceCli": "0.2.1"
     }
   },
   "espVisionReleaseType": "patch"

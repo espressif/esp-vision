@@ -14,30 +14,22 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Use Vibe Mode's `sysmeta/shared` Wi-Fi credentials directly in Iris builds, with read-only loading of the former `sysmeta/wifi` keys when no shared pair exists. Persist ESP-VISION configuration changes to the shared keys, retain enable/revision intent, and reject incomplete or invalid records without erasing system metadata or falling back to ESP-VISION factory credentials.
 
-- Add a bilingual AI development guide at `how-to/esp-vision-plugin` with goal-focused prompts, assistant setup and marketplace installation, first-use firmware download and flashing, Python vision applications, Wi-Fi development, USB camera output and conversational iteration. Include a bilingual first-time Wi-Fi setup walkthrough covering website, AI-assisted and CLI provisioning over USB, connection verification, LAN access and troubleshooting.
-
 - Add SC101IOT DVP camera support on ESP32_S31_MOSAICO alongside OV3640.
-
-- Add ESP32_P4X_VISION hardware CI.
-
-- Add ESP32_S31_KORVO camera and display hardware CI.
+- Add hardware CI for ESP32_P4X_VISION and ESP32_S31_KORVO, with camera checks on both boards and display checks on Korvo.
+- Extend Function EV, P4 Vision and S31 Korvo target acceptance with passive discovery, Unicode communication, repeated reconnect, standard Python module known-answer tests and ulab calculations. Independently verify flashed images and publish per-check JUnit reports.
+- Add bilingual AI-assisted development and first-time Wi-Fi setup guides covering assistant installation, firmware flashing, Python vision applications, USB camera output, provisioning, LAN access and troubleshooting.
 
 ### Changed
 
 - Restrict Iris firmware to the `ESP_VISION_ENABLE_IRISFW` compile option on ESP32_S31_MOSAICO. Keep its Vibe Mode ABI 2 system prefix and application NVS, place the 7 MiB application at `0x210000`, and assign the entire remaining 6.9375 MiB to FAT at `0x910000`, without a separate `ui_apps` partition. Confirm pending boot after MicroPython/EV-MUX readiness. Use a separate CI artifact directory so ordinary factory-layout BIN releases are unchanged; provision CMake in host CI to exercise the unsupported-board rejection.
 
-- Unify Device Core 0.8, CLI 0.2 and plugin 0.2 on npm serial bindings and the shared browser/Node esptool-js backend. Remove user-side Python/pyserial/esptool requirements; include native prebuilds and Linux USJ control-line compatibility in portable bundles. Replace the removed Python adapter tests with the shared Node/browser ROM coverage. Qualify unpublished source candidates in MR checks, then resolve the published Core archive integrity and carry the verified CLI lock through release jobs. Install and preflight the native serial backend in hardware CI before flashing.
-
-- Consolidate third-party license and source details in the bilingual license inventory instead of repeating them at the end of the README files.
-
-- Update the WorkBuddy Expert package introduction with bilingual project, hardware, adaptation and usage information.
-
-- Give the QoderWork plugin the distinct package name `esp-vision-plugin` to avoid the occupied `esp-vision` name, and replace its public-facing README with project, hardware, adaptation and usage information.
-
-- Update the ESP-IDF 5.5, 6.0 and 6.1 component manifests to esp_video 2.5.0 and esp_h264 1.4.*.
-- Prepare Device Core 0.7.1 as an independent npm patch release for faster complete installation and ROM-to-runtime firmware detection; retain the existing firmware and plugin release lifecycle.
-
-- Speed up complete firmware installation by trusting checked, partition-bounded FFAT erase commands without erased-range reads, and reuse official esptool whole-write MD5 verification receipts in Node/browser adapters instead of transferring firmware back to the host. Keep SHA-256 qualification before writing and full readback for custom adapters without receipts.
+- Clarify independent host-package release preparation: CLI 0.2.1 and Plugin 0.2.0 select Core 0.8.1; firmware qualification does not establish npm publication or online Knowledge availability.
+- Bundle Core 0.8.1 in CLI 0.2.1 and select CLI 0.2.1/Core 0.8.1 in Plugin 0.2.0. Require Core publication before resolving its npm integrity, building the CLI and publishing the verified CLI archive.
+- Move Device Core 0.8, CLI 0.2 and Plugin 0.2 to npm serial bindings and the shared Node/browser esptool-js backend. Remove end-user Python, pyserial and esptool requirements; include native prebuilds and Linux USB-Serial-JTAG control-line support in portable bundles. Hardware CI still uses esptool for flashing and preflights the SDK serial backend before device checks.
+- Accelerate complete firmware installation using bounded FFAT erase commands and verified whole-write MD5 receipts. Retain SHA-256 image qualification and full readback for custom adapters without verification receipts.
+- Update ESP-IDF 5.5, 6.0 and 6.1 component manifests to esp_video 2.5.0 and esp_h264 1.4.*.
+- Refresh WorkBuddy Expert and QoderWork introductions with bilingual project, hardware and usage information; rename the QoderWork package to `esp-vision-plugin` to avoid an occupied name.
+- Consolidate third-party licensing details in the bilingual license inventory, and use configurable workspace paths in maintained documentation. Enforce the shared-repository content boundary through agent guidance and pre-commit, GitLab and GitHub checks.
 
 ### Fixed
 
@@ -51,33 +43,20 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Match Vibe Mode's password byte rules when loading shared Wi-Fi settings, including existing non-ASCII passphrases and 64-digit hexadecimal PSKs, without changing the EV-MUX provisioning API's validation.
 
+- Keep fixture bootstrap progress separate from completed JUnit cases, and report blocked or unknown target-check outcomes as failures.
 - Allow explicitly opted-in hardware CI for a single matching board/IDF build with `ESP_VISION_TEST_HARDWARE=1`; keep ordinary targeted builds and SDK-only runs from flashing devices, and install Python for executable fixture fault injection in Device Core CI.
-
 - Diagnose shared hardware-check fixture bootstrap failures by phase, chunk offset, duration and last acknowledged operation; report dependent checks as blocked while failing the job. Transfer Python source idempotently with session/content acknowledgements, verify its SHA-256 and installation, and bound timeout recovery without replaying a partially installed fixture.
-
-- Restore LAN auto-discovery in the packaged CLI and plugin by providing Node's CommonJS loader in the ESM bundle; retain discovery failure diagnostics and check real mDNS initialization from the installed CLI tarball.
-
 - Close image files and unregister their owned buffers before exception cleanup releases native memory, including mismatched extensions and failed reads/writes; release conversion allocations when codecs, drawing, or destination allocation fail.
 - Reject PNG image files at load when the decoder is disabled, and avoid truncating existing files when PNG encoding is unavailable; clarify the firmware's PNG limitation.
-
-- Use a Mermaid extension version compatible with the Python version in the documentation CI image.
-
-- Isolate the GitHub PR sync metadata test from action-only dependencies so host CI can run it without installing GitLab or GitPython packages.
-
-- Enforce the shared-repository content boundary with agent guidance, ignore rules and index checks in pre-commit, GitLab CI and GitHub CI; replace developer-specific paths and shell setup in maintained documentation with configurable workspace instructions.
-
-- Keep Mosaico SC101IOT framing consistent across QQVGA, QVGA and VGA with hardware scaling, a wider field of view and no black borders.
-
-- Fix ESP32_P4X_VISION hardware CI to match the board's supported capabilities.
-
-- Drive the partial ROM-packet deadline regression with a controlled clock so CI scheduling delays cannot consume its successful receive budget.
-
-- Classify an occupied EV-MUX session as busy during firmware identification; USB descriptors, ROM responses and timeouts do not establish the presence or absence of ESP-VISION firmware.
-- Keep passive ROM enumeration non-opening; active firmware detection verifies the selected ROM MAC/security, attempts normal SPI boot once, then rebinds only its matching physical USB endpoint before the ESP-VISION handshake. Preserve unknown startup outcomes and require download re-entry when no runtime returns.
+- Restore packaged CLI/plugin LAN discovery by providing the CommonJS loader required by the ESM bundle; preserve discovery diagnostics and check mDNS initialization from the installed CLI archive.
+- Preserve Mosaico SC101IOT framing across QQVGA, QVGA and VGA using hardware scaling, a wider field of view and no black borders.
+- Match P4 Vision target checks to its supported capabilities.
+- Keep passive ROM enumeration non-opening. During active firmware detection, verify the selected ROM MAC/security, attempt normal boot once and reconnect only to its matching physical endpoint. Report occupied EV-MUX sessions as busy and preserve unknown outcomes without retrying download entry.
+- Make ROM packet-deadline tests independent of CI scheduling delays, isolate PR-sync metadata tests from action-only dependencies, and use a Mermaid extension compatible with the documentation CI Python version.
 
 ### Removed
 
-- Remove the internal native-UVC proposal and experiment record from `specs/`; supported UVC behavior remains documented in the bilingual API reference.
+- Remove the internal native-UVC proposal and experiment record from `specs/`; supported behavior remains in the bilingual API reference.
 
 ## [2026.11.06]
 

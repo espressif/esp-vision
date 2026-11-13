@@ -1,6 +1,6 @@
 {
   "name": "@esp-vision/device-cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Standalone command line interface for ESP-VISION devices.",
   "type": "module",
   "bin": {
@@ -46,11 +46,11 @@
     "url": "git+https://github.com/espressif/esp-vision.git",
     "directory": "host/device-cli"
   },
-  "espVisionReleaseType": "minor",
+  "espVisionReleaseType": "patch",
   "espVision": {
     "deviceCore": "~0.8.0",
     "resolved": {
-      "deviceCore": "0.8.0"
+      "deviceCore": "0.8.1"
     }
   }
 }

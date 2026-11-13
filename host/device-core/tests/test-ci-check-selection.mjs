@@ -14,7 +14,7 @@ test('CI keeps its qualified hardware suite explicit while manual ISP checks rem
   const commands = yaml.replace(/\\\r?\n\s*/g, ' ').split(/\r?\n/)
     .map(line => line.trim()).filter(line => line.startsWith('python3 tools/ci/flash_and_test.py '))
   assert.equal(commands.length, 3)
-  const expected = ['identity', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation',
+  const expected = ['identity', 'discovery', 'communication', 'reconnect', 'modules', 'ulab', 'memory', 'camera', 'framesizes', 'pixformats', 'orientation',
     'ipa_stats', 'snapshot_rate', 'preview', 'image_ops', 'display', 'display_stream',
     'camera_display_lifecycle', 'image_copy_to_fb', 'image_transform_argument',
     'sensor_snapshot_buffer', 'memory_policy', 'espdl_inference']

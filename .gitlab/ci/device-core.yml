@@ -6,6 +6,10 @@
 # restricted to protected default-branch pushes, matching release-npm.mjs.
 .device_core_changes: &device_core_changes
   - "host/device-core/**/*"
+  - "host/device-cli/**/*"
+  - "tools/ci/mcp/release_npm.mjs"
+  - "tools/ci/mcp/resolve_core_release_lock.mjs"
+  - ".gitlab/ci/host-tools.yml"
   - ".gitlab/ci/device-core.yml"
   - ".gitlab/ci/rules.yml"
   - ".gitlab-ci.yml"
@@ -58,6 +62,10 @@ publish_device_core_npm:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
       changes:
         - "host/device-core/**/*"
+        - "host/device-cli/**/*"
+        - "tools/ci/mcp/release_npm.mjs"
+        - "tools/ci/mcp/resolve_core_release_lock.mjs"
+        - ".gitlab/ci/host-tools.yml"
     - when: never
   script:
     - cd host/device-core

@@ -851,6 +851,46 @@ def isp_lsc_display(opts):
     return result
 
 
+def modules(opts):
+    """Known-answer module operations on the target, without storage writes."""
+    import json
+    import binascii
+    import hashlib
+    import struct
+    import io
+    import gc
+    payload = bytes(range(256))
+    assert binascii.unhexlify(binascii.hexlify(payload)) == payload, 'hex roundtrip'
+    assert binascii.a2b_base64(binascii.b2a_base64(payload)) == payload, 'base64 roundtrip'
+    digest = binascii.hexlify(hashlib.sha256(b'abc').digest()).decode()
+    assert digest == 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 'SHA-256 known answer'
+    packed = struct.pack('<Ih', 0x12345678, -1234)
+    assert packed == b'\x78\x56\x34\x12\x2e\xfb', 'struct byte order'
+    assert struct.unpack('<Ih', packed) == (0x12345678, -1234), 'struct unpack'
+    value = dict(text='Vision-视觉', values=[0, -1, 65535], enabled=True)
+    assert json.loads(json.dumps(value)) == value, 'JSON Unicode roundtrip'
+    stream = io.BytesIO()
+    try:
+        assert stream.write(payload) == len(payload), 'BytesIO short write'
+        stream.seek(17)
+        assert stream.read(31) == payload[17:48], 'BytesIO seek/read'
+    finally:
+        stream.close()
+    gc.collect()
+    assert gc.mem_free() > 0, 'GC free heap'
+    return dict(modules=['json', 'binascii', 'hashlib', 'struct', 'io', 'gc'], sha256=digest, binaryBytes=len(payload))
+
+
+def ulab(opts):
+    from ulab import numpy as np
+    values = np.array([1.0, 2.0, 3.0, 4.0])
+    assert abs(float(np.mean(values)) - 2.5) < 0.0001, 'ulab mean'
+    assert abs(float(np.sum(values * values)) - 30.0) < 0.0001, 'ulab multiply/sum'
+    assert abs(float(np.sqrt(values)[3]) - 2.0) < 0.0001, 'ulab sqrt'
+    assert list(np.sort(np.array([3, 1, 4, 2]))) == [1, 2, 3, 4], 'ulab sort'
+    return dict(elements=4, mean=2.5, squaredSum=30.0, sqrtLast=2.0)
+
+
 def memory(opts):
     import esp32
     heaps = esp32.idf_heap_info(esp32.HEAP_DATA)
@@ -875,7 +915,7 @@ def run_check(name, opts):
     import json
     if isinstance(opts, str):
         opts = json.loads(opts)
-    functions = dict(memory=memory, camera=camera, sensor_state=sensor_state, framesizes=framesizes,
+    functions = dict(modules=modules, ulab=ulab, memory=memory, camera=camera, sensor_state=sensor_state, framesizes=framesizes,
                      pixformats=pixformats, orientation=orientation, ipa_stats=ipa_stats,
                      snapshot_rate=snapshot_rate, preview=preview, image_ops=image_ops,
                      display=display, display_stream=display_stream,
