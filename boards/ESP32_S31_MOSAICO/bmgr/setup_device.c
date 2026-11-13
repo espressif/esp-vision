@@ -12,10 +12,12 @@
 #include "esp_lcd_co5300.h"
 #include "esp_lcd_touch_cst9220.h"
 #include "esp_lcd_panel_interface.h"
+#include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_log.h"
 
 static const char *TAG = "ESP32_S31_MOSAICO_SETUP";
+static esp_lcd_panel_io_handle_t s_co5300_io;
 
 esp_err_t lcd_touch_factory_entry_t(esp_lcd_panel_io_handle_t io,
                                     const esp_lcd_touch_config_t *touch_config,
@@ -44,7 +46,19 @@ static esp_err_t esp_vision_mosaico_draw_bitmap(esp_lcd_panel_t *panel,
     for (size_t i = 0; i < count; i++) {
         pixels[i] = (uint16_t)((pixels[i] >> 8) | (pixels[i] << 8));
     }
-    return s_co5300_draw_bitmap(panel, x_start, y_start, x_end, y_end, color_data);
+    esp_err_t ret = s_co5300_draw_bitmap(panel, x_start, y_start, x_end, y_end, color_data);
+    // SPI DMA borrows this buffer. Drain even after a partial submission error
+    // before restoring the native RGB565 view used by screen capture.
+    esp_err_t drain_ret = esp_lcd_panel_io_tx_param(s_co5300_io, -1, NULL, 0);
+    if (drain_ret != ESP_OK) {
+        // The buffer may still be in use. The display layer rejects capture
+        // after a failed submission rather than reading this transport view.
+        return drain_ret;
+    }
+    for (size_t i = 0; i < count; i++) {
+        pixels[i] = (uint16_t)((pixels[i] >> 8) | (pixels[i] << 8));
+    }
+    return ret;
 }
 
 static const co5300_lcd_init_cmd_t s_lcd_init_cmds[] = {
@@ -88,6 +102,7 @@ esp_err_t lcd_panel_factory_entry_t(esp_lcd_panel_io_handle_t io,
     ESP_RETURN_ON_ERROR(ret, TAG, "create CO5300 panel failed");
 
     s_co5300_draw_bitmap = (*panel_handle)->draw_bitmap;
+    s_co5300_io = io;
     (*panel_handle)->draw_bitmap = esp_vision_mosaico_draw_bitmap;
 
     return esp_lcd_panel_set_gap(*panel_handle, 0, 0);

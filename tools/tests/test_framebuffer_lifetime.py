@@ -115,7 +115,7 @@ typedef int esp_err_t;
 #define ESP_VISION_USE_BOARD_MANAGER 1
 static bool s_board_display_uses_spi=true;
 static uint16_t pixels[6]={1,2,3,4,5,6};
-static struct { void *panel_handle,*io_handle; int width,height; uint16_t *framebuffer; } s_display;
+static struct { void *panel_handle,*io_handle; int width,height; uint16_t *framebuffer; bool frame_valid; } s_display;
 static int pending,draw_error,drain_error,drains;
 static int esp_lcd_panel_draw_bitmap(void *panel,int x,int y,int w,int h,const void *p) {
     assert(panel==s_display.panel_handle && x==0 && y==0 && w==3 && h==2);
@@ -131,12 +131,16 @@ int main(void) {
     s_display.panel_handle=pixels; s_display.io_handle=pixels;
     s_display.width=3;s_display.height=2;s_display.framebuffer=pixels;
     assert(esp_vision_display_submit_frame()==0 && !pending && drains==1);
+    assert(s_display.frame_valid);
     draw_error=7;
     assert(esp_vision_display_submit_frame()==7 && !pending && drains==2);
+    assert(!s_display.frame_valid);
     draw_error=0;drain_error=8;
     assert(esp_vision_display_submit_frame()==8 && !pending && drains==3);
+    assert(!s_display.frame_valid);
     s_display.io_handle=NULL;
     assert(esp_vision_display_submit_frame()==0 && drains==3);
+    assert(s_display.frame_valid);
     pending=0;s_display.io_handle=pixels;s_board_display_uses_spi=false;
     assert(esp_vision_display_submit_frame()==0 && drains==3);
     return 0;

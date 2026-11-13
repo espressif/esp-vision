@@ -39,6 +39,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Restore Mosaico's native RGB565 framebuffer byte order after LCD DMA completes so screen captures retain correct colors; reject captures after failed frame submissions. Cover frame validity in both board-specific and shared DMA lifetime regressions.
+
 - Match Vibe Mode's password byte rules when loading shared Wi-Fi settings, including existing non-ASCII passphrases and 64-digit hexadecimal PSKs, without changing the EV-MUX provisioning API's validation.
 
 - Allow explicitly opted-in hardware CI for a single matching board/IDF build with `ESP_VISION_TEST_HARDWARE=1`; keep ordinary targeted builds and SDK-only runs from flashing devices, and install Python for executable fixture fault injection in Device Core CI.
