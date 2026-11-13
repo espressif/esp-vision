@@ -82,7 +82,7 @@ evmux_host_checks:
   image: python:3.11-slim
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends ca-certificates git gcc g++ libc6-dev libssl-dev ffmpeg
+    - apt-get install -y --no-install-recommends ca-certificates git gcc g++ cmake libc6-dev libssl-dev ffmpeg
     - python -m pip install PyYAML Pillow esptool==5.6.0
     - git submodule sync -- lib/micropython
     - git submodule update --init --depth 1 lib/micropython
@@ -170,8 +170,14 @@ check_readme_links:
     - export PATH="$CI_PROJECT_DIR/.ci-bin:$PATH"
     - echo "ninja wrapper active -> $REAL_NINJA -j ${NINJA_MAX_JOBS:-2}"
   script:
-    - idf.py --board "$BOARD" build
+    - |
+      if [ "${ESP_VISION_ENABLE_IRISFW:-0}" = "1" ]; then
+        idf.py --board "$BOARD" -B "build/$BOARD/idf6.1-irisfw" -D ESP_VISION_ENABLE_IRISFW=ON build
+      else
+        idf.py --board "$BOARD" build
+      fi
     - python tools/ci/launchpad/build_identity.py "$BOARD" "$CI_COMMIT_SHA"
+    - python tools/ci/irisfw/record_build.py "$BOARD"
   after_script:
     - |
       if [ -d "build/$BOARD" ]; then
@@ -218,6 +224,7 @@ check_readme_links:
       # Release metadata binds the published tag to this exact build version.
       - build/$BOARD/idf*/project_description.json
       - build/$BOARD/idf*/release-build-identity.json
+      - build/$BOARD/idf*/irisfw-build.json
 
 # Qualified board/IDF pairs: P4/S3 use pinned v5.5.6; S31 requires v6.1.
 firmware:
@@ -237,3 +244,11 @@ firmware:
           - ESP32_S31_CHATBOT
           - ESP32_S31_KORVO
           - ESP32_S31_MOSAICO
+
+# A separate artifact directory keeps retained-layout images out of BIN releases.
+firmware_irisfw_mosaico:
+  extends: .firmware_base
+  variables:
+    BOARD: ESP32_S31_MOSAICO
+    IDF_IMAGE: release-v6.1
+    ESP_VISION_ENABLE_IRISFW: "1"

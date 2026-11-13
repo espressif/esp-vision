@@ -11,6 +11,11 @@ if(NOT MICROPY_BOARD)
     set(MICROPY_BOARD ESP32_GENERIC)
 endif()
 
+option(ESP_VISION_ENABLE_IRISFW "Build an application for retained Mosaico Vibe Mode" OFF)
+if(ESP_VISION_ENABLE_IRISFW AND NOT MICROPY_BOARD STREQUAL "ESP32_S31_MOSAICO")
+    message(FATAL_ERROR "ESP_VISION_ENABLE_IRISFW is supported only on ESP32_S31_MOSAICO")
+endif()
+
 # Set the board directory and check that it exists.
 if(NOT MICROPY_BOARD_DIR)
     set(MICROPY_BOARD_DIR ${CMAKE_CURRENT_LIST_DIR}/boards/${MICROPY_BOARD})
@@ -45,6 +50,9 @@ endif()
 # ESP-VISION mounts FAT volumes through ESP-IDF and exposes them to
 # MicroPython through a native VFS bridge.
 list(APPEND SDKCONFIG_DEFAULTS boards/sdkconfig.esp_vision_storage boards/sdkconfig.esp_vision_network)
+if(ESP_VISION_ENABLE_IRISFW)
+    list(APPEND SDKCONFIG_DEFAULTS boards/sdkconfig.esp_vision_identity)
+endif()
 
 # Set the frozen manifest file. Note if MICROPY_FROZEN_MANIFEST is set from the cmake
 # command line, then it will override the default and any manifest set by the board.
@@ -72,6 +80,13 @@ idf_build_set_property(DEPENDENCIES_LOCK ${LOCKFILE_PATH})
 
 # Define the project and the public name embedded in the ESP-IDF app descriptor.
 project(esp-vision)
+
+if(ESP_VISION_ENABLE_IRISFW)
+    if(NOT CONFIG_PARTITION_TABLE_CUSTOM_FILENAME STREQUAL "boards/ESP32_S31_MOSAICO/partitions-16MiB-irisfw.csv"
+            OR NOT CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE OR NOT CONFIG_ESPTOOLPY_FLASHMODE_QIO)
+        message(FATAL_ERROR "Iris firmware requires retained partitions, rollback and QIO; use a fresh build directory")
+    endif()
+endif()
 
 # The P4 EYE deletes OV2710 statistics callbacks before Board Manager releases
 # SCCB. Compile a source-identity-checked copy, never change the registry cache.

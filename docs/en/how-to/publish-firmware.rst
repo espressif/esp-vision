@@ -59,3 +59,98 @@ Release procedure
 #. Verify the root config's publication hash against the versioned manifest, its exact board membership and website/MCP snapshots, and all selected image hashes. A dry-run config or a passed branch pipeline does not prove a production upload.
 
 Historical binaries and immutable manifests remain available. Do not manufacture metadata for old images, replace an existing version, or guess compatibility from git tags. Offline tests and merging these changes do not publish a tag, npm package or CDN data.
+
+Iris firmware files
+-------------------
+
+``ESP_VISION_ENABLE_IRISFW`` is an opt-in CMake option and C compilation macro, supported only on ``ESP32_S31_MOSAICO``. Enabling it for another board fails configuration. The default remains OFF: ordinary Launchpad BIN builds keep their existing factory layout. The separate ``firmware_irisfw_mosaico`` job enables it with IDF ``release-v6.1`` and stores artifacts in ``build/ESP32_S31_MOSAICO/idf6.1-irisfw``. Firmware tags package only this job through ``pack_irisfw``; no other board produces an Iris package.
+
+Use a new build directory when changing this option. The build checks the effective partition selection, QIO Flash mode and rollback setting, including when reusing a configuration:
+
+.. code-block:: sh
+
+   idf.py --board ESP32_S31_MOSAICO -B "$ESP_VISION_WORK_DIR/build/irisfw" \
+     -D ESP_VISION_ENABLE_IRISFW=ON build
+
+Retained layout
+~~~~~~~~~~~~~~~
+
+The 16 MiB layout follows the fixed system prefix of Mosaico Recovery ABI 2, contract ``esp-mosaico/v2`` and layout ID ``mosaico-retained-test-2m-v2``. The partition table remains at ``0x8000``. Application NVS keeps its address. The 7 MiB application is followed by one FAT partition using every remaining byte through the 16 MiB Flash boundary; there is no separate ``ui_apps`` reservation:
+
+.. list-table:: Iris build partitions
+   :header-rows: 1
+
+   * - Partition
+     - Type/subtype
+     - Offset
+     - Size
+   * - otadata
+     - data/ota
+     - 0x9000
+     - 0x2000 (8 KiB)
+   * - phy_init
+     - data/phy
+     - 0xB000
+     - 0x1000 (4 KiB)
+   * - sysmeta
+     - data/nvs
+     - 0xC000
+     - 0x14000 (80 KiB)
+   * - vibe_mode
+     - app/test
+     - 0x20000
+     - 0x1C0000 (1.75 MiB)
+   * - coredump
+     - data/coredump
+     - 0x1E0000
+     - 0x20000 (128 KiB)
+   * - nvs
+     - data/nvs
+     - 0x200000
+     - 0x10000 (64 KiB)
+   * - main_app
+     - app/ota_0
+     - 0x210000
+     - 0x700000 (7 MiB)
+   * - ffat
+     - data/fat
+     - 0x910000
+     - 0x6F0000 (6.9375 MiB)
+
+The fixed ``0x210000`` application start leaves only 13.9375 MiB for application and FAT combined. Two 7 MiB partitions would exceed 16 MiB Flash by 64 KiB, so the default uses 7 MiB for the application and 6.9375 MiB for FAT.
+
+The packer rejects applications larger than the 7 MiB slot. This layout reclaims the former UI resource area for FAT. Changing an existing FAT partition's offset or size does not migrate or resize its filesystem; preserve required files before installing a different layout.
+
+Iris builds load Wi-Fi directly from NVS partition ``sysmeta``, namespace ``shared``, string keys ``wifi_ssid`` and ``wifi_password``. A valid profile is enabled by default. The legacy ``sysmeta/wifi`` keys ``ssid``/``password`` are read only when both shared keys are absent; startup does not copy credentials or write NVS. ESP-VISION's ordinary ``nvs/ev_network`` record and factory credentials are not used in this build. Missing credentials leave Wi-Fi unconfigured; incomplete, oversized or unreadable data produces a configuration error and is left untouched.
+
+ESP-VISION network configuration writes the same shared credential keys. Its ``ev_enabled`` (u8) and ``ev_revision`` (u32) keys preserve the service's enable/revision state; Vibe Mode continues to use the shared SSID/password. Forget stores an empty shared pair to prevent either firmware from reviving legacy credentials. No operation erases ``sysmeta`` or unrelated shared settings.
+
+These packages require an existing compatible Vibe Mode installation, version 0.2.0 or later. Install the ``.irisfw`` through its native System Update path. This build's raw IDF flashing manifest is not a Vibe Mode installation package: its bootloader and blank OTA metadata must not replace the retained system. Changing from the ordinary factory layout does not migrate existing files. The new ``ffat`` follows the board's filesystem initialization policy; it is never supplied as an empty image in the update package.
+
+After MicroPython and EV-MUX become ready, the Iris-enabled application accepts its pending OTA image and records its address in the existing ABI 2 recovery metadata. This startup confirmation is independent of peripheral acceptance. It introduces no Iris runtime or USB transport; the application continues to communicate through EV-MUX. Host acceptance must switch from the Vibe Mode Iris transport to ESP-VISION after reboot. An updater requiring an Iris HEALTHY event from the application cannot establish success for this firmware without an EV-MUX acceptance adapter.
+
+Container and publication
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The unsigned ZIP uses ``esp-iris-system-update/0.2`` and contains exactly ``manifest.json``, ``partition-table.bin`` padded to 4096 erased bytes, and ``app.bin``. The manifest declares ``minimum_recovery_version=0.2.0``. Bootloader, OTA metadata, Vibe Mode, NVS, coredump, FFAT and UI resource images are excluded. The packer checks the retained partition policy and rejects extra flash inputs except the standard blank OTA metadata generated by IDF. Secure Boot signatures and encrypted images need a separate policy and are rejected.
+
+The Iris build retains the standard ESP-IDF application descriptor's project and version. Tags must fit its 31-byte version and match the compiled descriptor exactly. Build provenance binds the compile profile, board, source commit, pipeline/job IDs, actual IDF commit, configuration/layout hashes and all input hashes. It excludes personal paths and configuration contents. Packaging consumes the exact pipeline artifact without rebuilding or selecting another IDF directory.
+
+The format reference is `esp-mosaico-utils at be151ae047014e79a9c7ae0092dd203844499003 <https://github.com/esp-mosaico/esp-mosaico-utils/blob/be151ae047014e79a9c7ae0092dd203844499003/ESP-Iris/components/esp_iris/protocol/system_update_manifest.schema.json>`_. The packer and independent validator use the standard library plus hash-pinned YAML parsing. ``dist/irisfw/`` contains one board's package, ``.provenance.json`` and ``.validation.json`` sidecars, ``SHA256SUMS`` and ``release.json``.
+
+``publish_irisfw`` waits for ``qualify_firmware_release`` and uses ``CI_JOB_TOKEN`` to publish the frozen files to the project's Generic Package Registry under package ``esp-vision-irisfw``, version ``<tag>``. The download endpoint is ``${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/esp-vision-irisfw/<tag>/<filename>`` and uses existing registry access permissions. Existing Launchpad BIN paths and the external DL uploader are unchanged.
+
+Publication preflights every remote file, reuses identical bytes and rejects conflicting bytes. It compares every downloaded upload before writing ``release.json`` last. Retry with the same frozen artifacts; a different pipeline or rebuilt provenance requires a new version. A CI resource group serializes publication. Checksums establish integrity, not installation authorization. Platform upload, approval and public listing remain separate from registry publication and device testing.
+
+To package downloaded artifacts from one pipeline:
+
+.. code-block:: sh
+
+   python -m pip install --require-hashes -r tools/ci/irisfw/requirements.lock
+   python tools/ci/irisfw/package_release.py --tag "$CI_COMMIT_TAG" \
+     --source-sha "$CI_COMMIT_SHA" --pipeline-id "$CI_PIPELINE_ID" \
+     --build-root build --output dist/irisfw
+   python tools/ci/irisfw/validate_release.py --tag "$CI_COMMIT_TAG" \
+     --source-sha "$CI_COMMIT_SHA" --pipeline-id "$CI_PIPELINE_ID" --root dist/irisfw
+
+Use a new output directory per candidate. ``ESP_VISION_IRISFW_ONLY=1`` with ``ESP_VISION_TEST_BOARD=ESP32_S31_MOSAICO`` and ``ESP_VISION_TEST_IDF_IMAGE=release-v6.1`` selects only the Iris firmware build in API/web CI; it does not operate hardware. Offline regressions run with ``python -m unittest tools.tests.test_irisfw_release``. Branch/MR pipelines do not publish registry files.
