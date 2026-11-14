@@ -58,6 +58,10 @@
      - 说明
    * - ``idf.py --board <BOARD> build``
      - 为某块开发板构建固件。
+   * - ``idf.py --board <BOARD> app``
+     - 为某块开发板构建应用。
+   * - ``idf.py --board <BOARD> -p <PORT> app-flash``
+     - 按需构建，并仅向配置的应用分区地址烧录应用。
    * - ``idf.py --board <BOARD> -p <PORT> flash``
      - 构建并烧录固件。
    * - ``idf.py --board <BOARD> -p <PORT> monitor``
@@ -70,6 +74,22 @@
      - 清理该板的构建输出。
    * - ``idf.py --board <BOARD> fullclean``
      - 删除所选开发板的完整构建目录。
+
+.. _idf-app-flash:
+
+仅烧录应用
+----------
+
+``app`` 和 ``app-flash`` 适用于所有受支持的开发板与 ESP-IDF 组合，包括未开启 Iris 的普通固件。``app-flash`` 从当前构建的分区表选择应用地址，不写入 bootloader、分区表、OTA 元数据或数据分区。板子必须已经具有匹配的布局和启动选择；该命令不会初始化空白设备或迁移分区。
+
+选择对应板子的 ROM 下载端口，并为该固件配置指定独立构建目录。例如，已经安装匹配普通固件的 P4X EYE 可执行：
+
+.. code-block:: console
+
+   idf.py --board ESP32_P4X_EYE -B "$ESP_VISION_WORK_DIR/build/ESP32_P4X_EYE" \
+     -p "$PORT" app-flash
+
+普通构建的 ``flash`` 仍写入完整烧录清单。仅当 ``ESP_VISION_ENABLE_IRISFW=ON`` 时，根目录 ``flash`` 才自动选择 ``app-flash``；Mosaico 保留布局的应用地址为 ``0x210000``，其他配置不能沿用这一地址。Iris 专用的准备与验证流程见 :ref:`iris-app-flash`。
 
 运行第一个脚本
 --------------

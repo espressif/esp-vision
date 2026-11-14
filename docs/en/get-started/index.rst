@@ -58,6 +58,10 @@ Common idf.py Commands
      - Description
    * - ``idf.py --board <BOARD> build``
      - Build firmware for a board.
+   * - ``idf.py --board <BOARD> app``
+     - Build the application for a board.
+   * - ``idf.py --board <BOARD> -p <PORT> app-flash``
+     - Build as needed and flash only the application at its configured partition offset.
    * - ``idf.py --board <BOARD> -p <PORT> flash``
      - Build and flash firmware.
    * - ``idf.py --board <BOARD> -p <PORT> monitor``
@@ -70,6 +74,22 @@ Common idf.py Commands
      - Clean board build output.
    * - ``idf.py --board <BOARD> fullclean``
      - Remove the complete build directory for the selected board.
+
+.. _idf-app-flash:
+
+Application-only Flashing
+-------------------------
+
+``app`` and ``app-flash`` are supported for every supported board/ESP-IDF combination, including ordinary firmware with Iris disabled. ``app-flash`` uses the current build's partition table to select the application address; it does not write the bootloader, partition table, OTA metadata or data partitions. The board must already have the matching layout and boot selection. It does not provision a blank device or migrate partitions.
+
+Use the selected board's ROM download port and an explicit build directory for that firmware configuration. For example, with a matching ordinary P4X EYE installation:
+
+.. code-block:: console
+
+   idf.py --board ESP32_P4X_EYE -B "$ESP_VISION_WORK_DIR/build/ESP32_P4X_EYE" \
+     -p "$PORT" app-flash
+
+Ordinary ``flash`` still writes the full build's flashing manifest. Only when ``ESP_VISION_ENABLE_IRISFW=ON`` does root ``flash`` automatically select ``app-flash``; the retained Mosaico layout uses ``0x210000``, which must not be assumed for other configurations. See :ref:`iris-app-flash` for Iris-specific setup and verification.
 
 Run Your First Script
 ---------------------

@@ -29,6 +29,8 @@ MP_BASE_REF = "v1.28.0"
 MP_BASE_COMMIT = "e0e9fbb17ed6fd06bb76e266ae554784c9c80804"
 ESP_VISION_ACTIONS = {
     "all",
+    "app",
+    "app-flash",
     "clean",
     "erase-flash",
     "flash",
@@ -42,7 +44,7 @@ PASSTHROUGH_ACTIONS = {"docs", "help", "python-clean"}
 # IDF Component Manager inserts this task after a requested fullclean.
 INTERNAL_ACTIONS = {"remove_managed_components"}
 SUPPORTED_ACTIONS_HELP = (
-    "build, flash, monitor, menuconfig, clean, fullclean, reconfigure, size, "
+    "build, app, flash, app-flash, monitor, menuconfig, clean, fullclean, reconfigure, size, "
     "erase-flash"
 )
 
@@ -296,8 +298,31 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
         for define in defines:
             if "=" in define:
                 key, value = define.split("=", 1)
-                parsed[key] = value
+                parsed[key.split(":", 1)[0]] = value
         return parsed
+
+    def irisfw_enabled(args: Any) -> bool:
+        values = {}
+        cache_path = os.path.join(args.build_dir, "CMakeCache.txt")
+        if os.path.isfile(cache_path):
+            with open(cache_path, encoding="utf-8") as cache:
+                values.update(parse_defines(cache))
+        values.update(parse_defines(args.define_cache_entry))
+        value = values.get("ESP_VISION_ENABLE_IRISFW", "OFF").strip().upper()
+        return value not in {"", "0", "OFF", "NO", "FALSE", "N", "IGNORE", "NOTFOUND"} and not value.endswith("-NOTFOUND")
+
+    def select_flash_action(ctx: Any, args: Any, tasks: list[Any]) -> None:
+        if not irisfw_enabled(args):
+            return
+        for index, task in enumerate(tasks):
+            if task.name == "flash":
+                # Let IDF select the application's address from the built table.
+                # Its full flash target also writes bootloader/OTA metadata,
+                # which must remain owned by the retained Vibe Mode system.
+                replacement = ctx.invoke(ctx.command.get_command(ctx, "app-flash"))
+                replacement.action_args = task.action_args
+                tasks[index] = replacement
+                print("[ESP-VISION] Iris layout: flash uses app-flash; retaining Vibe Mode, partition table and data.")
 
     def set_define(args: Any, key: str, value: str) -> None:
         args.define_cache_entry = [
@@ -368,6 +393,7 @@ def action_extensions(base_actions: dict[str, Any], project_path: str = os.getcw
         overlay_name = selected_idf_overlay_name()
         validate_board_idf_overlay(board, overlay_name)
         configure_idf_args(args, board, overlay_name)
+        select_flash_action(ctx, args, tasks)
 
         if should_prepare(tasks, args.dry_run):
             selected = prepare_micropython_tree(board)

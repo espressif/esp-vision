@@ -24,7 +24,8 @@ This shared repository contains reviewed project deliverables: source, reproduci
 | EV-MUX, ownership and Python | `platform/ev_*.c`, `host/device-core/src/{evmux,evrepl,device_session}.js` | [Communication reference](docs/en/communication/index.rst) |
 | Network and identity | `platform/network_service.*`, `platform/device_identity.*` | [Discovery](docs/en/communication/network-discovery.rst) |
 | Camera and LCD capture | `platform/{camera,display,preview}.c`, `boards/<BOARD>/camera.c` | [Preview/capture](docs/en/communication/preview-debug.rst) |
-| Firmware builds and boards | `idf_ext.py`, `micropython.cmake`, `boards/<BOARD>/` | Board configuration and `.gitlab/ci/` |
+| Firmware builds, application-only flashing and boards | `idf_ext.py`, `micropython.cmake`, `boards/<BOARD>/` | [IDF commands](docs/en/get-started/index.rst#idf-app-flash), board configuration and `.gitlab/ci/` |
+| Mosaico Iris layout and application-only flashing | `idf_ext.py`, `boards/ESP32_S31_MOSAICO/port/partitions-16MiB-irisfw.csv` | [Iris flashing guide](docs/en/how-to/publish-firmware.rst#iris-app-flash), [中文](docs/zh_CN/how-to/publish-firmware.rst#iris-app-flash) |
 | Hardware acceptance | `host/device-core/tests/hardware-check.mjs`, `tools/ci/flash_and_test.py` | [Validation](docs/en/communication/validation.rst) |
 | Host plugin packaging and marketplace acceptance | `host/esp-vision-plugin/`, `tools/ci/mcp/` | [Plugin maintainer guide](host/esp-vision-plugin/README.md) |
 | Licensing | `LICENSE`, source headers, `host/device-core/NOTICE` | [License inventory](docs/en/license/index.rst) |
@@ -57,6 +58,8 @@ idf.py --board ESP32_P4X_EYE -B "$ESP_VISION_WORK_DIR/build/ESP32_P4X_EYE" build
 
 Prefer CI for the final firmware matrix after the feature is complete. SDK-only changes use `ESP_VISION_DEVICE_CORE_ONLY=1`; `ESP_VISION_BUILD_FIRMWARE=1` requests firmware validation. See CI rules for targeted filters.
 
+- Root `idf.py --board <BOARD> app` and `app-flash` are available for all supported board/IDF combinations, including ordinary firmware with Iris disabled. `app` builds the application; `app-flash` writes only the application at the current build's partition-derived offset. The installed layout and selected boot application must already match; do not assume the Iris offset for other builds. Only the automatic `flash` to `app-flash` selection is Iris-specific.
+- For a Mosaico already using the Iris layout and booting `main_app`, follow the linked Iris flashing guide: keep `ESP_VISION_ENABLE_IRISFW=ON` in a separate build directory and use root `idf.py app-flash`. Its application offset is `0x210000`; Iris `flash` selects the same app-only target. Use the ROM download interface, not Vibe Mode. Do not substitute ordinary factory-layout images or replay the full `flash_args` manifest, which would overwrite retained system metadata. App-only flashing neither installs the layout nor changes the selected boot application; native Iris installation acceptance is a separate test.
 - SDK changes: use Node.js 22+, install dependencies in `host/device-core` with `npm install --ignore-scripts --no-audit --no-fund --package-lock=false`, then run `npm run release:check` (tests, schema, package and publish dry run).
 - Firmware host checks: `python -m unittest discover -s tools/tests -p 'test_*.py' -v`.
 - Hardware checks: from `host/device-core`, start with `npm run test:hardware -- --help`; reuse this public-SDK entry point. CI flashing delegates to it through `tools/ci/flash_and_test.py`.
