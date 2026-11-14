@@ -56,18 +56,18 @@ Plugin and Knowledge npm packages publish independently from protected default-b
 
 ## Coordinated package versions
 
-The firmware 2026.11.14 candidate uses the following independent host package versions, all published to npm as of 2026-11-14. Verify the registry version, archive integrity and exact bundled dependencies at each release gate; a source manifest alone does not establish publication.
+The firmware 2026.11.14 release uses the following independently versioned host packages. Core, CLI and Plugin are already published; Knowledge 0.3.0 is the subsequent snapshot-import release. Verify the registry version, archive integrity and exact bundled dependencies at each release gate; a source manifest alone does not establish publication.
 
-| Package | Published version | Exact bundled dependency | Publication gate |
+| Package | Version | Exact bundled dependency | Publication gate |
 | --- | --- | --- | --- |
 | Device Core | 0.8.1 | None | Protected master, SDK release checks |
 | Device CLI | 0.2.1 | Core 0.8.1 | Published Core archive and resolved lock, checked CLI tarball |
 | Plugin | 0.2.0 | CLI 0.2.1 / Core 0.8.1 | Published CLI archive, successful concurrent Knowledge deployment and live endpoint contract |
-| Knowledge MCP | 0.2.0 | No Core/CLI pin | Checked catalog/npm/container, descriptor publication and website deployment |
+| Knowledge MCP | 0.3.0 | No Core/CLI pin | Checked catalog/npm/container, descriptor publication and website deployment |
 
-Core 0.8.1, CLI 0.2.1, Plugin 0.2.0 and Knowledge MCP 0.2.0 have completed npm publication independently of the pending firmware tag. For subsequent coordinated releases, install the website consumer contract before publishing a new Knowledge descriptor and publish Core and CLI before Plugin. Verify the final dependency pins, versioned Knowledge instructions and live API contract before Plugin publication. Once an npm version exists, changed bytes require a new version, including a dependency-only rebuild.
+Core 0.8.1, CLI 0.2.1, Plugin 0.2.0 and the preceding Knowledge MCP 0.2.0 completed npm publication independently of the firmware tag. Knowledge 0.3.0 imports its qualified 2026.11.14 snapshot without rebuilding or republishing Plugin 0.2.0. For subsequent coordinated releases, install the website consumer contract before publishing a new Knowledge descriptor and publish Core and CLI before Plugin. Verify the final dependency pins, versioned Knowledge instructions and live API contract before Plugin publication. Once an npm version exists, changed bytes require a new version, including a dependency-only rebuild.
 
-Knowledge 0.2.0 initially supports firmware 2026.10.21, 2026.10.23 and 2026.11.06, with `latestFirmwareVersion=2026.11.06`. The firmware 2026.11.14 tag archives its new baseline only after qualification and DL publication. Importing that archive is a separate reviewed Knowledge release; do not add a guessed future archive URL/hash or advance the latest pointer before the snapshot exists. Treat newly supported firmware as a minor-version addition under the package release policy; a subsequent 0.3.0 candidate must be prepared and qualified separately.
+Knowledge 0.3.0 retains firmware 2026.10.21, 2026.10.23 and 2026.11.06 and adds 2026.11.14, with `latestFirmwareVersion=2026.11.14`. Its new snapshot is pinned to the immutable archive produced after tag qualification and DL publication, with firmware/content commit `d4ec1543f6c498daac40cf77cc4f0b053241940e` and pack SHA-256 `c3c2933cd28bf6e1a4a70cf80822ca6884642695b98844090cbe7ae18c5cf1de`. Newly supported firmware is a minor-version addition; the reviewed import and Knowledge deployment remain separate from firmware publication. Do not add a guessed future archive URL/hash or advance the latest pointer before the snapshot exists.
 
 ## Firmware and Knowledge release procedure
 
