@@ -77,13 +77,27 @@ Retained layout
 
 The 16 MiB layout follows the fixed system prefix of Mosaico Recovery ABI 2, contract ``esp-mosaico/v2`` and layout ID ``mosaico-retained-test-2m-v2``. The partition table remains at ``0x8000``. Application NVS keeps its address. The 7 MiB application is followed by one FAT partition using every remaining byte through the 16 MiB Flash boundary; there is no separate ``ui_apps`` reservation:
 
-.. list-table:: Iris build partitions
+The map below includes the areas before the named partitions. The bootloader row is its reserved address window, not the actual image size; neither it nor the partition-table sector is an application partition. The Flash ends at ``0x1000000`` (exclusive).
+
+.. list-table:: Complete Iris Flash map
    :header-rows: 1
 
-   * - Partition
+   * - Region
      - Type/subtype
      - Offset
      - Size
+   * - Reserved prefix
+     - Outside named partitions
+     - 0x0
+     - 0x2000 (8 KiB)
+   * - Retained bootloader window
+     - Outside named partitions
+     - 0x2000
+     - 0x6000 (24 KiB)
+   * - Partition table
+     - Outside named partitions
+     - 0x8000
+     - 0x1000 (4 KiB)
    * - otadata
      - data/ota
      - 0x9000
@@ -126,6 +140,30 @@ Iris builds load Wi-Fi directly from NVS partition ``sysmeta``, namespace ``shar
 ESP-VISION network configuration writes the same shared credential keys. Its ``ev_enabled`` (u8) and ``ev_revision`` (u32) keys preserve the service's enable/revision state; Vibe Mode continues to use the shared SSID/password. Forget stores an empty shared pair to prevent either firmware from reviving legacy credentials. No operation erases ``sysmeta`` or unrelated shared settings.
 
 These packages require an existing compatible Vibe Mode installation, version 0.2.0 or later. Install the ``.irisfw`` through its native System Update path. This build's raw IDF flashing manifest is not a Vibe Mode installation package: its bootloader and blank OTA metadata must not replace the retained system. Changing from the ordinary factory layout does not migrate existing files. The new ``ffat`` follows the board's filesystem initialization policy; it is never supplied as an empty image in the update package.
+
+.. _iris-app-flash:
+
+Direct application flashing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The root ``app`` and ``app-flash`` commands also support ordinary firmware on all supported boards; see :ref:`idf-app-flash`. This section describes the Iris-specific procedure for a device already using the Iris layout and booting ``main_app``. First confirm the board, running application and partition layout; the source of truth is ``boards/ESP32_S31_MOSAICO/port/partitions-16MiB-irisfw.csv``. App-only flashing is not a conversion from the ordinary factory layout.
+
+#. Select a supported ESP-IDF environment and set ``ESP_VISION_WORK_DIR`` to a writable workspace outside the checkout. Keep this Iris build separate from ordinary builds and explicitly enable ``ESP_VISION_ENABLE_IRISFW``. The application must come from this Iris configuration; an ordinary factory build or a complete ``.irisfw`` archive is not an application image for direct writing.
+#. Release other clients and serial monitors. For a running ESP-VISION application, the installed CLI's ``control --action bootloader`` enters ROM download mode; see :doc:`../device-core/cli`. Wait for USB to re-enumerate, identify the same board and set ``PORT`` to its download port. Do not assume the application port name stays the same. This operation does not enter Vibe Mode.
+#. From the repository root, run the command below. IDF builds the application as needed and flashes only that application.
+#. After reset, reconnect through the application's port and verify its board/version and running ``main_app`` address. For camera changes, also capture a fresh camera frame. A completed write alone does not prove the expected application booted.
+
+.. code-block:: console
+
+   idf.py --board ESP32_S31_MOSAICO -B "$ESP_VISION_WORK_DIR/build/irisfw" \
+     -D ESP_VISION_ENABLE_IRISFW=ON -p "$PORT" app-flash
+
+The IDF target obtains the application offset from this build's partition table: ``0x210000`` for ``main_app``. It writes ``esp-vision.bin`` only, retaining the installed bootloader, partition table, OTA metadata, Vibe Mode, NVS and FAT. With the Iris option enabled, ``flash`` (including ``build flash monitor``) selects the same application-only target and prints this choice. Subsequent invocations recognize the option saved in that build directory's CMake cache; an explicit ``-D`` value takes precedence. Use separate build directories for ordinary and Iris firmware. Ordinary builds retain the usual full ``flash`` behavior.
+
+Direct flashing uses the chip's ROM download interface, which is distinct from Vibe Mode. ESP-VISION's USB bootloader control can enter ROM download mode; select the re-enumerated download port before flashing. Direct app flashing neither installs this layout on a factory-layout board nor changes which application is selected to boot. It is suitable for runtime development tests, but does not exercise the native Iris update transaction, HEALTHY acceptance or installation receipt. Validate those separately by manually entering Vibe Mode and installing an ``.irisfw`` package.
+
+Native Iris installation acceptance
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 After MicroPython and EV-MUX become ready, the Iris-enabled application accepts its pending OTA image and records its address in the existing ABI 2 recovery metadata. The same macro enables a minimal Iris 0.2 console acceptance subset on the existing USB CDC interface: hardware/firmware identity, authentication binding, BOOT/LINK_READY/HEALTHY events, status, ping/time and read-only system inventory. The native updater can check the new boot, exact ELF identity, partition-table hash and retained operation receipt without a host modification. HEALTHY requires confirmed startup, VM readiness and a non-crash reset; it does not prove peripheral behavior.
 

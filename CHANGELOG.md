@@ -6,6 +6,8 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Added
 
+- Support repository-root `idf.py app` and `app-flash` for all supported board/IDF combinations, including ordinary firmware. Write only the application at the configured partition offset. Iris builds additionally route `flash` to the application-only IDF target, including cached builds, to retain Vibe Mode, partition/OTA metadata and data; ordinary builds keep full-flash behavior. Document the general commands, complete Iris 16 MiB map and reusable ROM flashing procedure, with entry points in the agent guide.
+
 - Add owner-scoped, read-only EV-MUX `firmware.status` evidence for Mosaico Iris packages: exact BIN and ELF hashes, partition-table hash, confirmed OTA state, hardware-boot token, reset cause and retained installer receipt. Preserve manual Vibe Mode entry.
 
 - Publish deterministic `.irisfw` application packages for the opt-in `ESP32_S31_MOSAICO` build on firmware tags, with independent archive/image/layout validation, build provenance and checksums in the GitLab Generic Package Registry. Preserve standard ESP-IDF project/version descriptors in the Iris build; retain EV-MUX and existing BIN releases. Registry publication requires firmware qualification and verifies downloaded bytes before publishing the release index.

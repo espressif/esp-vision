@@ -77,13 +77,27 @@ Iris 固件文件
 
 16 MiB 布局遵循 Mosaico Recovery ABI 2 的固定系统前缀，产品契约为 ``esp-mosaico/v2``，布局 ID 为 ``mosaico-retained-test-2m-v2``，分区表仍位于 ``0x8000``。应用 NVS 地址保持不变；7 MiB 应用分区之后的全部剩余空间划给 FAT，直至 16 MiB Flash 末尾，不再单独预留 ``ui_apps``：
 
-.. list-table:: Iris 构建分区
+下表也列出命名分区之前的区域。bootloader 一行表示预留地址窗口，并非镜像实际大小；它和分区表扇区都不是应用分区。Flash 的结束边界为 ``0x1000000``，不含该地址。
+
+.. list-table:: 完整 Iris Flash 布局
    :header-rows: 1
 
-   * - 分区
+   * - 区域
      - 类型/子类型
      - 起始地址
      - 大小
+   * - 保留前缀
+     - 命名分区之外
+     - 0x0
+     - 0x2000 (8 KiB)
+   * - 保留 bootloader 窗口
+     - 命名分区之外
+     - 0x2000
+     - 0x6000 (24 KiB)
+   * - 分区表
+     - 命名分区之外
+     - 0x8000
+     - 0x1000 (4 KiB)
    * - otadata
      - data/ota
      - 0x9000
@@ -126,6 +140,30 @@ Iris 构建直接从 NVS 分区 ``sysmeta``、命名空间 ``shared`` 的字符�
 ESP-VISION 配网操作写回相同的共享键，另用 ``ev_enabled``（u8）和 ``ev_revision``（u32）保存服务的启用状态及修订号；Vibe Mode 继续使用共享 SSID/密码。忘记网络写入一对空字符串，避免任一固件重新启用旧版凭据。操作不擦除 ``sysmeta``，也不改动其他共享设置。
 
 此包要求设备已安装兼容的 Vibe Mode，版本不低于 0.2.0，通过其原生 System Update 流程安装 ``.irisfw``。这个构建的原始 IDF 烧录清单不是 Vibe Mode 初始化包，其中的 bootloader 和空白 OTA 元数据不能替换保留系统。从普通 factory 布局切换不会迁移原有文件。新的 ``ffat`` 遵循板级文件系统初始化策略，更新包不携带空白文件系统镜像。
+
+.. _iris-app-flash:
+
+已有 Iris 布局的应用直刷
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+根目录 ``app`` 和 ``app-flash`` 命令也支持所有受支持板型的普通固件，见 :ref:`idf-app-flash`。本节介绍已经采用 Iris 布局并启动 ``main_app`` 的设备所需的专用流程。先确认板型、运行应用和分区布局；分区定义以 ``boards/ESP32_S31_MOSAICO/port/partitions-16MiB-irisfw.csv`` 为准。仅烧应用不能把普通 factory 布局转换为 Iris 布局。
+
+#. 选择受支持的 ESP-IDF 环境，将 ``ESP_VISION_WORK_DIR`` 设为 checkout 之外的可写工作区。使用独立的 Iris 构建目录，并显式开启 ``ESP_VISION_ENABLE_IRISFW``。应用必须来自此 Iris 配置；普通 factory 构建或完整的 ``.irisfw`` 压缩包都不能作为直接写入的应用镜像。
+#. 释放其他客户端和串口监视器。对于正在运行的 ESP-VISION，已安装 CLI 的 ``control --action bootloader`` 可进入 ROM 下载模式，参见 :doc:`../device-core/cli`。等待 USB 重新枚举，核对同一块板子，将 ``PORT`` 设为其下载端口；不要假定应用端口名称保持不变。该操作不会进入 Vibe Mode。
+#. 在仓库根目录执行下方命令。IDF 会按需构建应用，并仅烧录该应用。
+#. 复位后通过应用端口重新连接，核对板型、版本和运行中的 ``main_app`` 地址；涉及相机的改动还应抓取一张新帧。写入完成本身不能证明预期应用已启动。
+
+.. code-block:: console
+
+   idf.py --board ESP32_S31_MOSAICO -B "$ESP_VISION_WORK_DIR/build/irisfw" \
+     -D ESP_VISION_ENABLE_IRISFW=ON -p "$PORT" app-flash
+
+IDF 目标从当前构建的分区表取得应用地址，本布局的 ``main_app`` 为 ``0x210000``。它只写入 ``esp-vision.bin``，保留设备上的 bootloader、分区表、OTA 元数据、Vibe Mode、NVS 和 FAT。启用 Iris 选项时，``flash``（包括 ``build flash monitor``）也会选择同一个仅应用烧录目标，并输出提示。后续调用会识别该构建目录 CMake 缓存中的选项；显式 ``-D`` 值优先。普通固件与 Iris 固件应使用独立构建目录。普通构建的 ``flash`` 仍执行完整烧录。
+
+直接烧录使用芯片的 ROM 下载接口，与 Vibe Mode 不同。ESP-VISION 的 USB bootloader 控制可以进入 ROM 下载模式；烧录前应选择重新枚举的下载端口。仅烧应用不会为 factory 布局的板子安装此分区布局，也不会改变启动应用的选择。它适用于运行时开发测试，但不经过原生 Iris 更新事务、HEALTHY 验收或安装回执流程；这些项目仍需手动进入 Vibe Mode 并安装 ``.irisfw`` 单独验证。
+
+原生 Iris 安装确认
+~~~~~~~~~~~~~~~~~~
 
 MicroPython 和 EV-MUX 就绪后，启用 Iris 宏的应用确认待验证 OTA 镜像，并在现有 ABI 2 恢复元数据中记录应用地址。同一宏在现有 USB CDC 接口启用最小 Iris 0.2 安装验收子集：硬件与固件身份、认证绑定、BOOT/LINK_READY/HEALTHY 事件、状态、ping/时间及只读系统清单。原生更新器无需修改，即可核对新启动、准确 ELF 身份、分区表哈希和保留的安装操作回执。HEALTHY 要求启动已确认、VM 就绪且复位原因不是崩溃；外设仍须分别验收。
 
