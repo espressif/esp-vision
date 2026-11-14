@@ -144,7 +144,7 @@
 # Independent npm release intent is recorded in the package manifest.
 .rules:knowledge:build:
   variables:
-    KNOWLEDGE_MCP_VERSION: "0.2.0"
+    KNOWLEDGE_MCP_VERSION: "0.3.0"
   rules:
     - if: '$CI_COMMIT_TAG'
       when: never
@@ -156,7 +156,7 @@
 
 .rules:knowledge:publish:
   variables:
-    KNOWLEDGE_MCP_VERSION: "0.2.0"
+    KNOWLEDGE_MCP_VERSION: "0.3.0"
   rules:
     - if: '$CI_COMMIT_TAG'
       when: never

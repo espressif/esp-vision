@@ -4,9 +4,13 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- Release Knowledge MCP 0.3.0 with the archived firmware 2026.11.14 snapshot and advance the explicit latest firmware pointer. Preserve all three historical snapshots and exact-version queries for the already published Plugin 0.2.0.
+
 ## [2026.11.14]
 
-Release candidate; not yet tagged or published. This firmware release adds Mosaico Iris distribution with retained Vibe Mode, shared Wi-Fi configuration and native installation confirmation; fixes Mosaico framebuffer colors and USB preview reconnects; adds Mosaico SC101IOT camera support, unifies the npm serial and flashing backends, improves device discovery and image I/O cleanup, expands real-target acceptance, and supports repository-root `idf.py app` / `app-flash` on all supported boards with retained Vibe Mode for Iris builds. It also decouples Plugin and Knowledge npm publication from firmware tags and retains versioned Knowledge snapshots. The independently published host packages are Device Core 0.8.1, Device CLI 0.2.1 bundling Core 0.8.1, Plugin 0.2.0 bundling CLI 0.2.1/Core 0.8.1, and Knowledge MCP 0.2.0 without Core/CLI pins. The initial Knowledge catalog covers firmware 2026.10.21, 2026.10.23 and 2026.11.06; support for 2026.11.14 requires a separate snapshot import and Knowledge release after the firmware tag qualifies and its binaries are published.
+This firmware release adds Mosaico Iris distribution with retained Vibe Mode, shared Wi-Fi configuration and native installation confirmation; fixes Mosaico framebuffer colors and USB preview reconnects; adds Mosaico SC101IOT camera support, unifies the npm serial and flashing backends, improves device discovery and image I/O cleanup, expands real-target acceptance, and supports repository-root `idf.py app` / `app-flash` on all supported boards with retained Vibe Mode for Iris builds. It also decouples Plugin and Knowledge npm publication from firmware tags and retains versioned Knowledge snapshots. The independently published host packages are Device Core 0.8.1, Device CLI 0.2.1 bundling Core 0.8.1, Plugin 0.2.0 bundling CLI 0.2.1/Core 0.8.1, and Knowledge MCP 0.2.0 without Core/CLI pins. The initial Knowledge catalog covers firmware 2026.10.21, 2026.10.23 and 2026.11.06; support for 2026.11.14 requires a separate snapshot import and Knowledge release after the firmware tag qualifies and its binaries are published.
 
 ### Added
 
