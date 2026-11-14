@@ -188,8 +188,8 @@ Firmware unit tests and Core acceptance
 Device Core owns application-visible and hardware acceptance tests. Use its public API for new connection, Python, file, preview and capture scenarios. Firmware fault injection stays alongside firmware because a normal SDK request cannot reliably force task scheduling, memory allocation or driver failures. Source-text assertions are supplementary checks, not substitutes for executing behavior or real hardware acceptance.
 
 
-Release target acceptance
--------------------------
+11.14 release target acceptance
+-------------------------------
 
 The release target jobs for Function EV, P4 Vision and S31 Korvo now require the following checks in addition to their board-specific camera, image, display and inference cases. Unsupported selected checks fail with ``--require-all``; a missing board or peripheral is not a passing result.
 
@@ -201,6 +201,8 @@ The release target jobs for Function EV, P4 Vision and S31 Korvo now require the
 
 ``--junit PATH`` on the Python driver produces GitLab test cases for the individual SDK checks, flash/verify stages and runtime readiness. Bootstrap progress events remain diagnostic log entries; blocked checks appear as failures with their prerequisite recorded. Failures before runtime acceptance produce a failing driver case. Logs and camera/screen artifacts remain available; a successful flash stage alone does not qualify a release.
 
-For each release candidate, retain the final commit/pipeline, board, interface, firmware version and image artifacts together. Run the full CI firmware matrix only after implementation is complete. The existing publication gate still requires all three target jobs. Tests on an older installed firmware validate the harness only; they do not qualify the candidate. Tag creation and publication are separate release actions.
+For the 2026.11.14 candidate, retain the final commit/pipeline, board, interface, firmware version and image artifacts together. Run the full CI firmware matrix only after implementation is complete. The existing publication gate still requires all three target jobs. Tests on an older installed firmware validate the harness only; they do not qualify the candidate. Tag creation and publication are separate release actions.
 
 For coordinated npm releases, CLI packaging on protected master requires successful Core publication or confirmed availability of that version. It resolves the published archive and SHA-512 integrity before ``npm ci``, builds and tests the CLI, then publishes that exact checked tarball with the resolved lock. MR checks may use the matching source Core tarball while publication is pending. Plugin release packaging requires the published CLI to bundle the Core version recorded in the Plugin manifest; it does not fall back to an older CLI or Core. Core 0.8.1 must therefore be available before CLI 0.2.1, and both must be available before packaging Plugin 0.2.0. Firmware qualification, npm publication and online Knowledge availability are separate acceptance milestones; a firmware tag alone does not prove that its Knowledge is online.
+
+Core 0.8.1, CLI 0.2.1, Plugin 0.2.0 and Knowledge MCP 0.2.0 are already published to npm. Knowledge MCP 0.2.0 is independent of Core/CLI pins. Its initial retained catalog covers 2026.10.21, 2026.10.23 and 2026.11.06; it does not yet cover the 2026.11.14 firmware candidate. Publish the new firmware snapshot after the tag qualifies and its binaries ship, then import it through a separate reviewed Knowledge release. The Plugin 0.2.0 publication gate waits for any concurrent Knowledge deployment and verifies the live versioned endpoint before writing to npm.

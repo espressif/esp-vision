@@ -54,6 +54,21 @@ Core and CLI publish automatically from protected default-branch push pipelines 
 
 Plugin and Knowledge npm packages publish independently from protected default-branch push pipelines when release metadata changes. Firmware-tag pipelines cannot publish npm. Plugin retains its minor-locked Core/CLI ranges and exact resolved versions; Knowledge has no Core/CLI dependency or release pin. When versions change together, Core publishes before the CLI release build, CLI publishes before Plugin release packaging, and Plugin copies and verifies that published CLI archive. The actual dependency order is Core → CLI → Plugin. If Knowledge releases in the same pipeline, Plugin publication also waits for the website bridge to finish successfully. Every actual Plugin publication probes its configured online Knowledge endpoint for the required health, version inventory and exact-query contract before contacting npm for publication; dry runs use a local server and never require production to have the candidate deployed. Do not change a consumer to an unpublished dependency without the corresponding upstream release or ordering gate. Existing Plugin/Knowledge versions must match the checked artifact integrity; changed bytes require a new version.
 
+## Coordinated package versions
+
+The firmware 2026.11.14 candidate uses the following independent host package versions, all published to npm as of 2026-11-14. Verify the registry version, archive integrity and exact bundled dependencies at each release gate; a source manifest alone does not establish publication.
+
+| Package | Published version | Exact bundled dependency | Publication gate |
+| --- | --- | --- | --- |
+| Device Core | 0.8.1 | None | Protected master, SDK release checks |
+| Device CLI | 0.2.1 | Core 0.8.1 | Published Core archive and resolved lock, checked CLI tarball |
+| Plugin | 0.2.0 | CLI 0.2.1 / Core 0.8.1 | Published CLI archive, successful concurrent Knowledge deployment and live endpoint contract |
+| Knowledge MCP | 0.2.0 | No Core/CLI pin | Checked catalog/npm/container, descriptor publication and website deployment |
+
+Core 0.8.1, CLI 0.2.1, Plugin 0.2.0 and Knowledge MCP 0.2.0 have completed npm publication independently of the pending firmware tag. For subsequent coordinated releases, install the website consumer contract before publishing a new Knowledge descriptor and publish Core and CLI before Plugin. Verify the final dependency pins, versioned Knowledge instructions and live API contract before Plugin publication. Once an npm version exists, changed bytes require a new version, including a dependency-only rebuild.
+
+Knowledge 0.2.0 initially supports firmware 2026.10.21, 2026.10.23 and 2026.11.06, with `latestFirmwareVersion=2026.11.06`. The firmware 2026.11.14 tag archives its new baseline only after qualification and DL publication. Importing that archive is a separate reviewed Knowledge release; do not add a guessed future archive URL/hash or advance the latest pointer before the snapshot exists. Treat newly supported firmware as a minor-version addition under the package release policy; a subsequent 0.3.0 candidate must be prepared and qualified separately.
+
 ## Firmware and Knowledge release procedure
 
 1. Merge firmware changes and maintained bilingual documentation with a root `[Unreleased]` changelog entry. Prepare the firmware tag and release notes independently of npm versions. Run the final firmware/build/target acceptance matrix through CI.
