@@ -29,13 +29,13 @@ class CdcHelloContractTests(unittest.TestCase):
         self.assertIn("ev_transport_link_advance_generation", cdc_open)
         self.assertIn("ev_control_transport_cdc_reset_parser", cdc_open)
 
-        acquire_start = production.index("static esp_err_t ev_control_send_hello_acquire(")
+        acquire_start = production.index("static MP_NOINLINE esp_err_t ev_control_send_hello_acquire(")
         acquire_end = production.index("static esp_err_t ev_control_send_transport_state(", acquire_start)
         acquire_handler = production[acquire_start:acquire_end]
         self.assertIn("return ev_control_send_hello_discovery(seq);", acquire_handler)
 
         start_marker = "static esp_err_t ev_control_build_hello_discovery_payload("
-        end_marker = "static esp_err_t ev_control_send_hello_acquire("
+        end_marker = "static MP_NOINLINE esp_err_t ev_control_send_hello_acquire("
         helpers = production[production.index(start_marker):production.index(end_marker)]
 
         prelude = r'''#include <assert.h>

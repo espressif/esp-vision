@@ -6,8 +6,9 @@
 """Explicit Linux hardware acceptance for native UVC, using the device CLI.
 
 Requires ffmpeg, v4l2-ctl and Pillow. Select both serial and video devices
-explicitly. The tests replace the UVC source and run a short camera program;
-finally they restore the logo. They do not modify device files or MSC data.
+explicitly. Use a device CLI with the Python serial adapter (`--python`)
+for recording the raw EV-MUX preview. The tests run a short camera program
+and restore the logo afterward. They do not modify device files or MSC data.
 """
 
 import argparse
@@ -317,19 +318,32 @@ print("UVC_CAMERA_RESTART_OK")''')
         active = None
         assert rgb[0] > 180 and rgb[1] < 80 and rgb[2] < 80, rgb
         passed('camera_restart_while_uvc_streaming', rgb)
-        python('before-soft-reset', '''import uvc, image
+        active = capture('vm-reset', 100)
+        python('before-soft-reset', '''import uvc, image, time
+deadline = time.ticks_add(time.ticks_ms(), 4000)
+while not uvc.is_streaming():
+    assert time.ticks_diff(deadline, time.ticks_ms()) > 0, "UVC did not start"
+    time.sleep_ms(20)
 img = image.Image(320,240,image.RGB565)
 img.draw_rectangle((0,0,320,240),color=(255,0,0),fill=True)
 assert uvc.set_frame(img)
 print("UVC_BEFORE_RESET_OK")''')
-        active = capture('vm-reset', 30)
-        time.sleep(0.6)
+        # Inspect exercises the bootstrap replies and device control on the
+        # same USB connection while the isochronous capture remains open.
+        inspect = ['node', str(args.device_cli), 'inspect', '--port', args.port,
+                   '--fields', 'runtime,network', '--probe', '--json']
+        before = json.loads(run('active-stream-before-reset', inspect))['result']['runtime']
+        assert before['vmReady'] and before['vmEpoch'], before
         run('vm-soft-reset', ['node', str(args.device_cli), 'control', '--port', args.port,
                               '--action', 'reset', '--mode', 'soft', '--timeout', '8000', '--json'])
+        after = json.loads(run('active-stream-after-reset', inspect))['result']['runtime']
+        assert after['vmReady'] and after['vmEpoch'] != before['vmEpoch'], after
         finish(active)
         active = None
         assert (out / 'vm-reset.jpg').read_bytes() == (out / 'logo.jpg').read_bytes()
-        passed('vm_soft_reset_keeps_uvc_and_restores_logo', {'decoded_frames': 30})
+        passed('vm_soft_reset_keeps_uvc_and_restores_logo', {
+            'decoded_frames': 100, 'before_epoch': before['vmEpoch'], 'after_epoch': after['vmEpoch'],
+        })
     except BaseException as exc:
         results.append({'name': 'acceptance', 'status': 'failed', 'error': str(exc)})
         raise

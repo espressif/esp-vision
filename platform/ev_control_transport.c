@@ -1459,7 +1459,8 @@ static int ev_control_append_sink(char *payload, size_t capacity, int *pos, bool
     return 0;
 }
 
-static esp_err_t ev_control_send_capabilities(uint32_t seq)
+// Keep the large bootstrap reply frames off the common RX dispatch stack.
+static MP_NOINLINE esp_err_t ev_control_send_capabilities(uint32_t seq)
 {
     char payload[3072];
     int pos = snprintf(payload, sizeof(payload),
@@ -1596,9 +1597,9 @@ static esp_err_t ev_control_send_hello_discovery(uint32_t seq)
     return ev_control_send_rpc_with_seq("rsp", "hello", payload, seq);
 }
 
-static esp_err_t ev_control_send_hello_acquire(uint32_t seq,
-                                               const char *request,
-                                               size_t request_len)
+static MP_NOINLINE esp_err_t ev_control_send_hello_acquire(uint32_t seq,
+                                                           const char *request,
+                                                           size_t request_len)
 {
     ev_control_json_hello_t hello;
     if (!ev_control_json_parse_hello(request, request_len, &hello)) {
