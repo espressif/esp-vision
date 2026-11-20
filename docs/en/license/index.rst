@@ -57,7 +57,7 @@ The following table lists the direct dependencies most relevant to redistributio
      - Checked build copy of ``sensors/ov2710/ov2710.c`` (SHA-256 ``4a9af395151527b156b1d685c39b298502490f33a8391a641a51ac72b3bc8876``); acknowledge callback shutdown before SCCB release, preserving the original header without editing the managed component
      - Apache-2.0
    * - TinyUSB UVC transfer adaptation
-     - ``overlay/micropython/shared/tinyusb/esp_vision_video_transfer.inc``, ``tools/tests/tinyusb_video_stubs/upstream_transfer.c``; espressif/tinyusb 0.19.0~3, commit ``ab4a1817907ed865b10a712b5e03e5e0a9902df5``
+     - ``overlay/micropython/shared/tinyusb/esp_vision_video_transfer.inc``, ``tools/patches/tinyusb-uvc-lifetime.patch``; espressif/tinyusb 0.19.0~3, commit ``ab4a1817907ed865b10a712b5e03e5e0a9902df5``
      - Checked build copy of ``src/class/video/video_device.c``; terminate failed/short ISO frames, separate failure completion, and preserve the original copyright and license headers
      - MIT
    * - `micropython-ulab <https://github.com/v923z/micropython-ulab>`__ 6.12

@@ -12,6 +12,7 @@ and restore the logo afterward. They do not modify device files or MSC data.
 """
 
 import argparse
+from fractions import Fraction
 import json
 import os
 from pathlib import Path
@@ -88,12 +89,39 @@ def validate_evmux_preview(recording, *, allow_collector_tail=False, tail_report
     return previews
 
 
+def parse_mode(value):
+    try:
+        dimensions, rate = value.split('@')
+        width, height = map(int, dimensions.split('x'))
+        fps = int(rate)
+        if min(width, height) > 0 and fps in (10, 20, 30):
+            return width, height, fps
+    except ValueError:
+        pass
+    raise argparse.ArgumentTypeError('expected WIDTHxHEIGHT@FPS with 10, 20 or 30 FPS')
+
+
+def measured_fps(path, frames):
+    time_base = None
+    timestamps = []
+    for line in path.read_text().splitlines():
+        if line.startswith('#tb 0:'):
+            time_base = Fraction(line.split(':', 1)[1].strip())
+        elif line and not line.startswith('#'):
+            timestamps.append(int(line.split(',')[2]))
+    assert time_base and len(timestamps) == frames
+    assert all(a < b for a, b in zip(timestamps, timestamps[1:])), path
+    return round(float((frames - 1) / ((timestamps[-1] - timestamps[0]) * time_base)), 3)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', required=True)
     parser.add_argument('--video', required=True)
     parser.add_argument('--device-cli', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
+    parser.add_argument('--mode', type=parse_mode, action='append', default=[],
+                        help='also test the specified advertised WIDTHxHEIGHT@FPS mode')
     args = parser.parse_args()
     out = args.output_dir.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -148,17 +176,22 @@ sys.exit(child.returncode)
         assert payload['ok'], payload
         return payload
 
-    def capture(label, frames=3):
+    def capture(label, frames=3, mode=(320, 240, 10), measure=False):
+        width, height, fps = mode
         path = out / (label + '.mjpeg')
         log = (out / (label + '-video.log')).open('w')
-        process = subprocess.Popen([
+        command = [
             'ffmpeg', '-hide_banner', '-loglevel', 'info', '-y', '-f', 'v4l2',
-            '-input_format', 'mjpeg', '-video_size', '320x240', '-framerate', '10',
+            '-input_format', 'mjpeg', '-video_size', f'{width}x{height}', '-framerate', str(fps),
             '-i', args.video, '-frames:v', str(frames), '-c:v', 'copy', str(path),
-        ], stdout=log, stderr=log, env=env)
+        ]
+        if measure:
+            command.extend(['-map', '0:v:0', '-frames:v', str(frames), '-c:v', 'copy',
+                            '-f', 'framecrc', str(path.with_suffix('.framecrc'))])
+        process = subprocess.Popen(command, stdout=log, stderr=log, env=env)
         return process, log, path, frames
 
-    def finish(record):
+    def finish(record, size=(320, 240), *, alternative_sizes=()):
         process, log, path, expected_frames = record
         try:
             assert process.wait(timeout=15) == 0, path
@@ -169,52 +202,61 @@ sys.exit(child.returncode)
         finally:
             log.close()
         # Decode every frame, including frames sent while the source changes.
-        frames = decode_mjpeg_frames(path.read_bytes(), expected_frames)
+        frames = decode_mjpeg_frames(path.read_bytes(), expected_frames, size, alternative_sizes=alternative_sizes)
         jpg = path.with_suffix('.jpg')
         jpg.write_bytes(frames[-1])
         with Image.open(jpg) as image:
-            assert image.size == (320, 240), image.size
-            return ImageStat.Stat(image.convert('RGB').crop((100, 100, 180, 160))).mean
+            assert image.size == size, image.size
+            x, y = image.width // 2, image.height // 2
+            return ImageStat.Stat(image.convert('RGB').crop((x - 10, y - 10, x + 10, y + 10))).mean
 
     def passed(name, detail=None):
         results.append({'name': name, 'status': 'passed', 'detail': detail})
         print('PASS', name, flush=True)
 
     active = None
+    wait_for_stream = '''import uvc, time
+deadline = time.ticks_add(time.ticks_ms(), 4000)
+while not uvc.is_streaming():
+    assert time.ticks_diff(deadline, time.ticks_ms()) > 0, "UVC did not start"
+    time.sleep_ms(20)
+'''
     try:
         formats = run('formats', ['v4l2-ctl', '-d', args.video, '--list-formats-ext'])
         assert 'MJPG' in formats and '320x240' in formats, formats
         passed('enumeration')
-        python('no-host', '''import uvc, image, gc
+        python('no-host', '''import uvc, image
 uvc.reset()
-assert uvc.get_mode() == {"format":"MJPEG", "width":320, "height":240, "interval_us":100000}
+assert uvc.get_mode()["format"] == "MJPEG"
 assert not uvc.is_streaming()
 assert uvc.write(image.Image(320, 240, image.RGB565)) is False
-try:
-    uvc.set_frame(image.Image(160, 120, image.RGB565))
-except ValueError:
-    pass
-else:
-    raise AssertionError("wrong dimensions accepted")
+assert uvc.set_frame(image.Image(160, 120, image.RGB565)) is False
 print("UVC_CONTRACT_OK")''')
-        passed('no_host_and_invalid_inputs')
+        passed('no_host_drops_submissions')
         active = capture('logo')
         rgb = finish(active)
         active = None
         passed('default_logo', rgb)
-        python('fixed-copy', '''import uvc, image, gc
+        active = capture('fixed-red', 30)
+        python('fixed-copy', wait_for_stream + '''import image, gc
 img = image.Image(320,240,image.RGB565)
 img.draw_rectangle((0,0,320,240),color=(255,0,0),fill=True)
+uvc.bind("preview")
 assert uvc.set_frame(img)
 img.draw_rectangle((0,0,320,240),color=(0,255,0),fill=True)
+img.flush()
 del img
 gc.collect()
 print("UVC_FIXED_COPY_OK")''')
-        active = capture('fixed-red')
         rgb = finish(active)
         active = None
         assert rgb[0] > 180 and rgb[1] < 60 and rgb[2] < 60, rgb
         passed('fixed_frame_owns_copy', rgb)
+        active = capture('fixed-frame-closed')
+        finish(active)
+        active = None
+        assert (out / 'fixed-frame-closed.jpg').read_bytes() == (out / 'logo.jpg').read_bytes()
+        passed('fixed_frame_clears_on_stream_close')
         active = capture('direct-blue', 30)
         python('direct-write', '''import uvc, image, time, gc
 for _ in range(100):
@@ -233,7 +275,8 @@ print("UVC_DIRECT_COPY_OK")''')
         active = None
         assert rgb[2] > 180 and rgb[0] < 60 and rgb[1] < 60, rgb
         passed('direct_write_owns_copy_and_reopen', rgb)
-        python('jpeg-input', '''import uvc, image, gc
+        active = capture('jpeg-green', 30)
+        python('jpeg-input', wait_for_stream + '''import image, gc
 img = image.Image(320,240,image.RGB565)
 img.draw_rectangle((0,0,320,240),color=(0,255,0),fill=True)
 jpg = img.to_jpeg(copy=True,quality=50)
@@ -247,16 +290,17 @@ except ValueError:
 else:
     raise AssertionError("unknown source accepted")
 print("UVC_JPEG_OK")''')
-        active = capture('jpeg-green')
         rgb = finish(active)
         active = None
         assert rgb[1] > 180 and rgb[0] < 60 and rgb[2] < 60, rgb
         passed('jpeg_input_and_invalid_binding', rgb)
-        python('oversize', '''import image, uvc, os
-buf = bytearray(os.urandom(320*240*2))
-img = image.Image(320,240,image.RGB565,buffer=buf)
-jpg = img.to_jpeg(copy=True,quality=100)
-assert jpg.size() > 48*1024
+        active = capture('preserved-green', 30)
+        python('oversize', wait_for_stream + r'''import image
+img = image.Image(320,240,image.RGB565)
+img.draw_rectangle((0,0,320,240),color=(0,255,0),fill=True)
+assert uvc.set_frame(img)
+data = bytes(img.to_jpeg(copy=True, quality=50).bytearray())
+jpg = image.Image(320,240,image.JPEG,buffer=data[:2]+b'\xff\xfe\xc0\x02'+bytes(49152)+data[2:])
 try:
     uvc.set_frame(jpg)
 except ValueError:
@@ -264,7 +308,6 @@ except ValueError:
 else:
     raise AssertionError("oversized JPEG accepted")
 print("UVC_OVERSIZE_OK")''')
-        active = capture('preserved-green')
         rgb = finish(active)
         active = None
         assert rgb[1] > 180 and rgb[0] < 60 and rgb[2] < 60, rgb
@@ -298,11 +341,12 @@ print("UVC_EVMUX_CAMERA_OK", count)''')
             'frames': len(previews), 'crc_errors': 0, 'strict_entropy_decoded': True,
             'collector_tail': collector_tail})
         # Repeated host reopen must continue delivering frames.
-        for cycle in range(3):
+        for cycle in range(10):
             active = capture(f'reopen-{cycle}')
             finish(active)
             active = None
-        passed('repeated_host_close_reopen')
+            assert (out / f'reopen-{cycle}.jpg').read_bytes() == (out / 'logo.jpg').read_bytes()
+        passed('repeated_host_close_reopen', {'cycles': 10})
         active = capture('camera-restarts', 40)
         python('camera-restarts', '''import sensor, uvc
 for _ in range(3):
@@ -344,6 +388,42 @@ print("UVC_BEFORE_RESET_OK")''')
         passed('vm_soft_reset_keeps_uvc_and_restores_logo', {
             'decoded_frames': 100, 'before_epoch': before['vmEpoch'], 'after_epoch': after['vmEpoch'],
         })
+        for width, height in ((160, 120), (480, 480), (640, 480), (1280, 720)):
+            label = f'input-{width}x{height}'
+            active = capture(label, 30)
+            python(label, wait_for_stream + f'''import image
+img = image.Image({width},{height},image.RGB565)
+img.draw_rectangle((0,0,{width},{height}),color=(255,0,0),fill=True)
+assert uvc.write(img)
+assert uvc.get_mode()["width"] == 320 and uvc.get_mode()["height"] == 240
+print("UVC_APPLICATION_SIZE_OK")''')
+            rgb = finish(active, (width, height), alternative_sizes=((320, 240),))
+            active = None
+            assert rgb[0] > 180 and rgb[1] < 60 and rgb[2] < 60, rgb
+            passed('application_dimensions', [width, height])
+        for width, height, fps in args.mode:
+            label = f'mode-{width}x{height}-{fps}fps'
+            frame_count = 4 * fps
+            active = capture(label, frame_count, (width, height, fps), measure=True)
+            python(label, wait_for_stream + f'''notifications = []
+uvc.set_mode_callback(notifications.append)
+try:
+    time.sleep_ms(100)
+    selected = uvc.get_mode()
+    assert notifications == [selected], notifications
+    assert (selected["width"], selected["height"], selected["interval_us"]) == ({width}, {height}, {1000000 // fps}), selected
+finally:
+    uvc.set_mode_callback(None)
+import image
+img = image.Image({width},{height},image.RGB565)
+img.draw_rectangle((0,0,{width},{height}),color=(255,0,0),fill=True)
+assert uvc.write(img)
+print("UVC_NEGOTIATED_MODE_OK")''')
+            rgb = finish(active, (width, height))
+            active = None
+            assert rgb[0] > 180 and rgb[1] < 60 and rgb[2] < 60, rgb
+            passed('advertised_mode_decodes', dict(mode=[width, height, fps],
+                   decoded_frames=frame_count, measured_fps=measured_fps(out / f'{label}.framecrc', frame_count)))
     except BaseException as exc:
         results.append({'name': 'acceptance', 'status': 'failed', 'error': str(exc)})
         raise

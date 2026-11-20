@@ -239,10 +239,10 @@ static void fill_encoded(uint8_t *output) {
 static const char *TAG="jpeg-test";
 static uint32_t s_last_usj_flush_ms;
 static int queued,errors;
-static bool esp_vision_uvc_preview_ready(const image_t *image) {(void)image;return true;}
+static uint32_t esp_vision_uvc_preview_epoch(void) {return 7;}
 static bool ev_mux_preview_observers_ready(void) {return true;}
-static int esp_vision_uvc_publish(const uint8_t *data,size_t length,bool fixed,bool *accepted) {
-    assert(data==encoded && length==sizeof(valid_jpeg) && !fixed);*accepted=true;return ESP_OK;
+static int esp_vision_uvc_publish(uint32_t epoch,const uint8_t *data,size_t length,bool *accepted) {
+    assert(epoch==7 && data==encoded && length==sizeof(valid_jpeg));*accepted=true;return ESP_OK;
 }
 static bool esp_vision_preview_is_ready(void) {return true;}
 static const char *ev_channel_get(int stream) {assert(stream==EV_STREAM_USER);return "uart";}

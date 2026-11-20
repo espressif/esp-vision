@@ -32,3 +32,11 @@
 
 #define MICROPY_HW_I2C0_SCL (1)
 #define MICROPY_HW_I2C0_SDA (0)
+
+// Sensor variants use different raw modes. Keep the common UVC profile.
+#ifndef MICROPY_HW_USB_UVC_ENABLE_TARGET_MODES
+#define MICROPY_HW_USB_UVC_ENABLE_TARGET_MODES (0)
+#endif
+#if MICROPY_HW_USB_UVC_ENABLE_TARGET_MODES
+#error "ESP32_S31_KORVO has no verified UVC target mode profile"
+#endif

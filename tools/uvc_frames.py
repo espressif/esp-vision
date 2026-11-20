@@ -35,7 +35,7 @@ def _strict_decode_mjpeg(data, expected_frames):
         raise ValueError(f'Strict FFmpeg JPEG validation did not decode all {expected_frames} frames')
 
 
-def decode_mjpeg_frames(data, expected_frames, size=(320, 240)):
+def decode_mjpeg_frames(data, expected_frames, size=(320, 240), *, alternative_sizes=()):
     """Return original JPEG bytes only after both decoders accept every frame."""
     if type(expected_frames) is not int or expected_frames <= 0:
         raise ValueError('A positive expected frame count is required')
@@ -52,7 +52,7 @@ def decode_mjpeg_frames(data, expected_frames, size=(320, 240)):
         frame = data[cursor:end + 2]
         with Image.open(io.BytesIO(frame)) as image:
             image.load()
-            if image.format != 'JPEG' or image.size != size:
+            if image.format != 'JPEG' or (image.size != size and image.size not in alternative_sizes):
                 raise ValueError(f'Unexpected UVC image format/dimensions: {image.format} {image.size}')
         frames.append(frame)
         cursor = end + 2

@@ -64,6 +64,60 @@
 #include "class/cdc/cdc_device.h"
 #endif
 
+// Keep the built-in configuration length shared by the descriptor definition
+// and machine.USBDevice.BUILTIN_DEFAULT. This mirrors the upstream MicroPython
+// interface while accounting for the optional UVC descriptor block.
+#if MICROPY_HW_ENABLE_USBDEV
+#define MP_USBD_UVC_FALLBACK_MODE_LIST(X) \
+    X(1, 320, 240, 49152, 1, 1000000, 0, 0)
+
+#if CFG_TUD_VIDEO
+#ifndef MICROPY_HW_USB_UVC_ENABLE_TARGET_MODES
+#define MICROPY_HW_USB_UVC_ENABLE_TARGET_MODES (0)
+#endif
+#ifndef MICROPY_HW_USB_UVC_MODE_TABLE_CAPABLE
+#define MICROPY_HW_USB_UVC_MODE_TABLE_CAPABLE (0)
+#endif
+
+#if MICROPY_HW_USB_UVC_ENABLE_TARGET_MODES && !MICROPY_HW_USB_UVC_MODE_TABLE_CAPABLE
+#error "UVC target modes require a platform commit callback that supports the configured mode table"
+#endif
+
+#if MICROPY_HW_USB_UVC_ENABLE_TARGET_MODES && defined(MICROPY_HW_USB_UVC_TARGET_MODE_LIST)
+#define MP_USBD_UVC_MODE_LIST(X) MICROPY_HW_USB_UVC_TARGET_MODE_LIST(X)
+#else
+#define MP_USBD_UVC_MODE_LIST(X) MP_USBD_UVC_FALLBACK_MODE_LIST(X)
+#endif
+
+#define MP_USBD_UVC_FRAME_DESC_LEN_1 (TUD_VIDEO_DESC_CS_VS_FRM_MJPEG_DISC_LEN + 4)
+#define MP_USBD_UVC_FRAME_DESC_LEN_2 (TUD_VIDEO_DESC_CS_VS_FRM_MJPEG_DISC_LEN + 8)
+#define MP_USBD_UVC_FRAME_DESC_LEN_3 (TUD_VIDEO_DESC_CS_VS_FRM_MJPEG_DISC_LEN + 12)
+#define MP_USBD_UVC_FRAME_DESC_LEN_SELECT(count) MP_USBD_UVC_FRAME_DESC_LEN_##count
+#define MP_USBD_UVC_FRAME_DESC_LEN(count) MP_USBD_UVC_FRAME_DESC_LEN_SELECT(count)
+#define MP_USBD_UVC_COUNT_FRAME(index, width, height, max_frame_size, interval_count, interval0, interval1, interval2) + 1
+#define MP_USBD_UVC_COUNT (0 MP_USBD_UVC_MODE_LIST(MP_USBD_UVC_COUNT_FRAME))
+#define MP_USBD_UVC_FRAME_BYTES(index, width, height, max_frame_size, interval_count, interval0, interval1, interval2) \
+    + MP_USBD_UVC_FRAME_DESC_LEN(interval_count)
+#define MP_USBD_UVC_DESC_FRAME_BYTES (0 MP_USBD_UVC_MODE_LIST(MP_USBD_UVC_FRAME_BYTES))
+#define MP_USBD_UVC_DESC_LEN (TUD_VIDEO_DESC_IAD_LEN + TUD_VIDEO_DESC_STD_VC_LEN + \
+    TUD_VIDEO_DESC_CS_VC_LEN + 1 + TUD_VIDEO_DESC_CAMERA_TERM_LEN + \
+    TUD_VIDEO_DESC_OUTPUT_TERM_LEN + TUD_VIDEO_DESC_STD_VS_LEN + \
+    TUD_VIDEO_DESC_CS_VS_IN_LEN + 1 + TUD_VIDEO_DESC_CS_VS_FMT_MJPEG_LEN + \
+    MP_USBD_UVC_DESC_FRAME_BYTES + TUD_VIDEO_DESC_CS_VS_COLOR_MATCHING_LEN + \
+    TUD_VIDEO_DESC_STD_VS_LEN + 7)
+#else
+#define MP_USBD_UVC_MODE_LIST(X)
+#define MP_USBD_UVC_COUNT (0)
+#define MP_USBD_UVC_DESC_FRAME_BYTES (0)
+#define MP_USBD_UVC_DESC_LEN (0)
+#endif
+
+#define MP_USBD_BUILTIN_DESC_CFG_LEN (TUD_CONFIG_DESC_LEN + \
+    (CFG_TUD_CDC ? TUD_CDC_DESC_LEN : 0) + \
+    (CFG_TUD_MSC ? TUD_MSC_DESC_LEN : 0) + \
+    (CFG_TUD_VIDEO ? MP_USBD_UVC_DESC_LEN : 0))
+#endif // MICROPY_HW_ENABLE_USBDEV
+
 // Initialise TinyUSB device.
 static inline void mp_usbd_init_tud(void) {
     tusb_init();
@@ -115,31 +169,27 @@ extern void mp_usbd_port_get_serial_number(char *buf);
 // length (2 * bytes_len + 1) (including NUL terminator).
 void mp_usbd_hex_str(char *out_str, const uint8_t *bytes, size_t bytes_len);
 
-// UVC descriptor length: VC header includes one streaming interface;
-// VS input header includes one format control byte.
-#if CFG_TUD_VIDEO
-#define MP_USBD_UVC_DESC_LEN (TUD_VIDEO_DESC_IAD_LEN + TUD_VIDEO_DESC_STD_VC_LEN + \
-    TUD_VIDEO_DESC_CS_VC_LEN + 1 + TUD_VIDEO_DESC_CAMERA_TERM_LEN + \
-    TUD_VIDEO_DESC_OUTPUT_TERM_LEN + TUD_VIDEO_DESC_STD_VS_LEN + \
-    TUD_VIDEO_DESC_CS_VS_IN_LEN + 1 + TUD_VIDEO_DESC_CS_VS_FMT_MJPEG_LEN + \
-    TUD_VIDEO_DESC_CS_VS_FRM_MJPEG_CONT_LEN + TUD_VIDEO_DESC_CS_VS_COLOR_MATCHING_LEN + \
-    TUD_VIDEO_DESC_STD_VS_LEN + 7)
-#else
-#define MP_USBD_UVC_DESC_LEN (0)
-#endif
+#if MICROPY_HW_ENABLE_USBDEV
+// UVC frame modes are grouped by unique resolution. frame_index is the UVC
+// descriptor's 1-based bFrameIndex; interval_100ns must exactly match one of
+// that frame's discrete advertised intervals.
+typedef struct {
+    uint16_t width;
+    uint16_t height;
+    uint32_t interval_100ns;
+    uint32_t max_frame_size;
+} mp_usbd_uvc_mode_t;
 
-// Length of built-in configuration descriptor
-#define MP_USBD_BUILTIN_DESC_CFG_LEN (TUD_CONFIG_DESC_LEN +                     \
-    (CFG_TUD_CDC ? (TUD_CDC_DESC_LEN) : 0) +  \
-    (CFG_TUD_MSC ? (TUD_MSC_DESC_LEN) : 0) +  \
-    (CFG_TUD_VIDEO ? MP_USBD_UVC_DESC_LEN : 0) \
-    )
+bool mp_usbd_uvc_default_mode(mp_usbd_uvc_mode_t *mode_out);
+bool mp_usbd_uvc_mode_get(uint8_t frame_index, uint32_t interval_100ns,
+                          mp_usbd_uvc_mode_t *mode_out);
+#endif
 
 const uint8_t *mp_usbd_builtin_configuration(bool other_speed);
 
 // Built-in USB device and configuration descriptor values
 extern const tusb_desc_device_t mp_usbd_builtin_desc_dev;
-extern const uint8_t mp_usbd_builtin_desc_cfg[MP_USBD_BUILTIN_DESC_CFG_LEN];
+extern const uint8_t mp_usbd_builtin_desc_cfg[];
 
 void mp_usbd_task_callback(mp_sched_node_t *node);
 

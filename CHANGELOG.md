@@ -7,10 +7,23 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 ### Added
 
 - Release Knowledge MCP 0.3.0 with the archived firmware 2026.11.14 snapshot and advance the explicit latest firmware pointer. Preserve all three historical snapshots and exact-version queries for the already published Plugin 0.2.0.
+- Add opt-in board-specific UVC mode tables and an optional VM callback for negotiated host modes.
+
+### Changed
+
+- Use one lazily allocated UVC application frame buffer and generate the fallback logo at runtime. Keep published UVC APIs and accept application JPEG dimensions independently of the negotiated mode.
 
 ### Fixed
 
+- Generate the UVC idle logo as a color MJPEG frame so hosts can start decoding color before the first camera frame.
+- Backport TinyUSB #4234 to serialize DWC2 transmit FIFO writes and flushes across cores and keep CDC responsive during UVC streaming.
+- Select the P4 software JPEG fallback when the default internal DMA heap cannot hold the hardware encoder's first descriptor.
+- Keep P4 color JPEG sampling consistent across hardware and software encoding. Allow an explicitly bound preview to replace its single UVC frame after the in-flight transfer drains and EV-MUX has its own copy.
 - Keep large EV-MUX bootstrap replies off the common receive stack so active UVC control and VM soft-reset requests retain stack headroom.
+- Clear UVC application frames when streaming closes and keep in-flight storage alive until TinyUSB confirms completion or cancellation.
+- Keep host regression fixtures aligned with the UVC publication epoch and EV-MUX bootstrap changes.
+- Verify that P4 software fallback produces 4:2:2 color JPEGs and grayscale JPEGs.
+- Use the host's temporary directory for the native UVC logo test, align the English and Chinese UVC examples, and correct the English UVC page heading for strict documentation builds.
 
 ## [2026.11.14]
 

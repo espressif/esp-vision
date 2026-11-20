@@ -182,7 +182,7 @@ static int jpeg_encoder_process(void *engine,const jpeg_encode_cfg_t *cfg,const 
     return hardware_result;
 }
 static bool intercepted_jpeg_compress(image_t *src,image_t *dst,int quality,bool grow,jpeg_subsampling_t sampling) {
-    assert(dst->pixels && dst->size==scratch_capacity && !grow && sampling==JPEG_SUBSAMPLING_AUTO);
+    assert(dst->pixels && dst->size==scratch_capacity && !grow && sampling==JPEG_SUBSAMPLING_422);
     cpu_calls++;
     if(cpu_fault==1)return true;
     bool overflow=imlib_jpeg_compress(src,dst,quality,grow,sampling);
@@ -310,15 +310,17 @@ class JpegCpuFallbackTests(unittest.TestCase):
         self.assertFalse(self.lib.fallback_output())
         self.assertEqual(self.lib.fallback_value(0), 0)
 
-    def check_decoded(self, jpeg, size, color):
+    def check_decoded(self, jpeg, size, color, *, sampling=None):
         try:
-            from PIL import Image
+            from PIL import Image, JpegImagePlugin
         except ImportError:
             self.skipTest('Pillow required for independent full JPEG decoding')
         with Image.open(io.BytesIO(jpeg)) as decoded:
             decoded.load()
             self.assertEqual(decoded.size, size)
             self.assertEqual(decoded.mode, 'RGB' if color else 'L')
+            if sampling is not None:
+                self.assertEqual(JpegImagePlugin.get_sampling(decoded), sampling)
 
     def test_real_rgb_and_gray_cpu_results_decode_and_use_exact_cache(self):
         for color in (True, False):
@@ -326,7 +328,8 @@ class JpegCpuFallbackTests(unittest.TestCase):
             self.lib.fallback_config(1 << 1, 0, 0, 7, 1)
             result, jpeg = self.encode(color=color)
             self.assertEqual(result, 0)
-            self.check_decoded(jpeg, (800, 480), color)
+            # Pillow reports index 1 for 4:2:2. Grayscale has no chroma.
+            self.check_decoded(jpeg, (800, 480), color, sampling=1 if color else None)
             self.assertEqual(self.lib.fallback_value(4), 0)
             self.assertEqual(self.lib.fallback_value(7), 0)
             self.assertEqual(self.lib.fallback_value(1), 1, 'CPU result must not use a second IDF allocation')
@@ -438,17 +441,24 @@ class JpegCpuFallbackTests(unittest.TestCase):
     def test_real_high_entropy_overflow_is_explicit_no_mem(self):
         state = 0x214c94
         data = bytearray()
-        for _ in range(800 * 480 * 2):
+        for _ in range(1280 * 720 * 2):
             state ^= (state << 13) & 0xffffffff
             state ^= state >> 17
             state ^= (state << 5) & 0xffffffff
             data.append(state & 255)
-        for largest in (2 << 20, 655360):
+        # 4:2:2 fits an 800×480 frame of this noise within the codec ceiling.
+        # Use a larger frame for that boundary and keep 800×480 for the
+        # fragmented heap case.
+        for largest, width, height, scratch_size in (
+            (2 << 20, 1280, 720, 1 << 20),
+            (655360, 800, 480, 655296),
+        ):
             with self.subTest(largest=largest):
                 self.lib.fallback_reset()
                 self.lib.fallback_largest(largest)
                 self.lib.fallback_config(1 << 1, 0, 0, 7, 1)
-                self.assertEqual(self.encode(quality=100, data=bytes(data))[0], 6)
+                self.assertEqual(self.encode(width, height, quality=100, data=bytes(data[:width * height * 2]))[0], 6)
+                self.assertEqual(self.lib.fallback_value(9), scratch_size)
                 self.assert_empty()
                 self.assertEqual(self.lib.fallback_value(5), 0)
 
