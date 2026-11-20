@@ -8,6 +8,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 - Release Knowledge MCP 0.3.0 with the archived firmware 2026.11.14 snapshot and advance the explicit latest firmware pointer. Preserve all three historical snapshots and exact-version queries for the already published Plugin 0.2.0.
 - Add opt-in board-specific UVC mode tables and an optional VM callback for negotiated host modes.
+- Add UVC examples for direct camera streaming, a fixed color chart, and app-controlled camera sizing after USB mode negotiation.
 
 ### Changed
 

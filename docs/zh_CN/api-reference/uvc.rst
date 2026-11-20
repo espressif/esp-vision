@@ -41,65 +41,35 @@ UVC 使用一个按需分配的 PSRAM 应用帧缓冲区；当前候选模式的
 
    注册可调用对象。主机每次成功 Commit 后，固件会以与 ``get_mode()`` 相同字段构成的字典通知该对象；如果注册前已有 Commit，也会安排一次最近模式通知。回调延后到 MicroPython VM 任务执行，不会在 USB 回调中执行。若 VM 调度前收到多个 Commit，只通知最新模式。回调异常由 MicroPython 输出，不会改变 USB Commit 结果。传入 ``None`` 解除注册；软复位会清除回调，``uvc.reset()`` 只更改图像来源。
 
-应用可以将处理后的相机图像发布给预览输出：
+示例
+----
 
-.. code-block:: python
+**IDE 与 UVC 预览。** 在 QVGA 相机帧上绘制文字，用 ``img.flush()`` 发布预览。
 
-   import sensor
-   import uvc
+.. literalinclude:: ../../../example/17-UVC/01-preview.py
+   :language: python
+   :lines: 5-
 
-   sensor.reset()
-   sensor.set_pixformat(sensor.RGB565)
-   sensor.set_framesize(sensor.QVGA)
-   # QVGA 与正式发布的 320×240@10 fallback 模式匹配。
-   uvc.bind("preview")
-   try:
-       while True:
-           img = sensor.snapshot()
-           img.draw_rectangle((20, 20, 100, 80), color=(255, 0, 0))
-           img.flush()
-   finally:
-       uvc.reset()
+**直接输出相机画面。** 在主机端选择 320×240。脚本按需启动相机，并在 UVC 忙时短暂重试发送同一张 JPEG。
 
-无需 EV-MUX 预览时，也可直接使用 ``uvc.write(img)``。同一帧不要同时走两条发布路径。USB 回调内不执行 Python 回调或相机抓帧。
+.. literalinclude:: ../../../example/17-UVC/02-camera-write.py
+   :language: python
+   :lines: 5-
 
-监听主机选择的模式：
+**查看模式协商。** 打印主机提交的分辨率和帧间隔。
 
-.. code-block:: python
+.. literalinclude:: ../../../example/17-UVC/03-mode-callback.py
+   :language: python
+   :lines: 5-
 
-   import time
-   import uvc
+**固定色条。** 按协商尺寸生成图像，每次开流发布一张固定图像。也可以换成相机图像。
 
-   def on_mode(mode):
-       print("UVC mode:", mode["width"], mode["height"], mode["interval_us"])
+.. literalinclude:: ../../../example/17-UVC/04-fixed-image.py
+   :language: python
+   :lines: 5-
 
-   uvc.set_mode_callback(on_mode)
-   try:
-       while True:
-           time.sleep_ms(1000)
-   finally:
-       uvc.set_mode_callback(None)
+**由应用调整相机尺寸。** 注册回调记录协商尺寸，由应用循环设置匹配的 QVGA 或 VGA 相机模式。在主机端选择板卡的相机和 UVC 模式表共同支持的尺寸。
 
-正式发布模式的兼容示例：
-
-.. code-block:: python
-
-   import sensor
-   import time
-   import uvc
-
-   sensor.reset()
-   sensor.set_pixformat(sensor.RGB565)
-   sensor.set_framesize(sensor.QVGA)  # 320×240，与 fallback 模式匹配。
-   sensor.skip_frames(time=1000)
-   while not uvc.is_streaming():
-       time.sleep_ms(50)
-
-   frame = sensor.snapshot()
-   while not uvc.set_frame(frame):  # set_frame 需要主机流处于活动状态。
-       time.sleep_ms(20)
-   try:
-       while uvc.is_streaming():
-           time.sleep_ms(100)
-   finally:
-       uvc.reset()
+.. literalinclude:: ../../../example/17-UVC/05-mode-aware-camera.py
+   :language: python
+   :lines: 5-

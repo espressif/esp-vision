@@ -41,65 +41,35 @@ Boards with candidate tables require both ``MICROPY_HW_USB_UVC_ENABLE_TARGET_MOD
 
    Register a callable to receive a dictionary with the same fields as ``get_mode()`` after each successful host Commit. If a Commit already occurred, registration schedules the latest committed mode once. The callback is deferred to the MicroPython VM task; it never runs inside the USB callback. If several Commit events arrive before the VM dispatches them, only the newest mode is delivered. Callback exceptions are reported by MicroPython and do not change the USB Commit result. Pass ``None`` to unregister. Soft reset clears the callback; ``uvc.reset()`` only changes the frame source.
 
-An application can publish processed camera images to preview:
+Examples
+--------
 
-.. code-block:: python
+**IDE and UVC preview.** Draw on each QVGA camera frame and publish it via ``img.flush()``.
 
-   import sensor
-   import uvc
+.. literalinclude:: ../../../example/17-UVC/01-preview.py
+   :language: python
+   :lines: 5-
 
-   sensor.reset()
-   sensor.set_pixformat(sensor.RGB565)
-   sensor.set_framesize(sensor.QVGA)
-   # QVGA matches the released 320x240@10 fallback profile.
-   uvc.bind("preview")
-   try:
-       while True:
-           img = sensor.snapshot()
-           img.draw_rectangle((20, 20, 100, 80), color=(255, 0, 0))
-           img.flush()
-   finally:
-       uvc.reset()
+**Direct camera output.** Select 320×240 in the host app. The script opens the camera on demand and retries each encoded JPEG briefly while UVC is busy.
 
-Direct ``uvc.write(img)`` is also available when EV-MUX preview is unnecessary. Do not call both publishing paths for the same frame. No Python callback or camera capture executes inside USB callbacks.
+.. literalinclude:: ../../../example/17-UVC/02-camera-write.py
+   :language: python
+   :lines: 5-
 
-Register a notification for host-selected mode changes:
+**Watch mode negotiation.** Print the dimensions and frame interval committed by the host.
 
-.. code-block:: python
+.. literalinclude:: ../../../example/17-UVC/03-mode-callback.py
+   :language: python
+   :lines: 5-
 
-   import time
-   import uvc
+**Fixed color chart.** Generate a picture at the negotiated size and publish one fixed image per stream with ``uvc.set_frame()``. A camera image can be used in its place.
 
-   def on_mode(mode):
-       print("UVC mode:", mode["width"], mode["height"], mode["interval_us"])
+.. literalinclude:: ../../../example/17-UVC/04-fixed-image.py
+   :language: python
+   :lines: 5-
 
-   uvc.set_mode_callback(on_mode)
-   try:
-       while True:
-           time.sleep_ms(1000)
-   finally:
-       uvc.set_mode_callback(None)
+**App-controlled camera size.** The registered callback records the negotiated dimensions and the application loop configures a matching QVGA or VGA camera mode. Select a size supported by your board’s camera and UVC table.
 
-Compatibility example for the released 320×240@10 profile:
-
-.. code-block:: python
-
-   import sensor
-   import time
-   import uvc
-
-   sensor.reset()
-   sensor.set_pixformat(sensor.RGB565)
-   sensor.set_framesize(sensor.QVGA)  # 320×240, matching the fallback mode.
-   sensor.skip_frames(time=1000)
-   while not uvc.is_streaming():
-       time.sleep_ms(50)
-
-   frame = sensor.snapshot()
-   while not uvc.set_frame(frame):  # set_frame requires an active host stream.
-       time.sleep_ms(20)
-   try:
-       while uvc.is_streaming():
-           time.sleep_ms(100)
-   finally:
-       uvc.reset()
+.. literalinclude:: ../../../example/17-UVC/05-mode-aware-camera.py
+   :language: python
+   :lines: 5-
