@@ -86,7 +86,7 @@ esp_err_t esp_vision_preview_flush(const image_t *img)
     size_t jpeg_size = 0;
     esp_err_t ret;
 
-    bool uvc_ready = esp_vision_uvc_preview_ready(img);
+    uint32_t uvc_epoch = esp_vision_uvc_preview_epoch();
     bool mux_ready = esp_vision_preview_is_ready();
     bool observers_ready = ev_mux_preview_observers_ready();
     const char *route = ev_channel_get(EV_STREAM_USER);
@@ -102,7 +102,7 @@ esp_err_t esp_vision_preview_flush(const image_t *img)
         ev_mux_record_tx_drop();
         mux_ready = false;
     }
-    if (!mux_ready && !uvc_ready && !observers_ready) {
+    if (!mux_ready && uvc_epoch == 0 && !observers_ready) {
         return ESP_OK;
     }
 
@@ -113,15 +113,14 @@ esp_err_t esp_vision_preview_flush(const image_t *img)
                         TAG,
                         "failed to encode jpeg");
 
-    if (uvc_ready) {
+    ret = (mux_ready || observers_ready) ?
+          esp_vision_preview_write_frame(img, jpeg_buf, jpeg_size, mux_ready, observers_ready) : ESP_OK;
+    if (uvc_epoch != 0) {
         bool accepted;
-        // A slow or unavailable UVC subscriber must not affect EV-MUX.
-        (void)esp_vision_uvc_publish(jpeg_buf, jpeg_size, false, &accepted);
+        // EV-MUX already owns its copy. Wait only for the explicitly bound
+        // UVC output to release its own frame before publishing this JPEG.
+        (void)esp_vision_uvc_publish(uvc_epoch, jpeg_buf, jpeg_size, &accepted);
     }
-    if (!mux_ready && !observers_ready) {
-        return ESP_OK;
-    }
-    ret = esp_vision_preview_write_frame(img, jpeg_buf, jpeg_size, mux_ready, observers_ready);
     if ((ret == ESP_ERR_INVALID_STATE) || (ret == ESP_ERR_TIMEOUT) ||
             (ret == ESP_ERR_INVALID_SIZE) || (ret == ESP_ERR_NO_MEM)) {
         return ESP_OK;

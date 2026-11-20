@@ -84,6 +84,7 @@
 #include "preview.h"
 #include "lcd_touch.h"
 #include "uvc.h"
+#include "py_uvc.h"
 #include "storage.h"
 #include "usb_auto_download.h"
 
@@ -293,6 +294,7 @@ soft_reset_exit:
     ev_stdio_vm_reset_begin();
     esp_vision_lcd_touch_deinit();
     esp_vision_display_deinit();
+    py_uvc_soft_reset();
     esp_vision_uvc_reset();
     esp_vision_preview_deinit();
     esp_vision_camera_release_snapshot_buffer();

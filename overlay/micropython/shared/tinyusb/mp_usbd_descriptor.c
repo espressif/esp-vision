@@ -32,6 +32,100 @@
 #include "tusb.h"
 #include "mp_usbd.h"
 
+// TinyUSB's discrete-frame macro appends variadic interval expressions without
+// expanding them into four little-endian bytes. Passing a uint32_t interval
+// there therefore initializes one byte and overflows under -Werror. Emit the
+// frame descriptor fields here and explicitly expand every interval instead.
+#define MP_USBD_UVC_FRAME_DESC_HEADER(index, width, height, max_frame_size, default_interval, interval_count, slowest_interval, fastest_interval) \
+    (TUD_VIDEO_DESC_CS_VS_FRM_MJPEG_DISC_LEN + 4 * (interval_count)), \
+    TUSB_DESC_CS_INTERFACE, VIDEO_CS_ITF_VS_FRAME_MJPEG, \
+    (index), 0, U16_TO_U8S_LE(width), U16_TO_U8S_LE(height), \
+    U32_TO_U8S_LE((uint32_t)((uint64_t)8192 * 10000000 / (slowest_interval))), \
+    U32_TO_U8S_LE((uint32_t)((uint64_t)(max_frame_size) * 8 * 10000000 / (fastest_interval))), \
+    U32_TO_U8S_LE(max_frame_size), U32_TO_U8S_LE(default_interval), (interval_count)
+
+#define MP_USBD_UVC_FRAME_DESC_1(index, width, height, max_frame_size, interval0, interval1, interval2) \
+    MP_USBD_UVC_FRAME_DESC_HEADER(index, width, height, max_frame_size, interval0, 1, interval0, interval0), \
+    U32_TO_U8S_LE(interval0)
+// TinyUSB GET_MIN/GET_MAX uses the first and last discrete intervals as the
+// fastest and slowest values. Lists stay ascending and default to the last one.
+#define MP_USBD_UVC_FRAME_DESC_2(index, width, height, max_frame_size, interval0, interval1, interval2) \
+    MP_USBD_UVC_FRAME_DESC_HEADER(index, width, height, max_frame_size, interval1, 2, interval1, interval0), \
+    U32_TO_U8S_LE(interval0), U32_TO_U8S_LE(interval1)
+#define MP_USBD_UVC_FRAME_DESC_3(index, width, height, max_frame_size, interval0, interval1, interval2) \
+    MP_USBD_UVC_FRAME_DESC_HEADER(index, width, height, max_frame_size, interval2, 3, interval2, interval0), \
+    U32_TO_U8S_LE(interval0), U32_TO_U8S_LE(interval1), U32_TO_U8S_LE(interval2)
+#define MP_USBD_UVC_FRAME_DESC_SELECT(count) MP_USBD_UVC_FRAME_DESC_##count
+#define MP_USBD_UVC_FRAME_DESC_SELECT_EXPAND(count) MP_USBD_UVC_FRAME_DESC_SELECT(count)
+#define MP_USBD_UVC_FRAME_DESC(index, width, height, max_frame_size, interval_count, interval0, interval1, interval2) \
+    MP_USBD_UVC_FRAME_DESC_SELECT_EXPAND(interval_count)(index, width, height, max_frame_size, interval0, interval1, interval2),
+
+#define MP_USBD_UVC_MODE_ENTRY(_index, _width, _height, _max_frame_size, _interval_count, _interval0, _interval1, _interval2) \
+    { .frame_index = (_index), .width = (_width), .height = (_height), \
+      .max_frame_size = (_max_frame_size), .interval_count = (_interval_count), \
+      .intervals_100ns = { (_interval0), (_interval1), (_interval2) } },
+
+typedef struct {
+    uint8_t frame_index;
+    uint16_t width;
+    uint16_t height;
+    uint32_t max_frame_size;
+    uint8_t interval_count;
+    uint32_t intervals_100ns[3];
+} mp_usbd_uvc_frame_t;
+
+#if CFG_TUD_VIDEO
+static const mp_usbd_uvc_frame_t mp_usbd_uvc_frames[] = {
+    MP_USBD_UVC_MODE_LIST(MP_USBD_UVC_MODE_ENTRY)
+};
+
+bool mp_usbd_uvc_default_mode(mp_usbd_uvc_mode_t *mode_out) {
+    const mp_usbd_uvc_frame_t *first = &mp_usbd_uvc_frames[0];
+    return mp_usbd_uvc_mode_get(first->frame_index,
+        first->intervals_100ns[first->interval_count - 1], mode_out);
+}
+
+bool mp_usbd_uvc_mode_get(uint8_t frame_index, uint32_t interval_100ns,
+                          mp_usbd_uvc_mode_t *mode_out) {
+    if (mode_out == NULL) {
+        return false;
+    }
+    for (size_t i = 0; i < MP_USBD_UVC_COUNT; ++i) {
+        const mp_usbd_uvc_frame_t *frame = &mp_usbd_uvc_frames[i];
+        if (frame->frame_index != frame_index) {
+            continue;
+        }
+        for (uint8_t j = 0; j < frame->interval_count; ++j) {
+            if (frame->intervals_100ns[j] == interval_100ns) {
+                *mode_out = (mp_usbd_uvc_mode_t) {
+                    .width = frame->width,
+                    .height = frame->height,
+                    .interval_100ns = interval_100ns,
+                    .max_frame_size = frame->max_frame_size,
+                };
+                return true;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
+#else
+bool mp_usbd_uvc_default_mode(mp_usbd_uvc_mode_t *mode_out) {
+    (void)mode_out;
+    return false;
+}
+
+bool mp_usbd_uvc_mode_get(uint8_t frame_index, uint32_t interval_100ns,
+                          mp_usbd_uvc_mode_t *mode_out) {
+    (void)frame_index;
+    (void)interval_100ns;
+    (void)mode_out;
+    return false;
+}
+#endif
+
 #define USBD_CDC_CMD_MAX_SIZE (8)
 #define USBD_CDC_IN_OUT_MAX_SIZE ((CFG_TUD_MAX_SPEED == OPT_MODE_HIGH_SPEED) ? 512 : 64)
 #define USBD_MSC_IN_OUT_MAX_SIZE ((CFG_TUD_MAX_SPEED == OPT_MODE_HIGH_SPEED) ? 512 : 64)
@@ -77,13 +171,11 @@ const uint8_t mp_usbd_builtin_desc_cfg[MP_USBD_BUILTIN_DESC_CFG_LEN] = {
     TUD_VIDEO_DESC_OUTPUT_TERM(2, VIDEO_TT_STREAMING, 0, 1, 0),
     TUD_VIDEO_DESC_STD_VS(USBD_ITF_UVC + 1, 0, 0, USBD_STR_UVC),
     TUD_VIDEO_DESC_CS_VS_INPUT(1,
-        TUD_VIDEO_DESC_CS_VS_FMT_MJPEG_LEN + TUD_VIDEO_DESC_CS_VS_FRM_MJPEG_CONT_LEN +
+        TUD_VIDEO_DESC_CS_VS_FMT_MJPEG_LEN + MP_USBD_UVC_DESC_FRAME_BYTES +
         TUD_VIDEO_DESC_CS_VS_COLOR_MATCHING_LEN,
         USBD_UVC_EP_IN, 0, 2, 0, 0, 0, 0),
-    TUD_VIDEO_DESC_CS_VS_FMT_MJPEG(1, 1, 0, 1, 0, 0, 0, 0),
-    TUD_VIDEO_DESC_CS_VS_FRM_MJPEG_CONT(1, 0, 320, 240,
-        8 * 1024 * 10, 48 * 1024 * 8 * 10, 48 * 1024,
-        1000000, 1000000, 1000000, 1000000),
+    TUD_VIDEO_DESC_CS_VS_FMT_MJPEG(1, MP_USBD_UVC_COUNT, 0, 1, 0, 0, 0, 0),
+    MP_USBD_UVC_MODE_LIST(MP_USBD_UVC_FRAME_DESC)
     TUD_VIDEO_DESC_CS_VS_COLOR_MATCHING(VIDEO_COLOR_PRIMARIES_BT709,
         VIDEO_COLOR_XFER_CH_BT709, VIDEO_COLOR_COEF_SMPTE170M),
     TUD_VIDEO_DESC_STD_VS(USBD_ITF_UVC + 1, 1, 1, USBD_STR_UVC),

@@ -224,6 +224,7 @@ target_sources(usermod_esp_vision_platform INTERFACE
     ${ESP_VISION_ROOT}/platform/lcd_touch.c
     ${ESP_VISION_ROOT}/platform/storage_writer_msc.c
     ${ESP_VISION_ROOT}/platform/uvc.c
+    ${ESP_VISION_ROOT}/platform/uvc_logo.c
     ${ESP_VISION_ROOT}/platform/usb_msc.c
     ${ESP_VISION_BOARD_SOURCES}
 )

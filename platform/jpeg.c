@@ -359,6 +359,7 @@ exit:
 #include "driver/jpeg_encode.h"
 #include "esp_cache.h"
 #include "esp_log.h"
+#include "esp_private/esp_cache_private.h"
 
 #define ESP_VISION_JPEG_TIMEOUT_MS (200)
 
@@ -414,6 +415,15 @@ static esp_err_t esp_vision_jpeg_ensure_encoder(void)
 {
     if (s_jpeg.encoder != NULL) {
         return ESP_OK;
+    }
+
+    // The IDF driver needs cache-line-aligned DMA links from the default
+    // internal heap. The reserved DMA heap alone cannot satisfy that request.
+    size_t cache_line_size = 0;
+    const uint32_t dma_caps = MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL | MALLOC_CAP_DEFAULT;
+    if (esp_cache_get_alignment(MALLOC_CAP_SPIRAM, &cache_line_size) == ESP_OK &&
+            heap_caps_get_largest_free_block(dma_caps) < cache_line_size) {
+        return ESP_ERR_NO_MEM;
     }
 
     jpeg_encode_engine_cfg_t encoder_config = {
@@ -545,7 +555,8 @@ static esp_err_t esp_vision_jpeg_encode_cpu(const image_t *img, int quality,
         .size = capacity,
         .data = scratch,
     };
-    bool overflow = jpeg_compress(&source, &encoded, quality, false, JPEG_SUBSAMPLING_AUTO);
+    // Keep the hardware path's color sampling if low memory selects software.
+    bool overflow = jpeg_compress(&source, &encoded, quality, false, JPEG_SUBSAMPLING_422);
     esp_err_t ret = ESP_OK;
     const char *stage = "done";
     if (overflow) {

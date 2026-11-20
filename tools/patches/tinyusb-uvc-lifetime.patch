@@ -1,0 +1,982 @@
+--- a/src/class/video/video_device.c
++++ b/src/class/video/video_device.c
+@@ -31,6 +31,7 @@
+
+ #include "device/usbd.h"
+ #include "device/usbd_pvt.h"
++#include "device/dcd.h"
+
+ #include "video_device.h"
+
+@@ -114,6 +115,14 @@
+   uint32_t max_payload_transfer_size;
+   uint8_t  error_code;/* error code */
+   uint8_t  state;    /* 0:probing 1:committed 2:streaming */
++  uint8_t  stream_open;
++  uint8_t  cancel_pending;
++  uint8_t  pending_alt;
++  uint8_t  frame_tagged;
++  uint16_t queued_size;
++  bool failed;
++  uint32_t frame_generation;
++  uint32_t frame_transfer_id;
+
+   video_probe_and_commit_control_t probe_commit_payload; /* Probe and Commit control */
+ } videod_streaming_interface_t;
+@@ -200,6 +209,20 @@
+   (void) stm_idx;
+ }
+
++TU_ATTR_WEAK void tud_video_frame_xfer_complete_tagged_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx,
++                                                           uint32_t generation, uint32_t transfer_id) {
++  (void) ctl_idx; (void) stm_idx; (void) generation; (void) transfer_id;
++}
++
++TU_ATTR_WEAK void tud_video_frame_xfer_cancelled_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx,
++                                                     uint32_t generation, uint32_t transfer_id) {
++  (void) ctl_idx; (void) stm_idx; (void) generation; (void) transfer_id;
++}
++
++TU_ATTR_WEAK void tud_video_stream_closed_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx, bool bus_reset) {
++  (void) ctl_idx; (void) stm_idx; (void) bus_reset;
++}
++
+ TU_ATTR_WEAK int tud_video_power_mode_cb(uint_fast8_t ctl_idx, uint8_t power_mod) {
+   (void) ctl_idx;
+   (void) power_mod;
+@@ -785,7 +808,7 @@
+  *
+  * @param[in,out] stm      Streaming interface context.
+  * @param[in]     altnum   The target alternate setting number. */
+-static bool _open_vs_itf(uint8_t rhport, videod_streaming_interface_t *stm, uint_fast8_t altnum)
++static bool _open_vs_itf_now(uint8_t rhport, videod_streaming_interface_t *stm, uint_fast8_t altnum)
+ {
+   uint_fast8_t i;
+   TU_LOG_DRV("    reopen VS %d\r\n", altnum);
+@@ -803,6 +826,13 @@
+       usbd_edpt_close(rhport, ep->bEndpointAddress);
+       TU_LOG_DRV("    close EP%02x\r\n", ep->bEndpointAddress);
+     }
++  }
++#else
++  // DWC2 ISO endpoint allocations persist across alternate settings, but the
++  // class must forget the old descriptor mapping before opening the new one.
++  for (i = 0; i < TU_ARRAY_SIZE(stm->desc.ep); ++i) {
++    if (!stm->desc.ep[i]) break;
++    stm->desc.ep[i] = 0;
+   }
+ #endif
+
+@@ -846,21 +876,122 @@
+   }
+   if (altnum) {
+     stm->state = VS_STATE_STREAMING;
+-  }
++  } else if (stm->state == VS_STATE_STREAMING) {
++    stm->state = VS_STATE_COMMITTED;
++  }
++  stm->stream_open = altnum != 0;
+   TU_LOG_DRV("    done\r\n");
+   return true;
+ }
+
++static void _stream_closed(videod_streaming_interface_t *stm, bool bus_reset) {
++  if (stm->stream_open) {
++    stm->stream_open = 0;
++    tud_video_stream_closed_cb(stm->index_vc, stm->index_vs, bus_reset);
++  }
++}
++
++static void _stream_invalidated(videod_streaming_interface_t *stm, bool bus_reset) {
++  if (stm->stream_open || stm->state != VS_STATE_PROBING) {
++    stm->stream_open = 0;
++    tud_video_stream_closed_cb(stm->index_vc, stm->index_vs, bus_reset);
++  }
++}
++
++TU_ATTR_WEAK void tud_video_frame_xfer_failed_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx);
++
++static void _retire_frame(videod_streaming_interface_t *stm, bool cancelled) {
++  if (!stm->buffer) return;
++
++  uint8_t const tagged = stm->frame_tagged;
++  uint32_t const generation = stm->frame_generation;
++  uint32_t const transfer_id = stm->frame_transfer_id;
++  stm->buffer = NULL;
++  stm->bufsize = 0;
++  stm->offset = 0;
++  stm->frame_tagged = 0;
++  stm->frame_generation = 0;
++  stm->frame_transfer_id = 0;
++  stm->queued_size = 0;
++  stm->failed = false;
++
++  if (cancelled) {
++    if (tagged) {
++      tud_video_frame_xfer_cancelled_cb(stm->index_vc, stm->index_vs, generation, transfer_id);
++    } else if (tud_video_frame_xfer_failed_cb) {
++      tud_video_frame_xfer_failed_cb(stm->index_vc, stm->index_vs);
++    }
++  }
++}
++
++static void esp_vision_video_retire(videod_streaming_interface_t *stm, bool failed) {
++  uint8_t const tagged = stm->frame_tagged;
++  uint32_t const generation = stm->frame_generation;
++  uint32_t const transfer_id = stm->frame_transfer_id;
++  _retire_frame(stm, failed);
++  if (failed) return;
++  if (tagged) {
++    tud_video_frame_xfer_complete_tagged_cb(stm->index_vc, stm->index_vs, generation, transfer_id);
++  } else {
++    tud_video_frame_xfer_complete_cb(stm->index_vc, stm->index_vs);
++  }
++}
++
++static void _vs_quiesce_complete(uint8_t rhport, uint8_t ep_addr, void *user_data) {
++  (void)ep_addr;
++  videod_streaming_interface_t *stm = (videod_streaming_interface_t *)user_data;
++  if (!stm || !stm->cancel_pending) return;
++
++  uint8_t const pending_alt = stm->pending_alt;
++  _retire_frame(stm, true);
++  stm->cancel_pending = 0;
++  stm->pending_alt = 0;
++  stm->stream_open = 0;
++
++  // The DCD marker is ordered after all older endpoint events. The source
++  // pointer is now clear, so reopening cannot expose the old frame to a late
++  // completion.
++  (void)_open_vs_itf_now(rhport, stm, pending_alt);
++}
++
++static bool _request_vs_itf(uint8_t rhport, videod_streaming_interface_t *stm, uint_fast8_t altnum) {
++  uint8_t const *desc = _videod_itf[stm->index_vc].beg;
++  uint8_t const *beg = desc + stm->desc.beg;
++  uint8_t const *end = desc + stm->desc.end;
++  TU_VERIFY(_find_desc_itf(beg, end, _desc_itfnum(beg), altnum) < end, false);
++
++  if (stm->cancel_pending) {
++    stm->pending_alt = (uint8_t)altnum;
++    return true;
++  }
++
++  if (stm->buffer) {
++    uint_fast16_t const ep_ofs = stm->desc.ep[0];
++    TU_VERIFY(ep_ofs, false);
++    uint8_t const ep_addr = _desc_ep_addr(desc + ep_ofs);
++    if (!dcd_edpt_quiesce_async(rhport, ep_addr, _vs_quiesce_complete, stm)) {
++      return false;
++    }
++    stm->pending_alt = (uint8_t)altnum;
++    stm->cancel_pending = 1;
++    _stream_closed(stm, false);
++    return true;
++  }
++
++  _stream_closed(stm, false);
++  return _open_vs_itf_now(rhport, stm, altnum);
++}
++
+ /** Prepare the next packet payload. */
+ static uint_fast16_t _prepare_in_payload(videod_streaming_interface_t *stm, uint8_t* ep_buf) {
+-  uint_fast16_t remaining = stm->bufsize - stm->offset;
+-  uint_fast16_t hdr_len   = ep_buf[0];
+-  uint_fast16_t pkt_len   = stm->max_payload_transfer_size;
++  uint32_t remaining = stm->bufsize - stm->offset;
++  uint32_t hdr_len   = ep_buf[0];
++  uint32_t pkt_len   = stm->max_payload_transfer_size;
+   if (hdr_len + remaining < pkt_len) {
+     pkt_len = hdr_len + remaining;
+   }
+   TU_ASSERT(pkt_len >= hdr_len);
+-  uint_fast16_t data_len = pkt_len - hdr_len;
++  uint32_t data_len = pkt_len - hdr_len;
+   memcpy(&ep_buf[hdr_len], stm->buffer + stm->offset, data_len);
+   stm->offset += data_len;
+   remaining -= data_len;
+@@ -868,7 +999,8 @@
+     tusb_video_payload_header_t *hdr = (tusb_video_payload_header_t*) ep_buf;
+     hdr->EndOfFrame = 1;
+   }
+-  return hdr_len + data_len;
++  stm->queued_size = (uint16_t)(hdr_len + data_len);
++  return stm->queued_size;
+ }
+
+ /** Handle a standard request to the video control interface. */
+@@ -1021,7 +1153,7 @@
+
+     case TUSB_REQ_SET_INTERFACE:
+       if (stage == CONTROL_STAGE_SETUP) {
+-        TU_VERIFY(_open_vs_itf(rhport, self, request->wValue), VIDEO_ERROR_UNKNOWN);
++        TU_VERIFY(_request_vs_itf(rhport, self, request->wValue), VIDEO_ERROR_UNKNOWN);
+         tud_control_status(rhport, request);
+       }
+       return VIDEO_ERROR_NONE;
+@@ -1125,19 +1257,36 @@
+           } else if (stage == CONTROL_STAGE_DATA) {
+             video_probe_and_commit_control_t *param = &stm->probe_commit_payload;
+             TU_VERIFY(_update_streaming_parameters(stm, param), VIDEO_ERROR_INVALID_VALUE_WITHIN_RANGE);
+-            /* Set the negotiated value */
++
++            // COMMIT invalidates the active stream. Keep any source pointer
++            // until the same DCD barrier used by SET_INTERFACE has drained.
++            bool const stream_was_open = stm->stream_open;
++            if (stm->buffer && !stm->cancel_pending) {
++              uint8_t const *desc = _videod_itf[stm->index_vc].beg;
++              uint_fast16_t const ep_ofs = stm->desc.ep[0];
++              TU_VERIFY(ep_ofs, VIDEO_ERROR_UNKNOWN);
++              uint8_t const ep_addr = _desc_ep_addr(desc + ep_ofs);
++              TU_VERIFY(dcd_edpt_quiesce_async(rhport, ep_addr, _vs_quiesce_complete, stm), VIDEO_ERROR_UNKNOWN);
++              stm->pending_alt = 0;
++              stm->cancel_pending = 1;
++              _stream_closed(stm, false);
++            } else if (stm->cancel_pending) {
++              stm->pending_alt = 0;
++            }
++
++            int ret = tud_video_commit_cb(stm->index_vc, stm->index_vs, param);
++            if (VIDEO_ERROR_NONE != ret) return ret;
++
++            if (stream_was_open && !stm->cancel_pending) {
++              _stream_closed(stm, false);
++              (void)_open_vs_itf_now(rhport, stm, 0);
++            }
+             stm->max_payload_transfer_size = param->dwMaxPayloadTransferSize;
+-            int ret = tud_video_commit_cb(stm->index_vc, stm->index_vs, param);
+-            if (VIDEO_ERROR_NONE == ret) {
+-              stm->state   = VS_STATE_COMMITTED;
+-              stm->buffer  = NULL;
+-              stm->bufsize = 0;
+-              stm->offset  = 0;
+-              /* initialize payload header */
+-              tusb_video_payload_header_t *hdr = (tusb_video_payload_header_t*)stm_epbuf->buf;
+-              hdr->bHeaderLength = sizeof(*hdr);
+-              hdr->bmHeaderInfo  = 0;
+-            }
++            stm->state = VS_STATE_COMMITTED;
++            /* initialize payload header */
++            tusb_video_payload_header_t *hdr = (tusb_video_payload_header_t*)stm_epbuf->buf;
++            hdr->bHeaderLength = sizeof(*hdr);
++            hdr->bmHeaderInfo  = 0;
+           }
+           return VIDEO_ERROR_NONE;
+
+@@ -1217,7 +1366,7 @@
+   TU_ASSERT(ctl_idx < CFG_TUD_VIDEO);
+   TU_ASSERT(stm_idx < CFG_TUD_VIDEO_STREAMING);
+   videod_streaming_interface_t *stm = _get_instance_streaming(ctl_idx, stm_idx);
+-  if (!stm || !stm->desc.ep[0]) return false;
++  if (!stm || !stm->desc.ep[0] || !stm->stream_open || stm->cancel_pending) return false;
+   if (stm->state == VS_STATE_PROBING) return false;
+
+ #ifdef TUP_DCD_EDPT_ISO_ALLOC
+@@ -1232,15 +1381,18 @@
+   return true;
+ }
+
+-bool tud_video_n_frame_xfer(uint_fast8_t ctl_idx, uint_fast8_t stm_idx, void *buffer, size_t bufsize) {
++static bool _video_n_frame_xfer(uint_fast8_t ctl_idx, uint_fast8_t stm_idx, void *buffer, size_t bufsize,
++                                bool tagged, uint32_t generation, uint32_t transfer_id) {
+   TU_ASSERT(ctl_idx < CFG_TUD_VIDEO);
+   TU_ASSERT(stm_idx < CFG_TUD_VIDEO_STREAMING);
+
+   if (!buffer || !bufsize) return false;
+   videod_streaming_interface_t *stm = _get_instance_streaming(ctl_idx, stm_idx);
+-  videod_streaming_epbuf_t *stm_epbuf = &_videod_streaming_epbuf[ctl_idx];
+-
+-  if (!stm || !stm->desc.ep[0] || stm->buffer) return false;
++  if (!stm) return false;
++  uint_fast8_t const streaming_index = (uint_fast8_t)(stm - _videod_streaming_itf);
++  videod_streaming_epbuf_t *stm_epbuf = &_videod_streaming_epbuf[streaming_index];
++
++  if (!stm->desc.ep[0] || !stm->stream_open || stm->cancel_pending || stm->buffer) return false;
+   if (stm->state == VS_STATE_PROBING) return false;
+
+   /* Find EP address */
+@@ -1259,12 +1411,29 @@
+   tusb_video_payload_header_t *hdr = (tusb_video_payload_header_t*)stm_epbuf->buf;
+   hdr->FrameID   ^= 1;
+   hdr->EndOfFrame = 0;
++  hdr->Error = 0;
+   /* update the packet data */
+   stm->buffer     = (uint8_t*)buffer;
+   stm->bufsize    = bufsize;
++  stm->frame_tagged = tagged;
++  stm->frame_generation = generation;
++  stm->frame_transfer_id = transfer_id;
+   uint_fast16_t pkt_len = _prepare_in_payload(stm, stm_epbuf->buf);
+-  TU_ASSERT( usbd_edpt_xfer(0, ep_addr, stm_epbuf->buf, (uint16_t) pkt_len), 0);
++  if (!usbd_edpt_xfer(0, ep_addr, stm_epbuf->buf, (uint16_t)pkt_len)) {
++    hdr->FrameID ^= 1;
++    _retire_frame(stm, false);
++    return false;
++  }
+   return true;
++}
++
++bool tud_video_n_frame_xfer(uint_fast8_t ctl_idx, uint_fast8_t stm_idx, void *buffer, size_t bufsize) {
++  return _video_n_frame_xfer(ctl_idx, stm_idx, buffer, bufsize, false, 0, 0);
++}
++
++bool tud_video_n_frame_xfer_tagged(uint_fast8_t ctl_idx, uint_fast8_t stm_idx, void *buffer, size_t bufsize,
++                                   uint32_t generation, uint32_t transfer_id) {
++  return _video_n_frame_xfer(ctl_idx, stm_idx, buffer, bufsize, true, generation, transfer_id);
+ }
+
+ //--------------------------------------------------------------------+
+@@ -1282,11 +1451,25 @@
+ }
+
+ bool videod_deinit(void) {
++  for (uint_fast8_t i = 0; i < CFG_TUD_VIDEO_STREAMING; ++i) {
++    videod_streaming_interface_t *stm = &_videod_streaming_itf[i];
++    _stream_invalidated(stm, true);
++    _retire_frame(stm, true);
++    stm->cancel_pending = 0;
++    stm->pending_alt = 0;
++  }
+   return true;
+ }
+
+ void videod_reset(uint8_t rhport) {
+   (void) rhport;
++  for (uint_fast8_t i = 0; i < CFG_TUD_VIDEO_STREAMING; ++i) {
++    videod_streaming_interface_t *stm = &_videod_streaming_itf[i];
++    _stream_invalidated(stm, true);
++    _retire_frame(stm, true);
++    stm->cancel_pending = 0;
++    stm->pending_alt = 0;
++  }
+   for (uint_fast8_t i = 0; i < CFG_TUD_VIDEO; ++i) {
+     videod_interface_t* ctl = &_videod_itf[i];
+     tu_memclr(ctl, sizeof(*ctl));
+@@ -1363,7 +1546,7 @@
+       uint8_t const *sbeg = (uint8_t const*)itf_desc + stm->desc.beg;
+       uint8_t const *send = (uint8_t const*)itf_desc + stm->desc.end;
+       if (send == _find_desc_itf(sbeg, send, _desc_itfnum(sbeg), 1)) {
+-        TU_VERIFY(_open_vs_itf(rhport, stm, 0), 0);
++        TU_VERIFY(_open_vs_itf_now(rhport, stm, 0), 0);
+       }
+     }
+   }
+@@ -1412,36 +1595,6 @@
+   return false;
+ }
+
+-bool videod_xfer_cb(uint8_t rhport, uint8_t ep_addr, xfer_result_t result, uint32_t xferred_bytes) {
+-  (void)result; (void)xferred_bytes;
+-
+-  /* find streaming handle */
+-  uint_fast8_t itf;
+-  videod_interface_t *ctl;
+-  videod_streaming_interface_t *stm;
+-  for (itf = 0; itf < CFG_TUD_VIDEO_STREAMING; ++itf) {
+-    stm = &_videod_streaming_itf[itf];
+-    uint_fast16_t const ep_ofs = stm->desc.ep[0];
+-    if (!ep_ofs) continue;
+-    ctl = &_videod_itf[stm->index_vc];
+-    uint8_t const *desc = ctl->beg;
+-    if (ep_addr == _desc_ep_addr(desc + ep_ofs)) break;
+-  }
+-  TU_ASSERT(itf < CFG_TUD_VIDEO_STREAMING);
+-  videod_streaming_epbuf_t *stm_epbuf = &_videod_streaming_epbuf[itf];
+-
+-  if (stm->offset < stm->bufsize) {
+-    /* Claim the endpoint */
+-    TU_VERIFY( usbd_edpt_claim(rhport, ep_addr), 0);
+-    uint_fast16_t pkt_len = _prepare_in_payload(stm, stm_epbuf->buf);
+-    TU_ASSERT( usbd_edpt_xfer(rhport, ep_addr, stm_epbuf->buf, (uint16_t) pkt_len), 0);
+-  } else {
+-    stm->buffer  = NULL;
+-    stm->bufsize = 0;
+-    stm->offset  = 0;
+-    tud_video_frame_xfer_complete_cb(stm->index_vc, stm->index_vs);
+-  }
+-  return true;
+-}
++#include "esp_vision_video_transfer.inc"
+
+ #endif
+--- a/src/class/video/video_device.h
++++ b/src/class/video/video_device.h
+@@ -56,12 +56,26 @@
+  * @param[in] bufsize    Byte size of the frame buffer */
+ bool tud_video_n_frame_xfer(uint_fast8_t ctl_idx, uint_fast8_t stm_idx, void *buffer, size_t bufsize);
+
++/** Transfer a frame with caller-owned lifetime tags. The DCD and video class
++ * retain buffer until exactly one tagged completion or cancellation callback.
++ */
++bool tud_video_n_frame_xfer_tagged(uint_fast8_t ctl_idx, uint_fast8_t stm_idx, void *buffer, size_t bufsize,
++                                   uint32_t generation, uint32_t transfer_id);
++
+ /*------------- Optional callbacks -------------*/
+ /** Invoked when compeletion of a frame transfer
+  *
+  * @param[in] ctl_idx    Destination control interface index
+  * @param[in] stm_idx    Destination streaming interface index */
+ void tud_video_frame_xfer_complete_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx);
++void tud_video_frame_xfer_complete_tagged_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx,
++                                              uint32_t generation, uint32_t transfer_id);
++void tud_video_frame_xfer_cancelled_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx,
++                                       uint32_t generation, uint32_t transfer_id);
++/** Invoked when a streaming session is invalidated. bus_reset is true for
++ * USB/class reset or full TinyUSB deinit and false for ordinary alt changes.
++ */
++void tud_video_stream_closed_cb(uint_fast8_t ctl_idx, uint_fast8_t stm_idx, bool bus_reset);
+
+ //--------------------------------------------------------------------+
+ // Application Callback API (weak is optional)
+--- a/src/device/dcd.h
++++ b/src/device/dcd.h
+@@ -49,6 +49,7 @@
+   DCD_EVENT_SETUP_RECEIVED, // 6
+   DCD_EVENT_XFER_COMPLETE,  // 7
+   USBD_EVENT_FUNC_CALL,     // 8 Not an DCD event, just a convenient way to defer ISR function
++  USBD_EVENT_ENDPOINT_QUIESCED, // 9 Internal DCD event: endpoint source can be retired
+   DCD_EVENT_COUNT
+ } dcd_eventid_t;
+
+@@ -82,6 +83,12 @@
+       void (*func) (void*);
+       void* param;
+     }func_call;
++
++    // ENDPOINT_QUIESCED
++    struct {
++      uint8_t ep_addr;
++      uint32_t cookie;
++    }endpoint_quiesced;
+   };
+ } dcd_event_t;
+
+@@ -171,6 +178,15 @@
+ // This API never calls with control endpoints, since it is auto cleared when receiving setup packet
+ void dcd_edpt_clear_stall     (uint8_t rhport, uint8_t ep_addr);
+
++// Asynchronously stop an IN transfer. The completion callback is dispatched
++// from the USBD task only after the DCD is quiescent and all older queued
++// endpoint events have been consumed. A false return leaves state unchanged.
++typedef void (*dcd_edpt_quiesce_cb_t)(uint8_t rhport, uint8_t ep_addr, void *user_data);
++bool dcd_edpt_quiesce_async(uint8_t rhport, uint8_t ep_addr,
++                            dcd_edpt_quiesce_cb_t callback, void *user_data);
++bool dcd_edpt_quiesce_task(uint8_t rhport);
++void dcd_edpt_quiesce_complete(uint8_t rhport, uint8_t ep_addr, uint32_t cookie);
++
+ #ifdef TUP_DCD_EDPT_ISO_ALLOC
+ // Allocate packet buffer used by ISO endpoints
+ // Some MCU need manual packet buffer allocation, we allocate the largest size to avoid clustering
+--- a/src/device/usbd.c
++++ b/src/device/usbd.c
+@@ -384,6 +384,21 @@
+   return true;
+ }
+
++bool usbd_event_endpoint_quiesced(uint8_t rhport, uint8_t ep_addr, uint32_t cookie) {
++  if (!_usbd_q) return false;
++
++  dcd_event_t event = {
++      .rhport = rhport,
++      .event_id = USBD_EVENT_ENDPOINT_QUIESCED,
++      .endpoint_quiesced = {
++          .ep_addr = ep_addr,
++          .cookie = cookie,
++      },
++  };
++  if (!osal_queue_send(_usbd_q, &event, false)) return false;
++  return true;
++}
++
+ //--------------------------------------------------------------------+
+ // Prototypes
+ //--------------------------------------------------------------------+
+@@ -418,6 +433,21 @@
+ TU_ATTR_WEAK bool dcd_edpt_xfer_fifo(uint8_t rhport, uint8_t ep_addr, tu_fifo_t * ff, uint16_t total_bytes) {
+   (void) rhport; (void) ep_addr; (void) ff; (void) total_bytes;
+   return false;
++}
++
++TU_ATTR_WEAK bool dcd_edpt_quiesce_async(uint8_t rhport, uint8_t ep_addr,
++                                         dcd_edpt_quiesce_cb_t callback, void *user_data) {
++  (void) rhport; (void) ep_addr; (void) callback; (void) user_data;
++  return false;
++}
++
++TU_ATTR_WEAK bool dcd_edpt_quiesce_task(uint8_t rhport) {
++  (void) rhport;
++  return false;
++}
++
++TU_ATTR_WEAK void dcd_edpt_quiesce_complete(uint8_t rhport, uint8_t ep_addr, uint32_t cookie) {
++  (void) rhport; (void) ep_addr; (void) cookie;
+ }
+
+ //--------------------------------------------------------------------+
+@@ -433,7 +463,8 @@
+     "Resume",
+     "Setup Received",
+     "Xfer Complete",
+-    "Func Call"
++    "Func Call",
++    "Endpoint Quiesced"
+ };
+
+ // for usbd_control to print the name of control complete driver
+@@ -643,7 +674,9 @@
+   // Loop until there is no more events in the queue
+   while (1) {
+     dcd_event_t event;
+-    if (!osal_queue_receive(_usbd_q, &event, timeout_ms)) return;
++    bool quiesce_pending = dcd_edpt_quiesce_task(_usbd_rhport);
++    uint32_t event_timeout_ms = quiesce_pending ? 0 : timeout_ms;
++    if (!osal_queue_receive(_usbd_q, &event, event_timeout_ms)) return;
+
+ #if CFG_TUSB_DEBUG >= CFG_TUD_LOG_LEVEL
+     if (event.event_id == DCD_EVENT_SETUP_RECEIVED) TU_LOG_USBD("\r\n"); // extra line for setup
+@@ -741,6 +774,11 @@
+         if (event.func_call.func) {
+           event.func_call.func(event.func_call.param);
+         }
++        break;
++
++      case USBD_EVENT_ENDPOINT_QUIESCED:
++        dcd_edpt_quiesce_complete(event.rhport, event.endpoint_quiesced.ep_addr,
++                                  event.endpoint_quiesced.cookie);
+         break;
+
+       case DCD_EVENT_SOF:
+--- a/src/device/usbd_pvt.h
++++ b/src/device/usbd_pvt.h
+@@ -130,6 +130,10 @@
+ bool usbd_open_edpt_pair(uint8_t rhport, uint8_t const* p_desc, uint8_t ep_count, uint8_t xfer_type, uint8_t* ep_out, uint8_t* ep_in);
+ void usbd_defer_func(osal_task_func_t func, void *param, bool in_isr);
+
++// Queue a checked endpoint-quiesced marker. False means the queue was full;
++// callers must retain source ownership and retry later.
++bool usbd_event_endpoint_quiesced(uint8_t rhport, uint8_t ep_addr, uint32_t cookie);
++
+
+ #if CFG_TUSB_DEBUG >= CFG_TUD_LOG_LEVEL
+ void usbd_driver_print_control_complete_name(usbd_control_xfer_cb_t callback);
+--- a/src/portable/synopsys/dwc2/dcd_dwc2.c
++++ b/src/portable/synopsys/dwc2/dcd_dwc2.c
+@@ -58,6 +58,29 @@
+ static xfer_ctl_t xfer_status[DWC2_EP_MAX][2];
+ #define XFER_CTL_BASE(_ep, _dir) (&xfer_status[_ep][_dir])
+
++typedef enum {
++  EP_QUIESCE_IDLE,
++  EP_QUIESCE_WAIT_NAK,
++  EP_QUIESCE_WAIT_DISABLE,
++  EP_QUIESCE_START_FIFO_FLUSH,
++  EP_QUIESCE_WAIT_FIFO_FLUSH,
++  EP_QUIESCE_CLEAR_STATUS,
++  EP_QUIESCE_READY,
++} ep_quiesce_phase_t;
++
++typedef struct {
++  dcd_edpt_quiesce_cb_t callback;
++  void *user_data;
++  uint32_t cookie;
++  uint8_t isr_inflight;
++  uint8_t phase;
++  bool active;
++  bool marker_queued;
++  bool quiesced;
++} ep_quiesce_t;
++
++static ep_quiesce_t ep_quiesce[DWC2_EP_MAX];
++
+ typedef struct {
+   // EP0 transfers are limited to 1 packet - larger sizes has to be split
+   uint16_t ep0_pending[2];  // Index determines direction as tusb_dir_t type
+@@ -278,9 +301,10 @@
+   dwc2_dep_t* dep = &dwc2->ep[dir == TUSB_DIR_IN ? 0 : 1][epnum];
+   dep->ctl = depctl.value;
+   dwc2->daintmsk |= TU_BIT(epnum + DAINT_SHIFT(dir));
+-}
+-
+-static void edpt_disable(uint8_t rhport, uint8_t ep_addr, bool stall) {
++  ep_quiesce[epnum].quiesced = false;
++}
++
++static void edpt_disable(uint8_t rhport, uint8_t ep_addr, bool stall, bool in_isr) {
+   (void) rhport;
+
+   dwc2_regs_t* dwc2 = DWC2_REG(rhport);
+@@ -303,8 +327,11 @@
+       dep->diepint = DIEPINT_EPDISD;
+     }
+
+-    // Flush the FIFO, and wait until we have confirmed it cleared.
++    // A FIFO flush must not overlap another core's FIFO write.
++    usbd_spin_lock(in_isr);
++    while (dwc2->grstctl & GRSTCTL_TXFFLSH_Msk) {}
+     dfifo_flush_tx(dwc2, epnum);
++    usbd_spin_unlock(in_isr);
+   } else {
+     // Only disable currently enabled non-control endpoint
+     if ((epnum == 0) || !(dep->doepctl & DOEPCTL_EPENA)) {
+@@ -556,6 +583,13 @@
+   dwc2->daintmsk = (1 << DAINTMSK_OEPM_Pos) | (1 << DAINTMSK_IEPM_Pos);
+
+   for (uint8_t n = 1; n < ep_count; n++) {
++    ep_quiesce[n].active = false;
++    ep_quiesce[n].marker_queued = false;
++    ep_quiesce[n].quiesced = false;
++    ep_quiesce[n].phase = EP_QUIESCE_IDLE;
++    ep_quiesce[n].callback = NULL;
++    ep_quiesce[n].user_data = NULL;
++    if (++ep_quiesce[n].cookie == 0) ++ep_quiesce[n].cookie;
+     for (uint8_t d = 0; d < 2; d++) {
+       dwc2_dep_t* dep = &dwc2->ep[d][n];
+       if (dep->ctl & EPCTL_EPENA) {
+@@ -577,9 +611,186 @@
+   return true;
+ }
+
++bool dcd_edpt_quiesce_async(uint8_t rhport, uint8_t ep_addr,
++                            dcd_edpt_quiesce_cb_t callback, void *user_data) {
++  const uint8_t epnum = tu_edpt_number(ep_addr);
++  if (!callback || epnum == 0 || epnum >= dwc2_ep_count(DWC2_REG(rhport)) ||
++      tu_edpt_dir(ep_addr) != TUSB_DIR_IN) {
++    return false;
++  }
++
++  dwc2_regs_t *dwc2 = DWC2_REG(rhport);
++  dwc2_dep_t *epin = &dwc2->epin[epnum];
++  ep_quiesce_t *state = &ep_quiesce[epnum];
++  bool accepted = false;
++
++  usbd_spin_lock(false);
++  if (!state->active && XFER_CTL_BASE(epnum, TUSB_DIR_IN)->max_size != 0) {
++    uint32_t cookie = state->cookie + 1;
++    if (cookie == 0) cookie = 1;
++    state->cookie = cookie;
++    state->callback = callback;
++    state->user_data = user_data;
++    state->active = true;
++    state->marker_queued = false;
++    state->quiesced = false;
++    state->phase = (epin->diepctl & DIEPCTL_EPENA) ? EP_QUIESCE_WAIT_NAK : EP_QUIESCE_START_FIFO_FLUSH;
++
++    // Stop both normal IN endpoint handling and incomplete-ISO retries before
++    // requesting the hardware NAK/disable sequence.
++    dwc2->daintmsk &= ~TU_BIT(epnum + DAINTMSK_IEPM_Pos);
++    dwc2->diepempmsk &= ~TU_BIT(epnum);
++    epin->diepctl |= DIEPCTL_SNAK;
++    accepted = true;
++  }
++  usbd_spin_unlock(false);
++  return accepted;
++}
++
++bool dcd_edpt_quiesce_task(uint8_t rhport) {
++  dwc2_regs_t *dwc2 = DWC2_REG(rhport);
++  bool pending = false;
++
++  for (uint8_t epnum = 1; epnum < dwc2_ep_count(dwc2); ++epnum) {
++    ep_quiesce_t *state = &ep_quiesce[epnum];
++    bool queue_marker = false;
++    uint32_t marker_cookie = 0;
++
++    usbd_spin_lock(false);
++    if (state->active) {
++      pending = true;
++      if (state->isr_inflight != 0) {
++        usbd_spin_unlock(false);
++        continue;
++      }
++      dwc2_dep_t *epin = &dwc2->epin[epnum];
++      uint32_t epctl = epin->diepctl;
++      uint32_t epint = epin->diepint;
++
++      switch ((ep_quiesce_phase_t)state->phase) {
++        case EP_QUIESCE_WAIT_NAK:
++          if (!(epctl & DIEPCTL_EPENA)) {
++            state->phase = EP_QUIESCE_START_FIFO_FLUSH;
++          } else if (epint & DIEPINT_INEPNE_Msk) {
++            // The SNAK request is effective; request endpoint disable, then
++            // poll EPENA/EPDISD without blocking this task or an ISR.
++            epin->diepctl |= DIEPCTL_EPDIS;
++            state->phase = EP_QUIESCE_WAIT_DISABLE;
++          }
++          break;
++
++        case EP_QUIESCE_WAIT_DISABLE:
++          if (!(epctl & DIEPCTL_EPENA) && (epint & DIEPINT_EPDISD_Msk)) {
++            state->phase = EP_QUIESCE_START_FIFO_FLUSH;
++          }
++          break;
++
++        case EP_QUIESCE_START_FIFO_FLUSH:
++          if (!(epctl & DIEPCTL_EPENA) && !(dwc2->grstctl & GRSTCTL_TXFFLSH_Msk)) {
++            // This is the DWC2 per-endpoint TX FIFO flush used by the normal
++            // disable path, issued once and polled on later task iterations.
++            dwc2->grstctl = GRSTCTL_TXFFLSH | (epnum << GRSTCTL_TXFNUM_Pos);
++            state->phase = EP_QUIESCE_WAIT_FIFO_FLUSH;
++          }
++          break;
++
++        case EP_QUIESCE_WAIT_FIFO_FLUSH:
++          if (!(dwc2->grstctl & GRSTCTL_TXFFLSH_Msk)) {
++            state->phase = EP_QUIESCE_CLEAR_STATUS;
++          }
++          break;
++
++        case EP_QUIESCE_CLEAR_STATUS: {
++          if (epctl & DIEPCTL_EPENA) {
++            state->phase = EP_QUIESCE_WAIT_DISABLE;
++            break;
++          }
++          // DIEPINT is write-one-to-clear. Follow the DCD's existing ISR
++          // treatment: write the observed value, then read back and verify
++          // callback-capable flags are gone before emitting a marker.
++          if (epint) epin->diepint = epint;
++          uint32_t const verify = epin->diepint;
++          uint32_t const callback_flags = DIEPINT_XFRC_Msk | DIEPINT_EPDISD_Msk |
++                                          DIEPINT_AHBERR_Msk | DIEPINT_TOC_Msk |
++                                          DIEPINT_INEPNE_Msk;
++          if (verify & callback_flags) {
++            state->phase = EP_QUIESCE_CLEAR_STATUS;
++          } else {
++            state->phase = EP_QUIESCE_READY;
++          }
++          break;
++        }
++
++        case EP_QUIESCE_READY:
++          if (!state->marker_queued) {
++            state->marker_queued = true;
++            marker_cookie = state->cookie;
++            queue_marker = true;
++          }
++          break;
++
++        case EP_QUIESCE_IDLE:
++        default:
++          // An impossible state remains masked and fails closed.
++          break;
++      }
++    }
++    usbd_spin_unlock(false);
++
++    if (queue_marker && !usbd_event_endpoint_quiesced(rhport, tu_edpt_addr(epnum, TUSB_DIR_IN), marker_cookie)) {
++      // Queue saturation must not release the class source. Retry after the
++      // task drains older events; the endpoint remains interrupt-masked.
++      usbd_spin_lock(false);
++      if (state->active && state->cookie == marker_cookie) {
++        state->marker_queued = false;
++      }
++      usbd_spin_unlock(false);
++    }
++  }
++
++  return pending;
++}
++
++void dcd_edpt_quiesce_complete(uint8_t rhport, uint8_t ep_addr, uint32_t cookie) {
++  const uint8_t epnum = tu_edpt_number(ep_addr);
++  if (epnum == 0 || epnum >= DWC2_EP_MAX || tu_edpt_dir(ep_addr) != TUSB_DIR_IN) return;
++
++  ep_quiesce_t *state = &ep_quiesce[epnum];
++  dcd_edpt_quiesce_cb_t callback = NULL;
++  void *user_data = NULL;
++
++  usbd_spin_lock(false);
++  if (state->active && state->marker_queued && state->cookie == cookie) {
++    state->active = false;
++    state->marker_queued = false;
++    state->phase = EP_QUIESCE_IDLE;
++    state->quiesced = true;
++    callback = state->callback;
++    user_data = state->user_data;
++    state->callback = NULL;
++    state->user_data = NULL;
++
++    xfer_ctl_t *xfer = XFER_CTL_BASE(epnum, TUSB_DIR_IN);
++    xfer->buffer = NULL;
++    xfer->ff = NULL;
++    xfer->total_len = 0;
++    xfer->iso_retry = 0;
++  }
++  usbd_spin_unlock(false);
++
++  if (callback) callback(rhport, ep_addr, user_data);
++}
++
+ bool dcd_edpt_iso_activate(uint8_t rhport,  tusb_desc_endpoint_t const * p_endpoint_desc) {
+-  // Disable EP to clear potential incomplete transfers
+-  edpt_disable(rhport, p_endpoint_desc->bEndpointAddress, false);
++  uint8_t const epnum = tu_edpt_number(p_endpoint_desc->bEndpointAddress);
++  bool was_quiesced;
++  usbd_spin_lock(false);
++  was_quiesced = epnum < DWC2_EP_MAX && ep_quiesce[epnum].quiesced;
++  if (was_quiesced) ep_quiesce[epnum].quiesced = false;
++  usbd_spin_unlock(false);
++  // The async barrier already disabled the EP and drained its FIFO. Skip the
++  // legacy blocking disable/flush on quick alt0 -> active reopen.
++  if (!was_quiesced) edpt_disable(rhport, p_endpoint_desc->bEndpointAddress, false, false);
+   edpt_activate(rhport, p_endpoint_desc);
+   return true;
+ }
+@@ -651,7 +862,7 @@
+
+ void dcd_edpt_stall(uint8_t rhport, uint8_t ep_addr) {
+   dwc2_regs_t* dwc2 = DWC2_REG(rhport);
+-  edpt_disable(rhport, ep_addr, true);
++  edpt_disable(rhport, ep_addr, true, false);
+   if((tu_edpt_number(ep_addr) == 0) && dma_device_enabled(dwc2)) {
+     dma_setup_prepare(rhport);
+   }
+@@ -679,6 +890,16 @@
+   const uint8_t ep_count =  dwc2_ep_count(dwc2);
+
+   tu_memclr(xfer_status, sizeof(xfer_status));
++
++  for (uint8_t n = 1; n < ep_count; n++) {
++    ep_quiesce[n].active = false;
++    ep_quiesce[n].marker_queued = false;
++    ep_quiesce[n].quiesced = false;
++    ep_quiesce[n].phase = EP_QUIESCE_IDLE;
++    ep_quiesce[n].callback = NULL;
++    ep_quiesce[n].user_data = NULL;
++    if (++ep_quiesce[n].cookie == 0) ++ep_quiesce[n].cookie;
++  }
+
+   _dcd_data.sof_en = false;
+   _dcd_data.allocated_epin_count = 0;
+@@ -854,7 +1075,7 @@
+     // Cleanup previous pending EP0 IN transfer if any
+     dwc2_dep_t* epin0 = &DWC2_REG(rhport)->epin[0];
+     if (epin0->diepctl & DIEPCTL_EPENA) {
+-      edpt_disable(rhport, 0x80, false);
++      edpt_disable(rhport, 0x80, false, true);
+     }
+     dcd_event_setup_received(rhport, _dcd_usbbuf.setup_packet, true);
+     return;
+@@ -886,7 +1107,9 @@
+   if (diepint_bm.xfer_complete) {
+     if ((epnum == 0) && _dcd_data.ep0_pending[TUSB_DIR_IN]) {
+       // EP0 can only handle one packet. Schedule another packet to be transmitted.
++      usbd_spin_lock(true);
+       edpt_schedule_packets(rhport, epnum, TUSB_DIR_IN);
++      usbd_spin_unlock(true);
+     } else {
+       dcd_event_xfer_complete(rhport, epnum | TUSB_DIR_IN_MASK, xfer->total_len, XFER_RESULT_SUCCESS, true);
+     }
+@@ -895,7 +1118,17 @@
+   // TX FIFO empty bit is read-only. It will only be cleared by hardware when written bytes is more than
+   // - 64 bytes or
+   // - Half/Empty of TX FIFO size (configured by GAHBCFG.TXFELVL)
+-  if (diepint_bm.txfifo_empty && (dwc2->diepempmsk & (1 << epnum))) {
++  if (diepint_bm.txfifo_empty) {
++    // Serialize FIFO writes and TXFE bookkeeping with endpoint scheduling
++    // and FIFO flushes on the other core (TinyUSB #4234).
++    usbd_spin_lock(true);
++    // The UVC close barrier can leave a nonblocking TX flush in progress.
++    // Keep TXFE armed so hardware can request a refill once the flush ends.
++    if (!(dwc2->diepempmsk & TU_BIT(epnum)) || (dwc2->grstctl & GRSTCTL_TXFFLSH_Msk)) {
++      usbd_spin_unlock(true);
++      return;
++    }
++
+     dwc2_ep_tsize_t tsiz = {.value = epin->tsiz};
+     const uint16_t remain_packets = tsiz.packet_count;
+
+@@ -923,8 +1156,9 @@
+     // Turn off TXFE if all bytes are written.
+     tsiz.value = epin->tsiz;
+     if (tsiz.xfer_size == 0) {
+-      dwc2->diepempmsk &= ~(1 << epnum);
+-    }
++      dwc2->diepempmsk &= ~TU_BIT(epnum);
++    }
++    usbd_spin_unlock(true);
+   }
+ }
+ #endif
+@@ -937,7 +1171,7 @@
+     // Cleanup previous pending EP0 IN transfer if any
+     dwc2_dep_t* epin0 = &DWC2_REG(rhport)->epin[0];
+     if (epin0->diepctl & DIEPCTL_EPENA) {
+-      edpt_disable(rhport, 0x80, false);
++      edpt_disable(rhport, 0x80, false, true);
+     }
+     dma_setup_prepare(rhport);
+     dcd_dcache_invalidate(_dcd_usbbuf.setup_packet, 8);
+@@ -1002,17 +1236,25 @@
+   // DAINT for a given EP clears when DEPINTx is cleared.
+   // EPINT will be cleared when DAINT bits are cleared.
+   for (uint8_t epnum = 0; epnum < ep_count; epnum++) {
+-    if (dwc2->daint & TU_BIT(daint_offset + epnum)) {
+-      dwc2_dep_t* epout = &ep_base[epnum];
+-      union {
+-        uint32_t value;
+-        dwc2_diepint_t diepint_bm;
+-        dwc2_doepint_t doepint_bm;
+-      } intr;
++    bool dispatch = false;
++    bool track_isr = false;
++    dwc2_dep_t* epout = &ep_base[epnum];
++    union {
++      uint32_t value;
++      dwc2_diepint_t diepint_bm;
++      dwc2_doepint_t doepint_bm;
++    } intr;
++    usbd_spin_lock(true);
++    if ((dwc2->daint & dwc2->daintmsk) & TU_BIT(daint_offset + epnum)) {
+       intr.value = epout->intr;
+-
+       epout->intr = intr.value; // Clear interrupt
+-
++      dispatch = true;
++      track_isr = (dir == TUSB_DIR_IN) && (epnum != 0);
++      if (track_isr) ep_quiesce[epnum].isr_inflight++;
++    }
++    usbd_spin_unlock(true);
++
++    if (dispatch) {
+       if (is_dma) {
+         #if CFG_TUD_DWC2_DMA_ENABLE
+         if (dir == TUSB_DIR_IN) {
+@@ -1030,6 +1272,12 @@
+         }
+         #endif
+       }
++
++      if (track_isr) {
++        usbd_spin_lock(true);
++        if (ep_quiesce[epnum].isr_inflight) ep_quiesce[epnum].isr_inflight--;
++        usbd_spin_unlock(true);
++      }
+     }
+   }
+ }
+@@ -1042,6 +1290,7 @@
+   // Loop over all IN endpoints
+   const uint8_t ep_count = dwc2_ep_count(dwc2);
+   for (uint8_t epnum = 0; epnum < ep_count; epnum++) {
++    if (!(dwc2->daintmsk & TU_BIT(epnum + DAINTMSK_IEPM_Pos))) continue;
+     dwc2_dep_t   *epin   = &dwc2->epin[epnum];
+     dwc2_depctl_t depctl = {.value = epin->diepctl};
+     // Read DSTS and DIEPCTLn for all isochronous endpoints. If the current EP is enabled and the read value of
+@@ -1064,7 +1313,7 @@
+         epin->diepctl = depctl.value;
+       } else {
+         // too many retries, give up
+-        edpt_disable(rhport, epnum | TUSB_DIR_IN_MASK, false);
++        edpt_disable(rhport, epnum | TUSB_DIR_IN_MASK, false, true);
+         dcd_event_xfer_complete(rhport, epnum | TUSB_DIR_IN_MASK, 0, XFER_RESULT_FAILED, true);
+       }
+     }
+@@ -1172,7 +1421,9 @@
+   // Incomplete isochronous IN transfer interrupt handling.
+   if (gintsts & GINTSTS_IISOIXFR) {
+     dwc2->gintsts = GINTSTS_IISOIXFR;
++    usbd_spin_lock(true);
+     handle_incomplete_iso_in(rhport);
++    usbd_spin_unlock(true);
+   }
+ }
