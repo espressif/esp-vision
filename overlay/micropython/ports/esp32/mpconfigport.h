@@ -215,7 +215,8 @@
 #define MICROPY_HW_SOFTSPI_MIN_DELAY        (0)
 #define MICROPY_HW_SOFTSPI_MAX_BAUDRATE     (esp_rom_get_cpu_ticks_per_us() * 1000000 / 200) // roughly
 #ifndef MICROPY_HW_ESP_NEW_I2C_DRIVER
-#define MICROPY_HW_ESP_NEW_I2C_DRIVER       (0)
+// ESP-IDF 6.0 deprecates the legacy driver/i2c.h driver; use i2c_master there.
+#define MICROPY_HW_ESP_NEW_I2C_DRIVER       (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0))
 #endif
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
 #define MICROPY_PY_SSL                      (0)

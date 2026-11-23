@@ -12,6 +12,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Changed
 
+- Use the `i2c_master` driver for `machine.I2C` on ESP-IDF 6.0 and later to remove the legacy I2C driver deprecation warning. Report a busy port as `OSError` instead of aborting.
 - Use one lazily allocated UVC application frame buffer and generate the fallback logo at runtime. Keep published UVC APIs and accept application JPEG dimensions independently of the negotiated mode.
 
 ### Fixed
