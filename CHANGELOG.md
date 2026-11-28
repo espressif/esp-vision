@@ -17,6 +17,7 @@ All notable changes to ESP-VISION are recorded here. The format follows [Keep a 
 
 ### Fixed
 
+- Increase ESP32-P4X Function EV VFS capacity to 16 so CSI camera registration can coexist with storage, console, ISP and codec VFS entries.
 - Generate the UVC idle logo as a color MJPEG frame so hosts can start decoding color before the first camera frame.
 - Backport TinyUSB #4234 to serialize DWC2 transmit FIFO writes and flushes across cores and keep CDC responsive during UVC streaming.
 - Select the P4 software JPEG fallback when the default internal DMA heap cannot hold the hardware encoder's first descriptor.
